@@ -30,9 +30,15 @@ type LectureGroup = {
 };
 
 
+type PhotoRow = {
+  id: string;
+  photos: PhotoRecord[];
+};
+
+
 type LectureSection = LectureGroup & {
   title: string;
-  data: PhotoRecord[];
+  data: PhotoRow[];
 };
 
 
@@ -129,10 +135,21 @@ export default function SubjectScreen() {
         const groups: LectureGroup[] =
           Object.entries(grouped)
             .map(([dateKey, photos]) => {
+              const sortedPhotos =
+                [...photos].sort((a, b) => {
+                  const dateA =
+                    new Date(a.takenAt).getTime();
+
+                  const dateB =
+                    new Date(b.takenAt).getTime();
+
+                  return dateA - dateB;
+                });
+
               return {
                 dateKey,
-                dateLabel: getDateLabel(photos[0]),
-                photos,
+                dateLabel: getDateLabel(sortedPhotos[0]),
+                photos: sortedPhotos,
               };
             })
             .sort((a, b) => {
@@ -172,11 +189,29 @@ export default function SubjectScreen() {
 
 
   const sections: LectureSection[] =
-    lectureGroups.map((group, index) => ({
-      ...group,
-      title: `第${index + 1}回`,
-      data: group.photos,
-    }));
+    lectureGroups.map((group, index) => {
+      const rows: PhotoRow[] = [];
+
+      for (
+        let photoIndex = 0;
+        photoIndex < group.photos.length;
+        photoIndex += 3
+      ) {
+        rows.push({
+          id: `${group.dateKey}-${photoIndex}`,
+          photos: group.photos.slice(
+            photoIndex,
+            photoIndex + 3
+          ),
+        });
+      }
+
+      return {
+        ...group,
+        title: `第${index + 1}回`,
+        data: rows,
+      };
+    });
 
 
   return (
@@ -184,12 +219,10 @@ export default function SubjectScreen() {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
       sections={sections}
-      keyExtractor={(photo, index) =>
-        `${photo.id}-${index}`
-      }
+      keyExtractor={(row) => row.id}
       stickySectionHeadersEnabled={false}
-      initialNumToRender={2}
-      maxToRenderPerBatch={2}
+      initialNumToRender={3}
+      maxToRenderPerBatch={3}
       windowSize={3}
       ListHeaderComponent={
         <View>
@@ -216,23 +249,32 @@ export default function SubjectScreen() {
           <Text style={styles.dateText}>
             {section.dateLabel}
           </Text>
+
+          <Text style={styles.photoCount}>
+            {section.photos.length}枚
+          </Text>
         </View>
       )}
-      renderItem={({ item: photo }) => (
-        <Image
-          source={{ uri: photo.uri }}
-          style={styles.photo}
-          contentFit="cover"
-          allowDownscaling
-          enforceEarlyResizing
-          cachePolicy="disk"
-          onError={(error) => {
-            console.log(
-              '画像表示エラー:',
-              error.error
-            );
-          }}
-        />
+      renderItem={({ item: row }) => (
+        <View style={styles.photoRow}>
+          {row.photos.map((photo) => (
+            <Image
+              key={photo.id}
+              source={{ uri: photo.uri }}
+              style={styles.photo}
+              contentFit="cover"
+              allowDownscaling
+              enforceEarlyResizing
+              cachePolicy="disk"
+              onError={(error) => {
+                console.log(
+                  '画像表示エラー:',
+                  error.error
+                );
+              }}
+            />
+          ))}
+        </View>
       )}
       renderSectionFooter={() => (
         <View style={styles.lectureFooter} />
@@ -290,15 +332,26 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
 
+  photoCount: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 12,
+  },
+
   lectureFooter: {
     height: 20,
   },
 
+  photoRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+
   photo: {
-    width: '100%',
-    height: 220,
-    borderRadius: 10,
+    width: '31.5%',
+    aspectRatio: 1,
+    borderRadius: 8,
     backgroundColor: '#eee',
-    marginBottom: 12,
   },
 });
