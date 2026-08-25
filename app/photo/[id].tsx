@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File } from 'expo-file-system';
 import { Image } from 'expo-image';
 import {
+  router,
   Stack,
   useLocalSearchParams,
 } from 'expo-router';
@@ -36,6 +40,7 @@ export default function PhotoScreen() {
     useState<PhotoRecord | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [errorMessage, setErrorMessage] =
     useState('');
 
@@ -104,6 +109,86 @@ export default function PhotoScreen() {
   };
 
 
+  const deletePhoto = async () => {
+    if (!photo || deleting) {
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      const savedPhotos =
+        await AsyncStorage.getItem('photos');
+
+      if (savedPhotos === null) {
+        throw new Error('写真データがありません');
+      }
+
+      const photos: PhotoRecord[] =
+        JSON.parse(savedPhotos);
+
+      const remainingPhotos =
+        photos.filter((item) => {
+          return item.id !== photo.id;
+        });
+
+      if (remainingPhotos.length === photos.length) {
+        throw new Error('削除する写真が見つかりません');
+      }
+
+      await AsyncStorage.setItem(
+        'photos',
+        JSON.stringify(remainingPhotos)
+      );
+
+      try {
+        const photoFile = new File(photo.uri);
+
+        if (photoFile.exists) {
+          photoFile.delete();
+        }
+      } catch (fileError) {
+        await AsyncStorage.setItem(
+          'photos',
+          savedPhotos
+        );
+
+        throw fileError;
+      }
+
+      router.back();
+    } catch (error) {
+      console.log('写真削除エラー:', error);
+
+      Alert.alert(
+        '削除できませんでした',
+        '写真を削除する際にエラーが発生しました。'
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+
+  const confirmDeletePhoto = () => {
+    Alert.alert(
+      '写真を削除しますか？',
+      'この操作は取り消せません。',
+      [
+        {
+          text: 'キャンセル',
+          style: 'cancel',
+        },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: deletePhoto,
+        },
+      ]
+    );
+  };
+
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -151,6 +236,21 @@ export default function PhotoScreen() {
             <Text style={styles.dateText}>
               {getTakenAtLabel(photo.takenAt)}
             </Text>
+
+            <Pressable
+              style={[
+                styles.deleteButton,
+                deleting && styles.disabledButton,
+              ]}
+              disabled={deleting}
+              onPress={confirmDeletePhoto}
+            >
+              <Text style={styles.deleteButtonText}>
+                {deleting
+                  ? '削除中...'
+                  : 'この写真を削除'}
+              </Text>
+            </Pressable>
           </View>
         </>
       ) : null}
@@ -199,5 +299,25 @@ const styles = StyleSheet.create({
     color: '#bbb',
     fontSize: 14,
     marginTop: 4,
+  },
+
+  deleteButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#ff5c5c',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    marginTop: 14,
+  },
+
+  disabledButton: {
+    opacity: 0.5,
+  },
+
+  deleteButtonText: {
+    color: '#ff6b6b',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });

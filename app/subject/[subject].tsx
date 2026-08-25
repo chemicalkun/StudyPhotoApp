@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import {
   Pressable,
@@ -11,6 +11,7 @@ import {
 import { Image } from 'expo-image';
 import {
   router,
+  useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
 
@@ -98,98 +99,100 @@ export default function SubjectScreen() {
   };
 
 
-  useEffect(() => {
-    const loadPhotos = async () => {
-      try {
-        const savedPhotos =
-          await AsyncStorage.getItem('photos');
+  useFocusEffect(
+    useCallback(() => {
+      const loadPhotos = async () => {
+        try {
+          const savedPhotos =
+            await AsyncStorage.getItem('photos');
 
-        if (savedPhotos === null) {
-          setLectureGroups([]);
-          setStatus('写真がありません');
-          return;
-        }
-
-        const allPhotos: PhotoRecord[] =
-          JSON.parse(savedPhotos);
-
-
-        const subjectPhotos =
-          allPhotos.filter((photo) => {
-            return getPhotoLabel(photo) === subject;
-          });
-
-
-        const grouped: Record<
-          string,
-          PhotoRecord[]
-        > = {};
-
-        subjectPhotos.forEach((photo) => {
-          const dateKey = getDateKey(photo);
-
-          if (!grouped[dateKey]) {
-            grouped[dateKey] = [];
+          if (savedPhotos === null) {
+            setLectureGroups([]);
+            setStatus('写真がありません');
+            return;
           }
 
-          grouped[dateKey].push(photo);
-        });
+          const allPhotos: PhotoRecord[] =
+            JSON.parse(savedPhotos);
 
 
-        const groups: LectureGroup[] =
-          Object.entries(grouped)
-            .map(([dateKey, photos]) => {
-              const sortedPhotos =
-                [...photos].sort((a, b) => {
-                  const dateA =
-                    new Date(a.takenAt).getTime();
-
-                  const dateB =
-                    new Date(b.takenAt).getTime();
-
-                  return dateA - dateB;
-                });
-
-              return {
-                dateKey,
-                dateLabel: getDateLabel(sortedPhotos[0]),
-                photos: sortedPhotos,
-              };
-            })
-            .sort((a, b) => {
-              const dateA =
-                new Date(
-                  a.photos[0].takenAt
-                ).getTime();
-
-              const dateB =
-                new Date(
-                  b.photos[0].takenAt
-                ).getTime();
-
-              return dateA - dateB;
+          const subjectPhotos =
+            allPhotos.filter((photo) => {
+              return getPhotoLabel(photo) === subject;
             });
 
 
-        setLectureGroups(groups);
+          const grouped: Record<
+            string,
+            PhotoRecord[]
+          > = {};
 
-        setStatus(
-          `${subjectPhotos.length}枚の写真`
-        );
-      } catch (error) {
-        console.log(
-          '授業写真読み込みエラー:',
-          error
-        );
+          subjectPhotos.forEach((photo) => {
+            const dateKey = getDateKey(photo);
 
-        setStatus(
-          '写真の読み込みでエラーが発生しました'
-        );
-      }
-    };
+            if (!grouped[dateKey]) {
+              grouped[dateKey] = [];
+            }
 
-    loadPhotos();
-  }, [subject]);
+            grouped[dateKey].push(photo);
+          });
+
+
+          const groups: LectureGroup[] =
+            Object.entries(grouped)
+              .map(([dateKey, photos]) => {
+                const sortedPhotos =
+                  [...photos].sort((a, b) => {
+                    const dateA =
+                      new Date(a.takenAt).getTime();
+
+                    const dateB =
+                      new Date(b.takenAt).getTime();
+
+                    return dateA - dateB;
+                  });
+
+                return {
+                  dateKey,
+                  dateLabel: getDateLabel(sortedPhotos[0]),
+                  photos: sortedPhotos,
+                };
+              })
+              .sort((a, b) => {
+                const dateA =
+                  new Date(
+                    a.photos[0].takenAt
+                  ).getTime();
+
+                const dateB =
+                  new Date(
+                    b.photos[0].takenAt
+                  ).getTime();
+
+                return dateA - dateB;
+              });
+
+
+          setLectureGroups(groups);
+
+          setStatus(
+            `${subjectPhotos.length}枚の写真`
+          );
+        } catch (error) {
+          console.log(
+            '授業写真読み込みエラー:',
+            error
+          );
+
+          setStatus(
+            '写真の読み込みでエラーが発生しました'
+          );
+        }
+      };
+
+      loadPhotos();
+    }, [subject])
+  );
 
 
   const sections: LectureSection[] =
