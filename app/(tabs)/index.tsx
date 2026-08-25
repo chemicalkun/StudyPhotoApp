@@ -80,6 +80,18 @@ export default function HomeScreen() {
     );
 
 
+  const unclassifiedPhotos = photos.filter(
+    (photo) =>
+      photo.subject === null ||
+      photo.subject === '未分類'
+  );
+
+
+  const subjectGroups = Object.entries(
+    groupedPhotos
+  ).filter(([subject]) => subject !== '未分類');
+
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>
@@ -122,17 +134,59 @@ export default function HomeScreen() {
 
 
       <Text style={styles.sectionTitle}>
+        未分類
+      </Text>
+
+
+      <Pressable
+        style={[
+          styles.subjectCard,
+          styles.unclassifiedCard,
+        ]}
+        onPress={() =>
+          router.push({
+            pathname: '/subject/[subject]',
+            params: { subject: '未分類' },
+          })
+        }
+      >
+        <View>
+          <Text style={styles.subjectName}>
+            未分類の写真
+          </Text>
+
+          <Text style={styles.subjectCount}>
+            {unclassifiedPhotos.length}枚
+          </Text>
+
+          <Text style={styles.unclassifiedHint}>
+            授業名を確認して整理できます
+          </Text>
+        </View>
+
+        <Text style={styles.arrow}>
+          ›
+        </Text>
+      </Pressable>
+
+
+      <Text
+        style={[
+          styles.sectionTitle,
+          styles.subjectSectionTitle,
+        ]}
+      >
         授業
       </Text>
 
 
-      {Object.keys(groupedPhotos).length === 0 ? (
+      {subjectGroups.length === 0 ? (
         <Text style={styles.emptyText}>
-          まだ写真がありません
+          まだ授業の写真がありません
         </Text>
       ) : (
         <View style={styles.subjectList}>
-          {Object.entries(groupedPhotos).map(
+          {subjectGroups.map(
             ([subject, subjectPhotos]) => (
               <Pressable
                   key={subject}
@@ -216,6 +270,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
+  subjectSectionTitle: {
+    marginTop: 28,
+  },
+
   emptyText: {
     color: '#777',
     fontSize: 15,
@@ -233,6 +291,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+
+  unclassifiedCard: {
+    backgroundColor: '#fff3d6',
+    borderWidth: 1,
+    borderColor: '#f0c96d',
+  },
+
+  unclassifiedHint: {
+    fontSize: 13,
+    color: '#725b24',
+    marginTop: 6,
   },
 
   subjectName: {

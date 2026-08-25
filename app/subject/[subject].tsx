@@ -55,6 +55,8 @@ export default function SubjectScreen() {
       ? params.subject
       : '';
 
+  const isUnclassified = subject === '未分類';
+
   const [lectureGroups, setLectureGroups] =
     useState<LectureGroup[]>([]);
 
@@ -118,6 +120,13 @@ export default function SubjectScreen() {
 
           const subjectPhotos =
             allPhotos.filter((photo) => {
+              if (isUnclassified) {
+                return (
+                  photo.subject === null ||
+                  photo.subject === '未分類'
+                );
+              }
+
               return getPhotoLabel(photo) === subject;
             });
 
@@ -191,7 +200,7 @@ export default function SubjectScreen() {
       };
 
       loadPhotos();
-    }, [subject])
+    }, [isUnclassified, subject])
   );
 
 
@@ -215,7 +224,9 @@ export default function SubjectScreen() {
 
       return {
         ...group,
-        title: `第${index + 1}回`,
+        title: isUnclassified
+          ? '撮影日'
+          : `第${index + 1}回`,
         data: rows,
       };
     });
@@ -234,17 +245,27 @@ export default function SubjectScreen() {
       ListHeaderComponent={
         <View>
           <Text style={styles.title}>
-            {subject}
+            {isUnclassified
+              ? '未分類の写真'
+              : subject}
           </Text>
 
           <Text style={styles.status}>
             {status}
           </Text>
+
+          {isUnclassified ? (
+            <Text style={styles.unclassifiedHint}>
+              写真を開き「分類を変更」から授業名を設定できます。
+            </Text>
+          ) : null}
         </View>
       }
       ListEmptyComponent={
         <Text style={styles.emptyText}>
-          この授業の写真はありません
+          {isUnclassified
+            ? '未分類の写真はありません'
+            : 'この授業の写真はありません'}
         </Text>
       }
       renderSectionHeader={({ section }) => (
@@ -325,17 +346,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 6,
+    marginBottom: 12,
+  },
+
+  unclassifiedHint: {
+    fontSize: 14,
+    color: '#725b24',
+    backgroundColor: '#fff3d6',
+    borderRadius: 8,
+    padding: 12,
+    lineHeight: 20,
     marginBottom: 28,
   },
 
   emptyText: {
     fontSize: 16,
     color: '#777',
+    marginTop: 16,
   },
 
   lectureHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 16,
     marginBottom: 12,
   },
 
