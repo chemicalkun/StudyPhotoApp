@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -20,8 +21,60 @@ const periodTimes = {
   5: { start: '16:20', end: '17:50' },
 };
 
+
+type PhotoRecord = {
+  id: string;
+  uri: string;
+  takenAt: string;
+  day: string;
+  period: number | null;
+  subject: string | null;
+};
+
+
+const isPhotoRecord = (
+  value: unknown
+): value is PhotoRecord => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const photo = value as Partial<PhotoRecord>;
+
+  return (
+    typeof photo.id === 'string' &&
+    typeof photo.uri === 'string' &&
+    typeof photo.takenAt === 'string' &&
+    typeof photo.day === 'string' &&
+    (typeof photo.period === 'number' ||
+      photo.period === null) &&
+    (typeof photo.subject === 'string' ||
+      photo.subject === null)
+  );
+};
+
+
+const isTimetable = (
+  value: unknown
+): value is Record<string, string> => {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value)
+  ) {
+    return false;
+  }
+
+  return Object.values(value).every(
+    (subject) => typeof subject === 'string'
+  );
+};
+
+
 export default function TimetableScreen() {
   const [modalVisible, setModalVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const [selectedDay, setSelectedDay] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
@@ -29,19 +82,50 @@ export default function TimetableScreen() {
   const [subjectName, setSubjectName] = useState('');
 
   const [timetable, setTimetable] = useState<Record<string, string>>({});
+
+
   useEffect(() => {
-  const loadTimetable = async () => {
-    const savedTimetable = await AsyncStorage.getItem('timetable');
+    const loadTimetable = async () => {
+      try {
+        setLoadError('');
 
-    if (savedTimetable !== null) {
-      setTimetable(JSON.parse(savedTimetable));
-    }
-  };
+        const savedTimetable =
+          await AsyncStorage.getItem('timetable');
 
-  loadTimetable();
-}, []);
+        if (savedTimetable === null) {
+          setTimetable({});
+          return;
+        }
+
+        const parsedTimetable: unknown =
+          JSON.parse(savedTimetable);
+
+        if (!isTimetable(parsedTimetable)) {
+          throw new Error(
+            'timetableの形式が不正です'
+          );
+        }
+
+        setTimetable(parsedTimetable);
+      } catch (error) {
+        console.log('時間割読み込みエラー:', error);
+
+        setTimetable({});
+        setLoadError(
+          '時間割データを読み込めませんでした。データは削除されていません。画面を開き直してください。'
+        );
+      }
+    };
+
+    loadTimetable();
+  }, []);
+
 
   const handlePress = (day: string, period: number) => {
+    if (loadError !== '') {
+      return;
+    }
+
     setSelectedDay(day);
     setSelectedPeriod(period);
 
@@ -52,31 +136,129 @@ export default function TimetableScreen() {
     setModalVisible(true);
   };
 
+
   const handleSave = async () => {
-  if (selectedPeriod === null) {
-    return;
-  }
+    if (selectedPeriod === null || saving) {
+      return;
+    }
 
-  const key = `${selectedDay}-${selectedPeriod}`;
+    const key = `${selectedDay}-${selectedPeriod}`;
+    const normalizedSubject = subjectName.trim();
 
-  const newTimetable = {
-    ...timetable,
-    [key]: subjectName,
+    const newTimetable = {
+      ...timetable,
+      [key]: normalizedSubject,
+    };
+
+    setSaving(true);
+
+    let originalPhotos: string | null = null;
+    let photosWereUpdated = false;
+    let updatedPhotoCount = 0;
+
+    try {
+      originalPhotos =
+        await AsyncStorage.getItem('photos');
+
+      if (
+        normalizedSubject !== '' &&
+        originalPhotos !== null
+      ) {
+        const parsedPhotos: unknown =
+          JSON.parse(originalPhotos);
+
+        if (
+          !Array.isArray(parsedPhotos) ||
+          !parsedPhotos.every(isPhotoRecord)
+        ) {
+          throw new Error(
+            'photosの形式が不正です'
+          );
+        }
+
+        const updatedPhotos = parsedPhotos.map(
+          (photo) => {
+            const shouldClassify =
+              photo.day === selectedDay &&
+              photo.period === selectedPeriod &&
+              (photo.subject === null ||
+                photo.subject === '未分類');
+
+            if (!shouldClassify) {
+              return photo;
+            }
+
+            updatedPhotoCount += 1;
+
+            return {
+              ...photo,
+              subject: normalizedSubject,
+            };
+          }
+        );
+
+        if (updatedPhotoCount > 0) {
+          await AsyncStorage.setItem(
+            'photos',
+            JSON.stringify(updatedPhotos)
+          );
+
+          photosWereUpdated = true;
+        }
+      }
+
+      await AsyncStorage.setItem(
+        'timetable',
+        JSON.stringify(newTimetable)
+      );
+
+      setTimetable(newTimetable);
+      setLoadError('');
+      setModalVisible(false);
+
+      if (updatedPhotoCount > 0) {
+        Alert.alert(
+          '時間割を保存しました',
+          `未分類の写真${updatedPhotoCount}枚を「${normalizedSubject}」に分類しました。`
+        );
+      }
+    } catch (error) {
+      console.log('時間割保存エラー:', error);
+
+      if (photosWereUpdated && originalPhotos !== null) {
+        try {
+          await AsyncStorage.setItem(
+            'photos',
+            originalPhotos
+          );
+        } catch (rollbackError) {
+          console.log(
+            '写真分類の復元エラー:',
+            rollbackError
+          );
+        }
+      }
+
+      Alert.alert(
+        '時間割を保存できませんでした',
+        '時間割の保存中にエラーが発生しました。もう一度お試しください。'
+      );
+    } finally {
+      setSaving(false);
+    }
   };
-
-  setTimetable(newTimetable);
-
-  await AsyncStorage.setItem(
-    'timetable',
-    JSON.stringify(newTimetable)
-  );
-
-  setModalVisible(false);
-};
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>時間割</Text>
+
+      {loadError !== '' ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>
+            {loadError}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.headerRow}>
         <View style={styles.cornerHeader} />
@@ -89,42 +271,60 @@ export default function TimetableScreen() {
       </View>
 
       {periods.map((period) => (
-  <View key={period} style={styles.row}>
-    <View style={styles.periodHeader}>
-      <Text style={styles.headerText}>{period}限</Text>
+        <View key={period} style={styles.row}>
+          <View style={styles.periodHeader}>
+            <Text style={styles.headerText}>
+              {period}限
+            </Text>
 
-      <Text style={styles.periodTime}>
-        {periodTimes[period as keyof typeof periodTimes].start}
-      </Text>
+            <Text style={styles.periodTime}>
+              {periodTimes[
+                period as keyof typeof periodTimes
+              ].start}
+            </Text>
 
-      <Text style={styles.periodTime}>
-        〜{periodTimes[period as keyof typeof periodTimes].end}
-      </Text>
-    </View>
+            <Text style={styles.periodTime}>
+              〜{periodTimes[
+                period as keyof typeof periodTimes
+              ].end}
+            </Text>
+          </View>
 
-    {days.map((day) => {
-      const key = `${day}-${period}`;
-      const subject = timetable[key];
+          {days.map((day) => {
+            const key = `${day}-${period}`;
+            const subject = timetable[key];
 
-      return (
-        <Pressable
-          key={key}
-          style={styles.cell}
-          onPress={() => handlePress(day, period)}
-        >
-          <Text style={styles.cellText}>
-            {subject || '＋'}
-          </Text>
-        </Pressable>
-      );
-    })}
-  </View>
-))}
+            return (
+              <Pressable
+                key={key}
+                style={[
+                  styles.cell,
+                  loadError !== '' &&
+                    styles.disabledButton,
+                ]}
+                disabled={loadError !== ''}
+                onPress={() =>
+                  handlePress(day, period)
+                }
+              >
+                <Text style={styles.cellText}>
+                  {subject || '＋'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
 
       <Modal
         visible={modalVisible}
         transparent={true}
         animationType="slide"
+        onRequestClose={() => {
+          if (!saving) {
+            setModalVisible(false);
+          }
+        }}
       >
         <View style={styles.modalBackground}>
           <View style={styles.modalContent}>
@@ -142,14 +342,21 @@ export default function TimetableScreen() {
             />
 
             <Pressable
-              style={styles.saveButton}
+              style={[
+                styles.saveButton,
+                saving && styles.disabledButton,
+              ]}
+              disabled={saving}
               onPress={handleSave}
             >
-              <Text style={styles.saveButtonText}>保存</Text>
+              <Text style={styles.saveButtonText}>
+                {saving ? '保存中...' : '保存'}
+              </Text>
             </Pressable>
 
             <Pressable
               style={styles.cancelButton}
+              disabled={saving}
               onPress={() => setModalVisible(false)}
             >
               <Text style={styles.cancelButtonText}>キャンセル</Text>
@@ -173,6 +380,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'black',
     marginBottom: 24,
+  },
+
+  errorBox: {
+    backgroundColor: '#ffe8e8',
+    borderWidth: 1,
+    borderColor: '#e39a9a',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 20,
+  },
+
+  errorText: {
+    color: '#8a2020',
+    fontSize: 14,
+    lineHeight: 20,
   },
 
   periodTime: {
@@ -277,16 +499,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  disabledButton: {
+    opacity: 0.5,
+  },
+
   cancelButton: {
     padding: 12,
   },
 
   cornerHeader: {
-  width: 50,
-  height: 50,
-  borderWidth: 0.5,
-  borderColor: '#aaa',
-},
+    width: 50,
+    height: 50,
+    borderWidth: 0.5,
+    borderColor: '#aaa',
+  },
 
   cancelButtonText: {
     color: 'black',
