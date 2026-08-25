@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import {
+  Pressable,
   SectionList,
   StyleSheet,
   Text,
@@ -8,7 +9,10 @@ import {
 } from 'react-native';
 
 import { Image } from 'expo-image';
-import { useLocalSearchParams } from 'expo-router';
+import {
+  router,
+  useLocalSearchParams,
+} from 'expo-router';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -258,21 +262,33 @@ export default function SubjectScreen() {
       renderItem={({ item: row }) => (
         <View style={styles.photoRow}>
           {row.photos.map((photo) => (
-            <Image
+            <Pressable
               key={photo.id}
-              source={{ uri: photo.uri }}
-              style={styles.photo}
-              contentFit="cover"
-              allowDownscaling
-              enforceEarlyResizing
-              cachePolicy="disk"
-              onError={(error) => {
-                console.log(
-                  '画像表示エラー:',
-                  error.error
-                );
-              }}
-            />
+              style={styles.photoButton}
+              accessibilityRole="button"
+              accessibilityLabel="写真を大きく表示"
+              onPress={() =>
+                router.push({
+                  pathname: '/photo/[id]',
+                  params: { id: photo.id },
+                })
+              }
+            >
+              <Image
+                source={{ uri: photo.uri }}
+                style={styles.photo}
+                contentFit="cover"
+                allowDownscaling
+                enforceEarlyResizing
+                cachePolicy="disk"
+                onError={(error) => {
+                  console.log(
+                    '画像表示エラー:',
+                    error.error
+                  );
+                }}
+              />
+            </Pressable>
           ))}
         </View>
       )}
@@ -348,9 +364,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  photo: {
+  photoButton: {
     width: '31.5%',
     aspectRatio: 1,
+  },
+
+  photo: {
+    width: '100%',
+    height: '100%',
     borderRadius: 8,
     backgroundColor: '#eee',
   },
