@@ -56,6 +56,7 @@ export default function CameraScreen() {
   const cameraRef = useRef<CameraView>(null);
 
   const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
 
 
   const timeToMinutes = (time: string) => {
@@ -168,81 +169,118 @@ export default function CameraScreen() {
       `${id}.jpg`
     );
 
-    sourceFile.copy(savedFile);
+    try {
+      sourceFile.copy(savedFile);
 
-    const record: PhotoRecord = {
-      id,
-      uri: savedFile.uri,
-      takenAt: new Date().toISOString(),
-      day: classInfo.day,
-      period: classInfo.period,
-      subject: classInfo.subject,
-    };
+      const record: PhotoRecord = {
+        id,
+        uri: savedFile.uri,
+        takenAt: new Date().toISOString(),
+        day: classInfo.day,
+        period: classInfo.period,
+        subject: classInfo.subject,
+      };
 
-    const savedPhotos =
-      await AsyncStorage.getItem('photos');
+      const savedPhotos =
+        await AsyncStorage.getItem('photos');
 
-    const photos: PhotoRecord[] =
-      savedPhotos !== null
-        ? JSON.parse(savedPhotos)
-        : [];
+      let photos: PhotoRecord[] = [];
 
-    const newPhotos = [
-      record,
-      ...photos,
-    ];
+      if (savedPhotos !== null) {
+        const parsedPhotos: unknown =
+          JSON.parse(savedPhotos);
 
-    await AsyncStorage.setItem(
-      'photos',
-      JSON.stringify(newPhotos)
-    );
+        if (!Array.isArray(parsedPhotos)) {
+          throw new Error(
+            'photosが配列ではありません'
+          );
+        }
 
-    return record;
+        photos = parsedPhotos as PhotoRecord[];
+      }
+
+      const newPhotos = [
+        record,
+        ...photos,
+      ];
+
+      await AsyncStorage.setItem(
+        'photos',
+        JSON.stringify(newPhotos)
+      );
+
+      return record;
+    } catch (error) {
+      try {
+        if (savedFile.exists) {
+          savedFile.delete();
+        }
+      } catch (cleanupError) {
+        console.log(
+          '写真ファイル後片付けエラー:',
+          cleanupError
+        );
+      }
+
+      throw error;
+    }
   };
 
-    
 
-    const takePicture = async (testMode = false) => {
-        if (!cameraRef.current) {
-            return;
-    }
-
-    const photo =
-        await cameraRef.current.takePictureAsync({
-            shutterSound: false,
-        });
-
-    if (!photo) {
+  const takePicture = async (testMode = false) => {
+    if (!cameraRef.current || saving) {
       return;
     }
 
-    let day: string;
-    let hour: number;
-    let minute: number;
+    setSaving(true);
+    setMessage('写真を保存中...');
 
-    if (testMode) {
-      day = '月';
-      hour = 9;
-      minute = 30;
-    } else {
-      const now = new Date();
+    try {
+      const photo =
+        await cameraRef.current.takePictureAsync({
+          shutterSound: false,
+        });
 
-      day = dayNames[now.getDay()];
-      hour = now.getHours();
-      minute = now.getMinutes();
+      if (!photo) {
+        throw new Error('撮影データがありません');
+      }
+
+      let day: string;
+      let hour: number;
+      let minute: number;
+
+      if (testMode) {
+        day = '月';
+        hour = 9;
+        minute = 30;
+      } else {
+        const now = new Date();
+
+        day = dayNames[now.getDay()];
+        hour = now.getHours();
+        minute = now.getMinutes();
+      }
+
+      const classInfo =
+        await getClassInfo(day, hour, minute);
+
+      const savedPhoto =
+        await savePhoto(photo.uri, classInfo);
+
+      setMessage(
+        `写真を保存しました\n${classInfo.label}`
+      );
+
+      console.log('保存した写真:', savedPhoto);
+    } catch (error) {
+      console.log('写真撮影・保存エラー:', error);
+
+      setMessage(
+        '写真を保存できませんでした\nもう一度お試しください'
+      );
+    } finally {
+      setSaving(false);
     }
-
-    const classInfo =
-      await getClassInfo(day, hour, minute);
-
-    const savedPhoto =
-      await savePhoto(photo.uri, classInfo);
-
-    setMessage(
-      `写真を保存しました\n${classInfo.label}`
-    );
-
-    console.log('保存した写真:', savedPhoto);
   };
 
 
@@ -285,19 +323,29 @@ export default function CameraScreen() {
         </Text>
 
         <Pressable
-  style={styles.shutterButton}
-  onPress={() => takePicture(false)}
->
-  <View style={styles.shutterInner} />
-</Pressable>
+          style={[
+            styles.shutterButton,
+            saving && styles.disabledButton,
+          ]}
+          disabled={saving}
+          onPress={() => takePicture(false)}
+        >
+          <View style={styles.shutterInner} />
+        </Pressable>
 
 
-<Pressable
-  style={styles.testButton}
-  onPress={() => takePicture(true)}
->
+        <Pressable
+          style={[
+            styles.testButton,
+            saving && styles.disabledButton,
+          ]}
+          disabled={saving}
+          onPress={() => takePicture(true)}
+        >
           <Text style={styles.testButtonText}>
-            テスト：月曜 9:30として撮影
+            {saving
+              ? '保存中...'
+              : 'テスト：月曜 9:30として撮影'}
           </Text>
         </Pressable>
       </View>
@@ -352,6 +400,10 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     backgroundColor: 'white',
+  },
+
+  disabledButton: {
+    opacity: 0.5,
   },
 
   message: {
