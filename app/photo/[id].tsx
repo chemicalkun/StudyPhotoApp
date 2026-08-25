@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -28,6 +29,9 @@ type PhotoRecord = {
   period: number | null;
   subject: string | null;
 };
+
+
+const swipeDistance = 60;
 
 
 const getPhotoLabel = (record: PhotoRecord) => {
@@ -174,6 +178,41 @@ export default function PhotoScreen() {
       params: { id: targetPhoto.id },
     });
   };
+
+
+  const swipeResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (
+      _,
+      gestureState
+    ) => {
+      const horizontalDistance =
+        Math.abs(gestureState.dx);
+
+      const verticalDistance =
+        Math.abs(gestureState.dy);
+
+      return (
+        horizontalDistance > 10 &&
+        horizontalDistance > verticalDistance
+      );
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      if (
+        gestureState.dx <= -swipeDistance &&
+        currentPhotoIndex < lecturePhotos.length - 1
+      ) {
+        goToPhoto(currentPhotoIndex + 1);
+        return;
+      }
+
+      if (
+        gestureState.dx >= swipeDistance &&
+        currentPhotoIndex > 0
+      ) {
+        goToPhoto(currentPhotoIndex - 1);
+      }
+    },
+  });
 
 
   const deletePhoto = async () => {
@@ -347,33 +386,38 @@ export default function PhotoScreen() {
         </View>
       ) : photo ? (
         <>
-          {imageLoadFailed ? (
-            <View style={styles.imageErrorContainer}>
-              <Text style={styles.errorText}>
-                画像ファイルを表示できません
-              </Text>
+          <View
+            style={styles.imageContainer}
+            {...swipeResponder.panHandlers}
+          >
+            {imageLoadFailed ? (
+              <View style={styles.imageErrorContainer}>
+                <Text style={styles.errorText}>
+                  画像ファイルを表示できません
+                </Text>
 
-              <Text style={styles.imageErrorHint}>
-                写真データの分類変更や削除は引き続き行えます。
-              </Text>
-            </View>
-          ) : (
-            <Image
-              source={{ uri: photo.uri }}
-              style={styles.image}
-              contentFit="contain"
-              allowDownscaling
-              cachePolicy="disk"
-              onError={(error) => {
-                console.log(
-                  '画像表示エラー:',
-                  error.error
-                );
+                <Text style={styles.imageErrorHint}>
+                  写真データの分類変更や削除は引き続き行えます。
+                </Text>
+              </View>
+            ) : (
+              <Image
+                source={{ uri: photo.uri }}
+                style={styles.image}
+                contentFit="contain"
+                allowDownscaling
+                cachePolicy="disk"
+                onError={(error) => {
+                  console.log(
+                    '画像表示エラー:',
+                    error.error
+                  );
 
-                setImageLoadFailed(true);
-              }}
-            />
-          )}
+                  setImageLoadFailed(true);
+                }}
+              />
+            )}
+          </View>
 
           <View style={styles.photoInfo}>
             <Text style={styles.subjectText}>
@@ -392,43 +436,49 @@ export default function PhotoScreen() {
             ) : null}
 
             {lecturePhotos.length > 1 ? (
-              <View style={styles.navigationRow}>
-                <Pressable
-                  style={[
-                    styles.navigationButton,
-                    currentPhotoIndex <= 0 &&
-                      styles.disabledButton,
-                  ]}
-                  disabled={currentPhotoIndex <= 0}
-                  onPress={() =>
-                    goToPhoto(currentPhotoIndex - 1)
-                  }
-                >
-                  <Text style={styles.navigationButtonText}>
-                    ‹ 前の写真
-                  </Text>
-                </Pressable>
+              <>
+                <Text style={styles.swipeHint}>
+                  画像を左右にスワイプして移動
+                </Text>
 
-                <Pressable
-                  style={[
-                    styles.navigationButton,
-                    currentPhotoIndex >=
-                      lecturePhotos.length - 1 &&
-                      styles.disabledButton,
-                  ]}
-                  disabled={
-                    currentPhotoIndex >=
-                    lecturePhotos.length - 1
-                  }
-                  onPress={() =>
-                    goToPhoto(currentPhotoIndex + 1)
-                  }
-                >
-                  <Text style={styles.navigationButtonText}>
-                    次の写真 ›
-                  </Text>
-                </Pressable>
-              </View>
+                <View style={styles.navigationRow}>
+                  <Pressable
+                    style={[
+                      styles.navigationButton,
+                      currentPhotoIndex <= 0 &&
+                        styles.disabledButton,
+                    ]}
+                    disabled={currentPhotoIndex <= 0}
+                    onPress={() =>
+                      goToPhoto(currentPhotoIndex - 1)
+                    }
+                  >
+                    <Text style={styles.navigationButtonText}>
+                      ‹ 前の写真
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.navigationButton,
+                      currentPhotoIndex >=
+                        lecturePhotos.length - 1 &&
+                        styles.disabledButton,
+                    ]}
+                    disabled={
+                      currentPhotoIndex >=
+                      lecturePhotos.length - 1
+                    }
+                    onPress={() =>
+                      goToPhoto(currentPhotoIndex + 1)
+                    }
+                  >
+                    <Text style={styles.navigationButtonText}>
+                      次の写真 ›
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
             ) : null}
 
             <Pressable
@@ -547,6 +597,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
+  imageContainer: {
+    flex: 1,
+    width: '100%',
+  },
+
   imageErrorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -583,6 +638,12 @@ const styles = StyleSheet.create({
   positionText: {
     color: '#888',
     fontSize: 13,
+    marginTop: 6,
+  },
+
+  swipeHint: {
+    color: '#888',
+    fontSize: 12,
     marginTop: 6,
   },
 
