@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -41,6 +43,15 @@ export default function PhotoScreen() {
 
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [
+    classificationModalVisible,
+    setClassificationModalVisible,
+  ] = useState(false);
+  const [subjectInput, setSubjectInput] = useState('');
+  const [
+    savingClassification,
+    setSavingClassification,
+  ] = useState(false);
   const [errorMessage, setErrorMessage] =
     useState('');
 
@@ -189,6 +200,76 @@ export default function PhotoScreen() {
   };
 
 
+  const openClassificationModal = () => {
+    if (!photo) {
+      return;
+    }
+
+    setSubjectInput(photo.subject ?? '');
+    setClassificationModalVisible(true);
+  };
+
+
+  const saveClassification = async () => {
+    if (!photo || savingClassification) {
+      return;
+    }
+
+    setSavingClassification(true);
+
+    try {
+      const savedPhotos =
+        await AsyncStorage.getItem('photos');
+
+      if (savedPhotos === null) {
+        throw new Error('写真データがありません');
+      }
+
+      const photos: PhotoRecord[] =
+        JSON.parse(savedPhotos);
+
+      const normalizedSubject =
+        subjectInput.trim() || null;
+
+      let updatedPhoto: PhotoRecord | null = null;
+
+      const updatedPhotos = photos.map((item) => {
+        if (item.id !== photo.id) {
+          return item;
+        }
+
+        updatedPhoto = {
+          ...item,
+          subject: normalizedSubject,
+        };
+
+        return updatedPhoto;
+      });
+
+      if (updatedPhoto === null) {
+        throw new Error('分類を変更する写真が見つかりません');
+      }
+
+      await AsyncStorage.setItem(
+        'photos',
+        JSON.stringify(updatedPhotos)
+      );
+
+      setPhoto(updatedPhoto);
+      setClassificationModalVisible(false);
+    } catch (error) {
+      console.log('写真分類変更エラー:', error);
+
+      Alert.alert(
+        '分類を変更できませんでした',
+        '写真の分類を保存する際にエラーが発生しました。'
+      );
+    } finally {
+      setSavingClassification(false);
+    }
+  };
+
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -238,6 +319,15 @@ export default function PhotoScreen() {
             </Text>
 
             <Pressable
+              style={styles.classificationButton}
+              onPress={openClassificationModal}
+            >
+              <Text style={styles.classificationButtonText}>
+                分類を変更
+              </Text>
+            </Pressable>
+
+            <Pressable
               style={[
                 styles.deleteButton,
                 deleting && styles.disabledButton,
@@ -254,6 +344,67 @@ export default function PhotoScreen() {
           </View>
         </>
       ) : null}
+
+      <Modal
+        visible={classificationModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() =>
+          setClassificationModalVisible(false)
+        }
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              分類を変更
+            </Text>
+
+            <Text style={styles.modalDescription}>
+              授業名を入力してください。
+            </Text>
+
+            <TextInput
+              style={styles.input}
+              value={subjectInput}
+              onChangeText={setSubjectInput}
+              placeholder="例：高分子化学"
+              autoFocus
+            />
+
+            <Text style={styles.inputHint}>
+              空欄で保存すると、曜日・時限による自動分類に戻ります。
+            </Text>
+
+            <Pressable
+              style={[
+                styles.saveButton,
+                savingClassification &&
+                  styles.disabledButton,
+              ]}
+              disabled={savingClassification}
+              onPress={saveClassification}
+            >
+              <Text style={styles.saveButtonText}>
+                {savingClassification
+                  ? '保存中...'
+                  : '保存'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.cancelButton}
+              disabled={savingClassification}
+              onPress={() =>
+                setClassificationModalVisible(false)
+              }
+            >
+              <Text style={styles.cancelButtonText}>
+                キャンセル
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -301,6 +452,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  classificationButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#3478f6',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    marginTop: 14,
+  },
+
+  classificationButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
   deleteButton: {
     alignSelf: 'flex-start',
     borderWidth: 1,
@@ -308,7 +474,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    marginTop: 14,
+    marginTop: 10,
   },
 
   disabledButton: {
@@ -319,5 +485,73 @@ const styles = StyleSheet.create({
     color: '#ff6b6b',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 22,
+  },
+
+  modalTitle: {
+    color: 'black',
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+
+  modalDescription: {
+    color: '#444',
+    fontSize: 15,
+    marginTop: 8,
+  },
+
+  input: {
+    borderWidth: 1,
+    borderColor: '#aaa',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    color: 'black',
+    fontSize: 16,
+    marginTop: 18,
+  },
+
+  inputHint: {
+    color: '#666',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+
+  saveButton: {
+    backgroundColor: '#333',
+    borderRadius: 8,
+    padding: 13,
+    marginTop: 20,
+  },
+
+  saveButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  cancelButton: {
+    padding: 12,
+    marginTop: 4,
+  },
+
+  cancelButtonText: {
+    color: 'black',
+    fontSize: 15,
+    textAlign: 'center',
   },
 });
