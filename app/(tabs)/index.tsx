@@ -191,47 +191,51 @@ export default function HomeScreen() {
       </Pressable>
 
 
-      <Text style={styles.sectionTitle}>
-        未分類
-      </Text>
-
-
-      <Pressable
-        style={[
-          styles.subjectCard,
-          styles.unclassifiedCard,
-        ]}
-        onPress={() =>
-          router.push({
-            pathname: '/subject/[subject]',
-            params: { subject: '未分類' },
-          })
-        }
-      >
-        <View>
-          <Text style={styles.subjectName}>
-            未分類の写真
+      {unclassifiedPhotos.length > 0 ? (
+        <>
+          <Text style={styles.sectionTitle}>
+            未分類
           </Text>
 
-          <Text style={styles.subjectCount}>
-            {unclassifiedPhotos.length}枚
-          </Text>
+          <Pressable
+            style={[
+              styles.subjectCard,
+              styles.unclassifiedCard,
+            ]}
+            onPress={() =>
+              router.push({
+                pathname: '/subject/[subject]',
+                params: { subject: '未分類' },
+              })
+            }
+          >
+            <View>
+              <Text style={styles.subjectName}>
+                未分類の写真
+              </Text>
 
-          <Text style={styles.unclassifiedHint}>
-            授業名を確認して整理できます
-          </Text>
-        </View>
+              <Text style={styles.subjectCount}>
+                {unclassifiedPhotos.length}枚
+              </Text>
 
-        <Text style={styles.arrow}>
-          ›
-        </Text>
-      </Pressable>
+              <Text style={styles.unclassifiedHint}>
+                授業名を確認して整理できます
+              </Text>
+            </View>
+
+            <Text style={styles.arrow}>
+              ›
+            </Text>
+          </Pressable>
+        </>
+      ) : null}
 
 
       <Text
         style={[
           styles.sectionTitle,
-          styles.subjectSectionTitle,
+          unclassifiedPhotos.length > 0 &&
+            styles.subjectSectionTitle,
         ]}
       >
         授業
