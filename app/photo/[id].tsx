@@ -30,6 +30,22 @@ type PhotoRecord = {
 };
 
 
+const getPhotoLabel = (record: PhotoRecord) => {
+  if (record.subject) {
+    return record.subject;
+  }
+
+  if (
+    record.period !== null &&
+    record.day !== ''
+  ) {
+    return `${record.day}曜${record.period}限`;
+  }
+
+  return '未分類';
+};
+
+
 export default function PhotoScreen() {
   const params = useLocalSearchParams();
 
@@ -40,6 +56,8 @@ export default function PhotoScreen() {
 
   const [photo, setPhoto] =
     useState<PhotoRecord | null>(null);
+  const [lecturePhotos, setLecturePhotos] =
+    useState<PhotoRecord[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [imageLoadFailed, setImageLoadFailed] =
@@ -61,6 +79,9 @@ export default function PhotoScreen() {
   useEffect(() => {
     const loadPhoto = async () => {
       try {
+        setLoading(true);
+        setErrorMessage('');
+        setPhoto(null);
         setImageLoadFailed(false);
 
         const savedPhotos =
@@ -71,8 +92,16 @@ export default function PhotoScreen() {
           return;
         }
 
-        const photos: PhotoRecord[] =
+        const parsedPhotos: unknown =
           JSON.parse(savedPhotos);
+
+        if (!Array.isArray(parsedPhotos)) {
+          throw new Error(
+            'photosが配列ではありません'
+          );
+        }
+
+        const photos = parsedPhotos as PhotoRecord[];
 
         const selectedPhoto =
           photos.find((item) => {
@@ -84,6 +113,24 @@ export default function PhotoScreen() {
           return;
         }
 
+        const selectedLabel =
+          getPhotoLabel(selectedPhoto);
+
+        const relatedPhotos = photos
+          .filter((item) => {
+            return getPhotoLabel(item) === selectedLabel;
+          })
+          .sort((a, b) => {
+            const dateA =
+              new Date(a.takenAt).getTime();
+
+            const dateB =
+              new Date(b.takenAt).getTime();
+
+            return dateA - dateB;
+          });
+
+        setLecturePhotos(relatedPhotos);
         setPhoto(selectedPhoto);
       } catch (error) {
         console.log('写真読み込みエラー:', error);
@@ -97,22 +144,6 @@ export default function PhotoScreen() {
   }, [photoId]);
 
 
-  const getPhotoLabel = (record: PhotoRecord) => {
-    if (record.subject) {
-      return record.subject;
-    }
-
-    if (
-      record.period !== null &&
-      record.day !== ''
-    ) {
-      return `${record.day}曜${record.period}限`;
-    }
-
-    return '未分類';
-  };
-
-
   const getTakenAtLabel = (takenAt: string) => {
     const date = new Date(takenAt);
 
@@ -121,6 +152,27 @@ export default function PhotoScreen() {
     }
 
     return date.toLocaleString('ja-JP');
+  };
+
+
+  const currentPhotoIndex = photo
+    ? lecturePhotos.findIndex((item) => {
+        return item.id === photo.id;
+      })
+    : -1;
+
+
+  const goToPhoto = (targetIndex: number) => {
+    const targetPhoto = lecturePhotos[targetIndex];
+
+    if (!targetPhoto) {
+      return;
+    }
+
+    router.replace({
+      pathname: '/photo/[id]',
+      params: { id: targetPhoto.id },
+    });
   };
 
 
@@ -332,6 +384,53 @@ export default function PhotoScreen() {
               {getTakenAtLabel(photo.takenAt)}
             </Text>
 
+            {currentPhotoIndex >= 0 ? (
+              <Text style={styles.positionText}>
+                写真 {currentPhotoIndex + 1} /{' '}
+                {lecturePhotos.length}
+              </Text>
+            ) : null}
+
+            {lecturePhotos.length > 1 ? (
+              <View style={styles.navigationRow}>
+                <Pressable
+                  style={[
+                    styles.navigationButton,
+                    currentPhotoIndex <= 0 &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={currentPhotoIndex <= 0}
+                  onPress={() =>
+                    goToPhoto(currentPhotoIndex - 1)
+                  }
+                >
+                  <Text style={styles.navigationButtonText}>
+                    ‹ 前の写真
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.navigationButton,
+                    currentPhotoIndex >=
+                      lecturePhotos.length - 1 &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={
+                    currentPhotoIndex >=
+                    lecturePhotos.length - 1
+                  }
+                  onPress={() =>
+                    goToPhoto(currentPhotoIndex + 1)
+                  }
+                >
+                  <Text style={styles.navigationButtonText}>
+                    次の写真 ›
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <Pressable
               style={styles.classificationButton}
               onPress={openClassificationModal}
@@ -479,6 +578,34 @@ const styles = StyleSheet.create({
     color: '#bbb',
     fontSize: 14,
     marginTop: 4,
+  },
+
+  positionText: {
+    color: '#888',
+    fontSize: 13,
+    marginTop: 6,
+  },
+
+  navigationRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+
+  navigationButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#666',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+
+  navigationButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 
   classificationButton: {
