@@ -21,25 +21,74 @@ type PhotoRecord = {
 };
 
 
+const isPhotoRecord = (
+  value: unknown
+): value is PhotoRecord => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const photo = value as Partial<PhotoRecord>;
+
+  return (
+    typeof photo.id === 'string' &&
+    typeof photo.uri === 'string' &&
+    typeof photo.takenAt === 'string' &&
+    typeof photo.day === 'string' &&
+    (typeof photo.period === 'number' ||
+      photo.period === null) &&
+    (typeof photo.subject === 'string' ||
+      photo.subject === null)
+  );
+};
+
+
 export default function HomeScreen() {
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
+  const [loadError, setLoadError] = useState('');
 
 
   useFocusEffect(
     useCallback(() => {
       const loadPhotos = async () => {
-        const savedPhotos =
-          await AsyncStorage.getItem('photos');
+        try {
+          setLoadError('');
 
-        if (savedPhotos === null) {
+          const savedPhotos =
+            await AsyncStorage.getItem('photos');
+
+          if (savedPhotos === null) {
+            setPhotos([]);
+            return;
+          }
+
+          const parsedPhotos: unknown =
+            JSON.parse(savedPhotos);
+
+          if (!Array.isArray(parsedPhotos)) {
+            throw new Error(
+              'photosが配列ではありません'
+            );
+          }
+
+          if (!parsedPhotos.every(isPhotoRecord)) {
+            throw new Error(
+              'photosに不正なデータが含まれています'
+            );
+          }
+
+          setPhotos(parsedPhotos);
+        } catch (error) {
+          console.log(
+            'ホーム写真読み込みエラー:',
+            error
+          );
+
           setPhotos([]);
-          return;
+          setLoadError(
+            '写真データを読み込めませんでした。データは削除されていません。'
+          );
         }
-
-        const parsedPhotos: PhotoRecord[] =
-          JSON.parse(savedPhotos);
-
-        setPhotos(parsedPhotos);
       };
 
       loadPhotos();
@@ -101,6 +150,15 @@ export default function HomeScreen() {
       <Text style={styles.subtitle}>
         講義写真を自動で整理
       </Text>
+
+
+      {loadError !== '' ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>
+            {loadError}
+          </Text>
+        </View>
+      ) : null}
 
 
       <Pressable
@@ -240,6 +298,21 @@ const styles = StyleSheet.create({
     color: '#555',
     marginTop: 8,
     marginBottom: 32,
+  },
+
+  errorBox: {
+    backgroundColor: '#ffe8e8',
+    borderWidth: 1,
+    borderColor: '#e39a9a',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 20,
+  },
+
+  errorText: {
+    color: '#8a2020',
+    fontSize: 14,
+    lineHeight: 20,
   },
 
   mainButton: {
