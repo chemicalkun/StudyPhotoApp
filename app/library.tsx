@@ -45,6 +45,7 @@ type PhotoRecord = {
 
 export default function LibraryScreen() {
   const [message, setMessage] = useState('');
+  const [importing, setImporting] = useState(false);
 
   const timeToMinutes = (time: string) => {
     const [hour, minute] = time.split(':').map(Number);
@@ -80,82 +81,85 @@ export default function LibraryScreen() {
     const period = findPeriod(hour, minute);
 
     if (period === null) {
-        return {
-            day,
-            period: null,
-            subject: null,
-            label: '授業時間外',
-        };
+      return {
+        day,
+        period: null,
+        subject: null,
+        label: '授業時間外',
+      };
     }
 
     if (day === '') {
-        return {
-            day,
-            period,
-            subject: null,
-            label: '土日は授業なし',
-        };
+      return {
+        day,
+        period,
+        subject: null,
+        label: '土日は授業なし',
+      };
     }
 
-  const savedTimetable =
-    await AsyncStorage.getItem('timetable');
+    const savedTimetable =
+      await AsyncStorage.getItem('timetable');
 
-  if (savedTimetable === null) {
+    if (savedTimetable === null) {
+      return {
+        day,
+        period,
+        subject: null,
+        label: '時間割未登録',
+      };
+    }
+
+    const timetable: Record<string, string> =
+      JSON.parse(savedTimetable);
+
+    const key = `${day}-${period}`;
+    const subject = timetable[key] ?? null;
+
+    if (subject === null) {
+      return {
+        day,
+        period,
+        subject: null,
+        label: `${day}曜日 ${period}限：授業未登録`,
+      };
+    }
+
     return {
       day,
       period,
-      subject: null,
-      label: '時間割未登録',
+      subject,
+      label: `${day}曜日 ${period}限：${subject}`,
     };
-  }
-
-  const timetable: Record<string, string> =
-    JSON.parse(savedTimetable);
-
-  const key = `${day}-${period}`;
-  const subject = timetable[key] ?? null;
-
-  if (subject === null) {
-    return {
-      day,
-      period,
-      subject: null,
-      label: `${day}曜日 ${period}限：授業未登録`,
-    };
-  }
-
-  return {
-    day,
-    period,
-    subject,
-    label: `${day}曜日 ${period}限：${subject}`,
   };
-    };
-  
-    const savePhoto = async (
-        photoUri: string,
-        takenAt: Date,
-        classInfo: ClassInfo
-    ) => {
-      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      const photosDirectory = new Directory(
-        Paths.document,
-        'studyphoto-photos'
-      );
 
-      photosDirectory.create({
-        idempotent: true,
-        intermediates: true,
-      });
+  const savePhoto = async (
+    photoUri: string,
+    takenAt: Date,
+    classInfo: ClassInfo
+  ) => {
+    const id =
+      `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      const sourceFile = new File(photoUri);
+    const photosDirectory = new Directory(
+      Paths.document,
+      'studyphoto-photos'
+    );
 
-      const savedFile = new File(
-        photosDirectory,
-        `${id}.jpg`
-      );
+    photosDirectory.create({
+      idempotent: true,
+      intermediates: true,
+    });
 
+    const sourceFile = new File(photoUri);
+
+    const savedFile = new File(
+      photosDirectory,
+      `${id}.jpg`
+    );
+
+    try {
       sourceFile.copy(savedFile);
 
       const record: PhotoRecord = {
@@ -170,10 +174,20 @@ export default function LibraryScreen() {
       const savedPhotos =
         await AsyncStorage.getItem('photos');
 
-      const photos: PhotoRecord[] =
-        savedPhotos !== null
-        ? JSON.parse(savedPhotos)
-        : [];
+      let photos: PhotoRecord[] = [];
+
+      if (savedPhotos !== null) {
+        const parsedPhotos: unknown =
+          JSON.parse(savedPhotos);
+
+        if (!Array.isArray(parsedPhotos)) {
+          throw new Error(
+            'photosが配列ではありません'
+          );
+        }
+
+        photos = parsedPhotos as PhotoRecord[];
+      }
 
       const newPhotos = [
         record,
@@ -186,69 +200,146 @@ export default function LibraryScreen() {
       );
 
       return record;
-    };    
-
-    const pickImage = async () => {
-        const permissionResult =
-            await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-        if (!permissionResult.granted) {
-            setMessage('写真ライブラリへのアクセスが必要です');
-            return;
+    } catch (error) {
+      try {
+        if (savedFile.exists) {
+          savedFile.delete();
         }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            allowsMultipleSelection: true,
-            selectionLimit: 20,
-            exif: true,
-            quality: 1,
-        });
-
-        if (result.canceled) {
-            return;
-        }
-
-    const classificationResults: string[] = [];
-
-    for (const selectedPhoto of result.assets) {
-        if (!selectedPhoto.assetId) {
-            classificationResults.push(
-            '撮影日時を取得できない写真がありました'
-            );
-            continue;
-        }
-
-        const assetInfo =
-            await MediaLibrary.getAssetInfoAsync(
-            selectedPhoto.assetId
-            );
-
-        const takenAt = new Date(
-            assetInfo.creationTime
+      } catch (cleanupError) {
+        console.log(
+          '写真ファイル後片付けエラー:',
+          cleanupError
         );
+      }
 
-        const classInfo =
-            await getClassInfo(takenAt);
+      throw error;
+    }
+  };
 
-        const savedPhoto =
-            await savePhoto(
-            selectedPhoto.uri,
-            takenAt,
-            classInfo
-            );
 
-        classificationResults.push(classInfo.label);
-
-        console.log('撮影日時:', takenAt);
-        console.log('保存した写真:', savedPhoto);
+  const pickImage = async () => {
+    if (importing) {
+      return;
     }
 
-    setMessage(
-        `${result.assets.length}枚を保存しました\n` +
-        classificationResults.join('\n')
-    );
-};
+    setImporting(true);
+
+    try {
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        setMessage(
+          '写真ライブラリへのアクセスが必要です'
+        );
+        return;
+      }
+
+      const result =
+        await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsMultipleSelection: true,
+          selectionLimit: 20,
+          exif: true,
+          quality: 1,
+        });
+
+      if (result.canceled) {
+        return;
+      }
+
+      let savedCount = 0;
+      let failedCount = 0;
+      const classificationResults: string[] = [];
+
+      for (
+        let index = 0;
+        index < result.assets.length;
+        index += 1
+      ) {
+        const selectedPhoto = result.assets[index];
+
+        setMessage(
+          `${index + 1}/${result.assets.length}枚を処理中...`
+        );
+
+        if (!selectedPhoto.assetId) {
+          failedCount += 1;
+          classificationResults.push(
+            '撮影日時を取得できず、保存できませんでした'
+          );
+          continue;
+        }
+
+        try {
+          const assetInfo =
+            await MediaLibrary.getAssetInfoAsync(
+              selectedPhoto.assetId
+            );
+
+          const takenAt = new Date(
+            assetInfo.creationTime
+          );
+
+          if (Number.isNaN(takenAt.getTime())) {
+            throw new Error('撮影日時が不正です');
+          }
+
+          const classInfo =
+            await getClassInfo(takenAt);
+
+          const savedPhoto =
+            await savePhoto(
+              selectedPhoto.uri,
+              takenAt,
+              classInfo
+            );
+
+          savedCount += 1;
+          classificationResults.push(classInfo.label);
+
+          console.log('撮影日時:', takenAt);
+          console.log('保存した写真:', savedPhoto);
+        } catch (photoError) {
+          failedCount += 1;
+          classificationResults.push(
+            '1枚の写真を保存できませんでした'
+          );
+
+          console.log(
+            'ライブラリ写真保存エラー:',
+            photoError
+          );
+        }
+      }
+
+      const summary = [
+        `${savedCount}枚を保存しました`,
+      ];
+
+      if (failedCount > 0) {
+        summary.push(
+          `${failedCount}枚は保存できませんでした`
+        );
+      }
+
+      setMessage(
+        [...summary, ...classificationResults]
+          .join('\n')
+      );
+    } catch (error) {
+      console.log(
+        '写真ライブラリ処理エラー:',
+        error
+      );
+
+      setMessage(
+        '写真ライブラリの処理に失敗しました\nもう一度お試しください'
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -261,11 +352,15 @@ export default function LibraryScreen() {
       </Text>
 
       <Pressable
-        style={styles.button}
+        style={[
+          styles.button,
+          importing && styles.disabledButton,
+        ]}
+        disabled={importing}
         onPress={pickImage}
       >
         <Text style={styles.buttonText}>
-          写真を選択
+          {importing ? '処理中...' : '写真を選択'}
         </Text>
       </Pressable>
 
@@ -308,6 +403,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+
+  disabledButton: {
+    opacity: 0.5,
   },
 
   message: {
