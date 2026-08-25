@@ -42,6 +42,8 @@ export default function PhotoScreen() {
     useState<PhotoRecord | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [imageLoadFailed, setImageLoadFailed] =
+    useState(false);
   const [deleting, setDeleting] = useState(false);
   const [
     classificationModalVisible,
@@ -59,6 +61,8 @@ export default function PhotoScreen() {
   useEffect(() => {
     const loadPhoto = async () => {
       try {
+        setImageLoadFailed(false);
+
         const savedPhotos =
           await AsyncStorage.getItem('photos');
 
@@ -291,23 +295,33 @@ export default function PhotoScreen() {
         </View>
       ) : photo ? (
         <>
-          <Image
-            source={{ uri: photo.uri }}
-            style={styles.image}
-            contentFit="contain"
-            allowDownscaling
-            cachePolicy="disk"
-            onError={(error) => {
-              console.log(
-                '画像表示エラー:',
-                error.error
-              );
+          {imageLoadFailed ? (
+            <View style={styles.imageErrorContainer}>
+              <Text style={styles.errorText}>
+                画像ファイルを表示できません
+              </Text>
 
-              setErrorMessage(
-                '画像ファイルを表示できません'
-              );
-            }}
-          />
+              <Text style={styles.imageErrorHint}>
+                写真データの分類変更や削除は引き続き行えます。
+              </Text>
+            </View>
+          ) : (
+            <Image
+              source={{ uri: photo.uri }}
+              style={styles.image}
+              contentFit="contain"
+              allowDownscaling
+              cachePolicy="disk"
+              onError={(error) => {
+                console.log(
+                  '画像表示エラー:',
+                  error.error
+                );
+
+                setImageLoadFailed(true);
+              }}
+            />
+          )}
 
           <View style={styles.photoInfo}>
             <Text style={styles.subjectText}>
@@ -432,6 +446,21 @@ const styles = StyleSheet.create({
   image: {
     flex: 1,
     width: '100%',
+  },
+
+  imageErrorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+
+  imageErrorHint: {
+    color: '#aaa',
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginTop: 10,
   },
 
   photoInfo: {

@@ -63,6 +63,9 @@ export default function SubjectScreen() {
   const [status, setStatus] =
     useState('読み込み中...');
 
+  const [failedPhotoIds, setFailedPhotoIds] =
+    useState<Record<string, boolean>>({});
+
 
   const getPhotoLabel = (photo: PhotoRecord) => {
     if (photo.subject) {
@@ -105,6 +108,8 @@ export default function SubjectScreen() {
     useCallback(() => {
       const loadPhotos = async () => {
         try {
+          setFailedPhotoIds({});
+
           const savedPhotos =
             await AsyncStorage.getItem('photos');
 
@@ -298,20 +303,35 @@ export default function SubjectScreen() {
                 })
               }
             >
-              <Image
-                source={{ uri: photo.uri }}
-                style={styles.photo}
-                contentFit="cover"
-                allowDownscaling
-                enforceEarlyResizing
-                cachePolicy="disk"
-                onError={(error) => {
-                  console.log(
-                    '画像表示エラー:',
-                    error.error
-                  );
-                }}
-              />
+              {failedPhotoIds[photo.id] ? (
+                <View style={styles.photoError}>
+                  <Text style={styles.photoErrorText}>
+                    画像を表示できません
+                  </Text>
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: photo.uri }}
+                  style={styles.photo}
+                  contentFit="cover"
+                  allowDownscaling
+                  enforceEarlyResizing
+                  cachePolicy="disk"
+                  onError={(error) => {
+                    console.log(
+                      '画像表示エラー:',
+                      error.error
+                    );
+
+                    setFailedPhotoIds(
+                      (currentIds) => ({
+                        ...currentIds,
+                        [photo.id]: true,
+                      })
+                    );
+                  }}
+                />
+              )}
             </Pressable>
           ))}
         </View>
@@ -410,5 +430,22 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 8,
     backgroundColor: '#eee',
+  },
+
+  photoError: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    backgroundColor: '#eee',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 8,
+  },
+
+  photoErrorText: {
+    color: '#777',
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: 'center',
   },
 });
