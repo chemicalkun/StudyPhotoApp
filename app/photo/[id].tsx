@@ -51,6 +51,17 @@ const getPhotoLabel = (record: PhotoRecord) => {
 };
 
 
+const getDateKey = (takenAt: string) => {
+  const date = new Date(takenAt);
+
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+
+  return `${year}-${month}-${day}`;
+};
+
+
 export default function PhotoScreen() {
   const params = useLocalSearchParams();
 
@@ -165,6 +176,36 @@ export default function PhotoScreen() {
 
   const currentPhotoIndex = photo
     ? lecturePhotos.findIndex((item) => {
+        return item.id === photo.id;
+      })
+    : -1;
+
+
+  const lectureDateKeys = [
+    ...new Set(
+      lecturePhotos.map((item) => {
+        return getDateKey(item.takenAt);
+      })
+    ),
+  ];
+
+  const currentLectureDateKey = photo
+    ? getDateKey(photo.takenAt)
+    : '';
+
+  const currentLectureIndex =
+    lectureDateKeys.indexOf(currentLectureDateKey);
+
+  const currentLecturePhotos =
+    lecturePhotos.filter((item) => {
+      return (
+        getDateKey(item.takenAt) ===
+        currentLectureDateKey
+      );
+    });
+
+  const currentLecturePhotoIndex = photo
+    ? currentLecturePhotos.findIndex((item) => {
         return item.id === photo.id;
       })
     : -1;
@@ -455,10 +496,19 @@ export default function PhotoScreen() {
               {getTakenAtLabel(photo.takenAt)}
             </Text>
 
-            {currentPhotoIndex >= 0 ? (
+            {currentLectureIndex >= 0 &&
+            currentLecturePhotoIndex >= 0 ? (
               <Text style={styles.positionText}>
-                写真 {currentPhotoIndex + 1} /{' '}
-                {lecturePhotos.length}
+                第{currentLectureIndex + 1}回 ・ この回の写真{' '}
+                {currentLecturePhotoIndex + 1} /{' '}
+                {currentLecturePhotos.length}
+              </Text>
+            ) : null}
+
+            {currentPhotoIndex >= 0 ? (
+              <Text style={styles.overallPositionText}>
+                授業全体 {currentPhotoIndex + 1} /{' '}
+                {lecturePhotos.length}枚
               </Text>
             ) : null}
 
@@ -674,6 +724,12 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 13,
     marginTop: 6,
+  },
+
+  overallPositionText: {
+    color: '#777',
+    fontSize: 12,
+    marginTop: 3,
   },
 
   swipeHint: {
