@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Alert,
@@ -11,15 +11,16 @@ import {
   View,
 } from 'react-native';
 
+import { router, useFocusEffect } from 'expo-router';
+
+import {
+  defaultPeriodTimes,
+  loadPeriodTimes,
+  periodNumbers,
+  PeriodTimes,
+} from '@/utils/period-times';
+
 const days = ['月', '火', '水', '木', '金'];
-const periods = [1, 2, 3, 4, 5];
-const periodTimes = {
-  1: { start: '09:00', end: '10:30' },
-  2: { start: '10:40', end: '12:10' },
-  3: { start: '13:00', end: '14:30' },
-  4: { start: '14:40', end: '16:10' },
-  5: { start: '16:20', end: '17:50' },
-};
 
 
 type PhotoRecord = {
@@ -77,6 +78,8 @@ export default function TimetableScreen() {
   const [deletingClass, setDeletingClass] =
     useState(false);
   const [loadError, setLoadError] = useState('');
+  const [periodTimesError, setPeriodTimesError] =
+    useState('');
 
   const [selectedDay, setSelectedDay] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
@@ -84,6 +87,8 @@ export default function TimetableScreen() {
   const [subjectName, setSubjectName] = useState('');
 
   const [timetable, setTimetable] = useState<Record<string, string>>({});
+  const [periodTimes, setPeriodTimes] =
+    useState<PeriodTimes>(defaultPeriodTimes);
 
 
   useEffect(() => {
@@ -121,6 +126,40 @@ export default function TimetableScreen() {
 
     loadTimetable();
   }, []);
+
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const loadSettings = async () => {
+        try {
+          const savedPeriodTimes =
+            await loadPeriodTimes();
+
+          if (active) {
+            setPeriodTimes(savedPeriodTimes);
+            setPeriodTimesError('');
+          }
+        } catch (error) {
+          console.log('時限設定読み込みエラー:', error);
+
+          if (active) {
+            setPeriodTimes(defaultPeriodTimes);
+            setPeriodTimesError(
+              '時限設定を読み込めなかったため、デフォルト時刻を表示しています。'
+            );
+          }
+        }
+      };
+
+      loadSettings();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
 
 
   const handlePress = (day: string, period: number) => {
@@ -445,6 +484,23 @@ export default function TimetableScreen() {
         </View>
       ) : null}
 
+      {periodTimesError !== '' ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>
+            {periodTimesError}
+          </Text>
+        </View>
+      ) : null}
+
+      <Pressable
+        style={styles.periodSettingsButton}
+        onPress={() => router.push('/period-settings')}
+      >
+        <Text style={styles.periodSettingsButtonText}>
+          ⏰ 時限の開始・終了時刻を変更
+        </Text>
+      </Pressable>
+
       <View style={styles.headerRow}>
         <View style={styles.cornerHeader} />
 
@@ -455,7 +511,7 @@ export default function TimetableScreen() {
         ))}
       </View>
 
-      {periods.map((period) => (
+      {periodNumbers.map((period) => (
         <View key={period} style={styles.row}>
           <View style={styles.periodHeader}>
             <Text style={styles.headerText}>
@@ -464,13 +520,13 @@ export default function TimetableScreen() {
 
             <Text style={styles.periodTime}>
               {periodTimes[
-                period as keyof typeof periodTimes
+                period
               ].start}
             </Text>
 
             <Text style={styles.periodTime}>
               〜{periodTimes[
-                period as keyof typeof periodTimes
+                period
               ].end}
             </Text>
           </View>
@@ -603,6 +659,22 @@ const styles = StyleSheet.create({
   periodTime: {
     fontSize: 9,
     color: '#666',
+  },
+
+  periodSettingsButton: {
+    backgroundColor: '#eef3ff',
+    borderWidth: 1,
+    borderColor: '#9eb8ef',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 20,
+  },
+
+  periodSettingsButtonText: {
+    color: '#2454a6',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 
   headerRow: {

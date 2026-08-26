@@ -17,13 +17,11 @@ import {
   Paths,
 } from 'expo-file-system';
 
-const periodTimes = {
-  1: { start: '09:00', end: '10:30' },
-  2: { start: '10:40', end: '12:10' },
-  3: { start: '13:00', end: '14:30' },
-  4: { start: '14:40', end: '16:10' },
-  5: { start: '16:20', end: '17:50' },
-};
+import {
+  findPeriod,
+  loadPeriodTimes,
+  PeriodTimes,
+} from '@/utils/period-times';
 
 const dayNames = ['', '月', '火', '水', '木', '金', ''];
 
@@ -47,38 +45,19 @@ export default function LibraryScreen() {
   const [message, setMessage] = useState('');
   const [importing, setImporting] = useState(false);
 
-  const timeToMinutes = (time: string) => {
-    const [hour, minute] = time.split(':').map(Number);
-
-    return hour * 60 + minute;
-  };
-
-  const findPeriod = (hour: number, minute: number) => {
-    const currentMinutes = hour * 60 + minute;
-
-    for (const [period, time] of Object.entries(periodTimes)) {
-      const startMinutes = timeToMinutes(time.start);
-      const endMinutes = timeToMinutes(time.end);
-
-      if (
-        currentMinutes >= startMinutes &&
-        currentMinutes <= endMinutes
-      ) {
-        return Number(period);
-      }
-    }
-
-    return null;
-  };
-
   const getClassInfo = async (
-    date: Date
+    date: Date,
+    periodTimes: PeriodTimes
   ): Promise<ClassInfo> => {
     const day = dayNames[date.getDay()];
     const hour = date.getHours();
     const minute = date.getMinutes();
 
-    const period = findPeriod(hour, minute);
+    const period = findPeriod(
+      hour,
+      minute,
+      periodTimes
+    );
 
     if (period === null) {
       return {
@@ -248,6 +227,9 @@ export default function LibraryScreen() {
         return;
       }
 
+      const configuredPeriodTimes =
+        await loadPeriodTimes();
+
       let savedCount = 0;
       let failedCount = 0;
       const classificationResults: string[] = [];
@@ -286,7 +268,10 @@ export default function LibraryScreen() {
           }
 
           const classInfo =
-            await getClassInfo(takenAt);
+            await getClassInfo(
+              takenAt,
+              configuredPeriodTimes
+            );
 
           const savedPhoto =
             await savePhoto(
