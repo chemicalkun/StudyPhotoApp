@@ -18,19 +18,14 @@ import {
 } from 'expo-file-system';
 
 import {
-  findPeriod,
   loadPeriodTimes,
-  PeriodTimes,
 } from '@/utils/period-times';
-
-const dayNames = ['', '月', '火', '水', '木', '金', ''];
-
-type ClassInfo = {
-  day: string;
-  period: number | null;
-  subject: string | null;
-  label: string;
-};
+import {
+  ClassInfo,
+  classifyClassTime,
+  getDayName,
+  parseTimetable,
+} from '@/utils/classification';
 
 type PhotoRecord = {
   id: string;
@@ -44,74 +39,6 @@ type PhotoRecord = {
 export default function LibraryScreen() {
   const [message, setMessage] = useState('');
   const [importing, setImporting] = useState(false);
-
-  const getClassInfo = async (
-    date: Date,
-    periodTimes: PeriodTimes
-  ): Promise<ClassInfo> => {
-    const day = dayNames[date.getDay()];
-    const hour = date.getHours();
-    const minute = date.getMinutes();
-
-    const period = findPeriod(
-      hour,
-      minute,
-      periodTimes
-    );
-
-    if (period === null) {
-      return {
-        day,
-        period: null,
-        subject: null,
-        label: '授業時間外',
-      };
-    }
-
-    if (day === '') {
-      return {
-        day,
-        period,
-        subject: null,
-        label: '土日は授業なし',
-      };
-    }
-
-    const savedTimetable =
-      await AsyncStorage.getItem('timetable');
-
-    if (savedTimetable === null) {
-      return {
-        day,
-        period,
-        subject: null,
-        label: '時間割未登録',
-      };
-    }
-
-    const timetable: Record<string, string> =
-      JSON.parse(savedTimetable);
-
-    const key = `${day}-${period}`;
-    const subject = timetable[key] ?? null;
-
-    if (subject === null) {
-      return {
-        day,
-        period,
-        subject: null,
-        label: `${day}曜日 ${period}限：授業未登録`,
-      };
-    }
-
-    return {
-      day,
-      period,
-      subject,
-      label: `${day}曜日 ${period}限：${subject}`,
-    };
-  };
-
 
   const savePhoto = async (
     photoUri: string,
@@ -227,8 +154,12 @@ export default function LibraryScreen() {
         return;
       }
 
-      const configuredPeriodTimes =
-        await loadPeriodTimes();
+      const [configuredPeriodTimes, savedTimetable] =
+        await Promise.all([
+          loadPeriodTimes(),
+          AsyncStorage.getItem('timetable'),
+        ]);
+      const timetable = parseTimetable(savedTimetable);
 
       let savedCount = 0;
       let failedCount = 0;
@@ -267,11 +198,13 @@ export default function LibraryScreen() {
             throw new Error('撮影日時が不正です');
           }
 
-          const classInfo =
-            await getClassInfo(
-              takenAt,
-              configuredPeriodTimes
-            );
+          const classInfo = classifyClassTime(
+            getDayName(takenAt),
+            takenAt.getHours(),
+            takenAt.getMinutes(),
+            configuredPeriodTimes,
+            timetable
+          );
 
           const savedPhoto =
             await savePhoto(

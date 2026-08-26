@@ -15,7 +15,6 @@ import { router, Stack } from 'expo-router';
 
 import {
   defaultPeriodTimes,
-  findPeriod,
   getPeriodTimesValidationError,
   loadPeriodTimes,
   PeriodTime,
@@ -23,6 +22,11 @@ import {
   periodNumbers,
   savePeriodTimes,
 } from '@/utils/period-times';
+import {
+  classifyClassTime,
+  getDayName,
+  parseTimetable,
+} from '@/utils/classification';
 
 
 type PhotoRecord = {
@@ -33,9 +37,6 @@ type PhotoRecord = {
   period: number | null;
   subject: string | null;
 };
-
-
-const dayNames = ['', '月', '火', '水', '木', '金', ''];
 
 
 const isPhotoRecord = (
@@ -56,23 +57,6 @@ const isPhotoRecord = (
       photo.period === null) &&
     (typeof photo.subject === 'string' ||
       photo.subject === null)
-  );
-};
-
-
-const isTimetable = (
-  value: unknown
-): value is Record<string, string> => {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    Array.isArray(value)
-  ) {
-    return false;
-  }
-
-  return Object.values(value).every(
-    (subject) => typeof subject === 'string'
   );
 };
 
@@ -151,20 +135,8 @@ export default function PeriodSettingsScreen() {
 
       originalPhotos = savedPhotos;
 
-      let timetable: Record<string, string> = {};
-
-      if (savedTimetable !== null) {
-        const parsedTimetable: unknown =
-          JSON.parse(savedTimetable);
-
-        if (!isTimetable(parsedTimetable)) {
-          throw new Error(
-            'timetableの形式が不正です'
-          );
-        }
-
-        timetable = parsedTimetable;
-      }
+      const timetable =
+        parseTimetable(savedTimetable) ?? {};
 
       if (savedPhotos !== null) {
         const parsedPhotos: unknown =
@@ -203,23 +175,18 @@ export default function PeriodSettingsScreen() {
               return photo;
             }
 
-            const newDay = dayNames[takenAt.getDay()];
-            const newPeriod = findPeriod(
+            const newClassInfo = classifyClassTime(
+              getDayName(takenAt),
               takenAt.getHours(),
               takenAt.getMinutes(),
-              periodTimes
+              periodTimes,
+              timetable
             );
-            const newSubject =
-              newDay !== '' && newPeriod !== null
-                ? timetable[
-                    `${newDay}-${newPeriod}`
-                  ]?.trim() || null
-                : null;
 
             const shouldUpdate =
-              photo.day !== newDay ||
-              photo.period !== newPeriod ||
-              photo.subject !== newSubject;
+              photo.day !== newClassInfo.day ||
+              photo.period !== newClassInfo.period ||
+              photo.subject !== newClassInfo.subject;
 
             if (!shouldUpdate) {
               return photo;
@@ -229,9 +196,9 @@ export default function PeriodSettingsScreen() {
 
             return {
               ...photo,
-              day: newDay,
-              period: newPeriod,
-              subject: newSubject,
+              day: newClassInfo.day,
+              period: newClassInfo.period,
+              subject: newClassInfo.subject,
             };
           }
         );
