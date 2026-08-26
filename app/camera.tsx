@@ -14,24 +14,14 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
-  Directory,
-  File,
-  Paths,
-} from 'expo-file-system';
-
-import {
   loadPeriodTimes,
 } from '@/utils/period-times';
 import {
-  ClassInfo,
   classifyClassTime,
   getDayName,
   parseTimetable,
 } from '@/utils/classification';
-import {
-  parsePhotoRecords,
-  PhotoRecord,
-} from '@/types/photo';
+import { savePhotoFromUri } from '@/services/photo-storage';
 
 
 export default function CameraScreen() {
@@ -41,78 +31,6 @@ export default function CameraScreen() {
 
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
-
-
-  const savePhoto = async (
-    photoUri: string,
-    classInfo: ClassInfo
-  ) => {
-    const id = Date.now().toString();
-
-    const photosDirectory = new Directory(
-      Paths.document,
-      'studyphoto-photos'
-    );
-
-    photosDirectory.create({
-      idempotent: true,
-      intermediates: true,
-    });
-
-    const sourceFile = new File(photoUri);
-
-    const savedFile = new File(
-      photosDirectory,
-      `${id}.jpg`
-    );
-
-    try {
-      sourceFile.copy(savedFile);
-
-      const record: PhotoRecord = {
-        id,
-        uri: savedFile.uri,
-        takenAt: new Date().toISOString(),
-        day: classInfo.day,
-        period: classInfo.period,
-        subject: classInfo.subject,
-      };
-
-      const savedPhotos =
-        await AsyncStorage.getItem('photos');
-
-      let photos: PhotoRecord[] = [];
-
-      if (savedPhotos !== null) {
-        photos = parsePhotoRecords(savedPhotos);
-      }
-
-      const newPhotos = [
-        record,
-        ...photos,
-      ];
-
-      await AsyncStorage.setItem(
-        'photos',
-        JSON.stringify(newPhotos)
-      );
-
-      return record;
-    } catch (error) {
-      try {
-        if (savedFile.exists) {
-          savedFile.delete();
-        }
-      } catch (cleanupError) {
-        console.log(
-          '写真ファイル後片付けエラー:',
-          cleanupError
-        );
-      }
-
-      throw error;
-    }
-  };
 
 
   const takePicture = async (testMode = false) => {
@@ -164,8 +82,13 @@ export default function CameraScreen() {
         timetable
       );
 
-      const savedPhoto =
-        await savePhoto(photo.uri, classInfo);
+      const savedPhoto = await savePhotoFromUri({
+        sourceUri: photo.uri,
+        takenAt: new Date(),
+        day: classInfo.day,
+        period: classInfo.period,
+        subject: classInfo.subject,
+      });
 
       setMessage(
         `写真を保存しました\n${classInfo.label}`

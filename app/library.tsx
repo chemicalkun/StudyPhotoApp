@@ -12,102 +12,18 @@ import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
-  Directory,
-  File,
-  Paths,
-} from 'expo-file-system';
-
-import {
   loadPeriodTimes,
 } from '@/utils/period-times';
 import {
-  ClassInfo,
   classifyClassTime,
   getDayName,
   parseTimetable,
 } from '@/utils/classification';
-import {
-  parsePhotoRecords,
-  PhotoRecord,
-} from '@/types/photo';
+import { savePhotoFromUri } from '@/services/photo-storage';
 
 export default function LibraryScreen() {
   const [message, setMessage] = useState('');
   const [importing, setImporting] = useState(false);
-
-  const savePhoto = async (
-    photoUri: string,
-    takenAt: Date,
-    classInfo: ClassInfo
-  ) => {
-    const id =
-      `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    const photosDirectory = new Directory(
-      Paths.document,
-      'studyphoto-photos'
-    );
-
-    photosDirectory.create({
-      idempotent: true,
-      intermediates: true,
-    });
-
-    const sourceFile = new File(photoUri);
-
-    const savedFile = new File(
-      photosDirectory,
-      `${id}.jpg`
-    );
-
-    try {
-      sourceFile.copy(savedFile);
-
-      const record: PhotoRecord = {
-        id,
-        uri: savedFile.uri,
-        takenAt: takenAt.toISOString(),
-        day: classInfo.day,
-        period: classInfo.period,
-        subject: classInfo.subject,
-      };
-
-      const savedPhotos =
-        await AsyncStorage.getItem('photos');
-
-      let photos: PhotoRecord[] = [];
-
-      if (savedPhotos !== null) {
-        photos = parsePhotoRecords(savedPhotos);
-      }
-
-      const newPhotos = [
-        record,
-        ...photos,
-      ];
-
-      await AsyncStorage.setItem(
-        'photos',
-        JSON.stringify(newPhotos)
-      );
-
-      return record;
-    } catch (error) {
-      try {
-        if (savedFile.exists) {
-          savedFile.delete();
-        }
-      } catch (cleanupError) {
-        console.log(
-          '写真ファイル後片付けエラー:',
-          cleanupError
-        );
-      }
-
-      throw error;
-    }
-  };
-
 
   const pickImage = async () => {
     if (importing) {
@@ -192,12 +108,13 @@ export default function LibraryScreen() {
             timetable
           );
 
-          const savedPhoto =
-            await savePhoto(
-              selectedPhoto.uri,
-              takenAt,
-              classInfo
-            );
+          const savedPhoto = await savePhotoFromUri({
+            sourceUri: selectedPhoto.uri,
+            takenAt,
+            day: classInfo.day,
+            period: classInfo.period,
+            subject: classInfo.subject,
+          });
 
           savedCount += 1;
           classificationResults.push(classInfo.label);
