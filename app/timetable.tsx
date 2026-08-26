@@ -74,6 +74,8 @@ const isTimetable = (
 export default function TimetableScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingClass, setDeletingClass] =
+    useState(false);
   const [loadError, setLoadError] = useState('');
 
   const [selectedDay, setSelectedDay] = useState('');
@@ -138,7 +140,11 @@ export default function TimetableScreen() {
 
 
   const handleSave = async () => {
-    if (selectedPeriod === null || saving) {
+    if (
+      selectedPeriod === null ||
+      saving ||
+      deletingClass
+    ) {
       return;
     }
 
@@ -146,6 +152,14 @@ export default function TimetableScreen() {
     const normalizedSubject = subjectName.trim();
     const previousSubject =
       timetable[key]?.trim() ?? '';
+
+    if (normalizedSubject === '') {
+      Alert.alert(
+        '授業名を入力してください',
+        '登録済みの授業は「この授業を削除」から削除できます。'
+      );
+      return;
+    }
 
     const newTimetable = {
       ...timetable,
@@ -261,6 +275,164 @@ export default function TimetableScreen() {
     }
   };
 
+
+  const deleteClass = async () => {
+    if (
+      selectedPeriod === null ||
+      saving ||
+      deletingClass
+    ) {
+      return;
+    }
+
+    const key = `${selectedDay}-${selectedPeriod}`;
+    const deletedSubject =
+      timetable[key]?.trim() ?? '';
+
+    if (deletedSubject === '') {
+      return;
+    }
+
+    const newTimetable = { ...timetable };
+    delete newTimetable[key];
+
+    setDeletingClass(true);
+
+    let originalPhotos: string | null = null;
+    let photosWereUpdated = false;
+    let updatedPhotoCount = 0;
+
+    try {
+      originalPhotos =
+        await AsyncStorage.getItem('photos');
+
+      if (originalPhotos !== null) {
+        const parsedPhotos: unknown =
+          JSON.parse(originalPhotos);
+
+        if (
+          !Array.isArray(parsedPhotos) ||
+          !parsedPhotos.every(isPhotoRecord)
+        ) {
+          throw new Error(
+            'photosの形式が不正です'
+          );
+        }
+
+        const updatedPhotos = parsedPhotos.map(
+          (photo) => {
+            const shouldUnclassify =
+              photo.day === selectedDay &&
+              photo.period === selectedPeriod &&
+              photo.subject === deletedSubject;
+
+            if (!shouldUnclassify) {
+              return photo;
+            }
+
+            updatedPhotoCount += 1;
+
+            return {
+              ...photo,
+              subject: null,
+            };
+          }
+        );
+
+        if (updatedPhotoCount > 0) {
+          await AsyncStorage.setItem(
+            'photos',
+            JSON.stringify(updatedPhotos)
+          );
+
+          photosWereUpdated = true;
+        }
+      }
+
+      await AsyncStorage.setItem(
+        'timetable',
+        JSON.stringify(newTimetable)
+      );
+
+      setTimetable(newTimetable);
+      setModalVisible(false);
+
+      Alert.alert(
+        '授業を削除しました',
+        updatedPhotoCount > 0
+          ? `既存の写真${updatedPhotoCount}枚を曜日・時限の仮分類に戻しました。`
+          : '時間割から授業を削除しました。'
+      );
+    } catch (error) {
+      console.log('授業削除エラー:', error);
+
+      if (photosWereUpdated && originalPhotos !== null) {
+        try {
+          await AsyncStorage.setItem(
+            'photos',
+            originalPhotos
+          );
+        } catch (rollbackError) {
+          console.log(
+            '写真分類の復元エラー:',
+            rollbackError
+          );
+        }
+      }
+
+      Alert.alert(
+        '授業を削除できませんでした',
+        '時間割の更新中にエラーが発生しました。'
+      );
+    } finally {
+      setDeletingClass(false);
+    }
+  };
+
+
+  const confirmDeleteClass = () => {
+    if (selectedPeriod === null) {
+      return;
+    }
+
+    const key = `${selectedDay}-${selectedPeriod}`;
+    const deletedSubject =
+      timetable[key]?.trim() ?? '';
+
+    if (deletedSubject === '') {
+      return;
+    }
+
+    Alert.alert(
+      `「${deletedSubject}」を削除しますか？`,
+      'この曜日・時限の既存写真は、曜日・時限の仮分類に戻ります。',
+      [
+        {
+          text: 'キャンセル',
+          style: 'cancel',
+        },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: deleteClass,
+        },
+      ]
+    );
+  };
+
+
+  const selectedTimetableKey =
+    selectedPeriod !== null
+      ? `${selectedDay}-${selectedPeriod}`
+      : '';
+
+  const selectedExistingSubject =
+    selectedTimetableKey !== ''
+      ? timetable[selectedTimetableKey]?.trim() ?? ''
+      : '';
+
+  const updating = saving || deletingClass;
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>時間割</Text>
@@ -334,7 +506,7 @@ export default function TimetableScreen() {
         transparent={true}
         animationType="slide"
         onRequestClose={() => {
-          if (!saving) {
+          if (!updating) {
             setModalVisible(false);
           }
         }}
@@ -352,14 +524,15 @@ export default function TimetableScreen() {
               value={subjectName}
               onChangeText={setSubjectName}
               placeholder="例：高分子化学"
+              editable={!updating}
             />
 
             <Pressable
               style={[
                 styles.saveButton,
-                saving && styles.disabledButton,
+                updating && styles.disabledButton,
               ]}
-              disabled={saving}
+              disabled={updating}
               onPress={handleSave}
             >
               <Text style={styles.saveButtonText}>
@@ -369,11 +542,28 @@ export default function TimetableScreen() {
 
             <Pressable
               style={styles.cancelButton}
-              disabled={saving}
+              disabled={updating}
               onPress={() => setModalVisible(false)}
             >
               <Text style={styles.cancelButtonText}>キャンセル</Text>
             </Pressable>
+
+            {selectedExistingSubject !== '' ? (
+              <Pressable
+                style={[
+                  styles.deleteClassButton,
+                  updating && styles.disabledButton,
+                ]}
+                disabled={updating}
+                onPress={confirmDeleteClass}
+              >
+                <Text style={styles.deleteClassButtonText}>
+                  {deletingClass
+                    ? '削除中...'
+                    : 'この授業を削除'}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -529,6 +719,21 @@ const styles = StyleSheet.create({
 
   cancelButtonText: {
     color: 'black',
+    textAlign: 'center',
+  },
+
+  deleteClassButton: {
+    borderWidth: 1,
+    borderColor: '#d64545',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+  },
+
+  deleteClassButtonText: {
+    color: '#c83232',
+    fontSize: 15,
+    fontWeight: 'bold',
     textAlign: 'center',
   },
 });
