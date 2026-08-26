@@ -19,57 +19,10 @@ import {
   periodNumbers,
   PeriodTimes,
 } from '@/utils/period-times';
+import { isTimetable } from '@/utils/classification';
+import { parsePhotoRecords } from '@/types/photo';
 
 const days = ['月', '火', '水', '木', '金'];
-
-
-type PhotoRecord = {
-  id: string;
-  uri: string;
-  takenAt: string;
-  day: string;
-  period: number | null;
-  subject: string | null;
-};
-
-
-const isPhotoRecord = (
-  value: unknown
-): value is PhotoRecord => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const photo = value as Partial<PhotoRecord>;
-
-  return (
-    typeof photo.id === 'string' &&
-    typeof photo.uri === 'string' &&
-    typeof photo.takenAt === 'string' &&
-    typeof photo.day === 'string' &&
-    (typeof photo.period === 'number' ||
-      photo.period === null) &&
-    (typeof photo.subject === 'string' ||
-      photo.subject === null)
-  );
-};
-
-
-const isTimetable = (
-  value: unknown
-): value is Record<string, string> => {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    Array.isArray(value)
-  ) {
-    return false;
-  }
-
-  return Object.values(value).every(
-    (subject) => typeof subject === 'string'
-  );
-};
 
 
 export default function TimetableScreen() {
@@ -219,17 +172,8 @@ export default function TimetableScreen() {
         normalizedSubject !== '' &&
         originalPhotos !== null
       ) {
-        const parsedPhotos: unknown =
-          JSON.parse(originalPhotos);
-
-        if (
-          !Array.isArray(parsedPhotos) ||
-          !parsedPhotos.every(isPhotoRecord)
-        ) {
-          throw new Error(
-            'photosの形式が不正です'
-          );
-        }
+        const parsedPhotos =
+          parsePhotoRecords(originalPhotos);
 
         const updatedPhotos = parsedPhotos.map(
           (photo) => {
@@ -346,17 +290,8 @@ export default function TimetableScreen() {
         await AsyncStorage.getItem('photos');
 
       if (originalPhotos !== null) {
-        const parsedPhotos: unknown =
-          JSON.parse(originalPhotos);
-
-        if (
-          !Array.isArray(parsedPhotos) ||
-          !parsedPhotos.every(isPhotoRecord)
-        ) {
-          throw new Error(
-            'photosの形式が不正です'
-          );
-        }
+        const parsedPhotos =
+          parsePhotoRecords(originalPhotos);
 
         const updatedPhotos = parsedPhotos.map(
           (photo) => {

@@ -17,15 +17,10 @@ import {
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-
-type PhotoRecord = {
-  id: string;
-  uri: string;
-  takenAt: string;
-  day: string;
-  period: number | null;
-  subject: string | null;
-};
+import {
+  parsePhotoRecords,
+  PhotoRecord,
+} from '@/types/photo';
 
 
 type LectureGroup = {
@@ -119,8 +114,8 @@ export default function SubjectScreen() {
             return;
           }
 
-          const allPhotos: PhotoRecord[] =
-            JSON.parse(savedPhotos);
+          const allPhotos =
+            parsePhotoRecords(savedPhotos);
 
 
           const subjectPhotos =

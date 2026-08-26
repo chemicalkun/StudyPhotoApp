@@ -23,15 +23,10 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
-
-type PhotoRecord = {
-  id: string;
-  uri: string;
-  takenAt: string;
-  day: string;
-  period: number | null;
-  subject: string | null;
-};
+import {
+  parsePhotoRecords,
+  PhotoRecord,
+} from '@/types/photo';
 
 
 const swipeDistance = 60;
@@ -120,16 +115,7 @@ export default function PhotoScreen() {
           return;
         }
 
-        const parsedPhotos: unknown =
-          JSON.parse(savedPhotos);
-
-        if (!Array.isArray(parsedPhotos)) {
-          throw new Error(
-            'photosが配列ではありません'
-          );
-        }
-
-        const photos = parsedPhotos as PhotoRecord[];
+        const photos = parsePhotoRecords(savedPhotos);
 
         const selectedPhoto =
           photos.find((item) => {
@@ -341,8 +327,7 @@ export default function PhotoScreen() {
         throw new Error('写真データがありません');
       }
 
-      const photos: PhotoRecord[] =
-        JSON.parse(savedPhotos);
+      const photos = parsePhotoRecords(savedPhotos);
 
       const remainingPhotos =
         photos.filter((item) => {
@@ -431,8 +416,7 @@ export default function PhotoScreen() {
         throw new Error('写真データがありません');
       }
 
-      const photos: PhotoRecord[] =
-        JSON.parse(savedPhotos);
+      const photos = parsePhotoRecords(savedPhotos);
 
       const normalizedSubject =
         subjectInput.trim() || null;

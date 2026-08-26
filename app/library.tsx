@@ -26,15 +26,10 @@ import {
   getDayName,
   parseTimetable,
 } from '@/utils/classification';
-
-type PhotoRecord = {
-  id: string;
-  uri: string;
-  takenAt: string;
-  day: string;
-  period: number | null;
-  subject: string | null;
-};
+import {
+  parsePhotoRecords,
+  PhotoRecord,
+} from '@/types/photo';
 
 export default function LibraryScreen() {
   const [message, setMessage] = useState('');
@@ -83,16 +78,7 @@ export default function LibraryScreen() {
       let photos: PhotoRecord[] = [];
 
       if (savedPhotos !== null) {
-        const parsedPhotos: unknown =
-          JSON.parse(savedPhotos);
-
-        if (!Array.isArray(parsedPhotos)) {
-          throw new Error(
-            'photosが配列ではありません'
-          );
-        }
-
-        photos = parsedPhotos as PhotoRecord[];
+        photos = parsePhotoRecords(savedPhotos);
       }
 
       const newPhotos = [

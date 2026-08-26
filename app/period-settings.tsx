@@ -27,38 +27,7 @@ import {
   getDayName,
   parseTimetable,
 } from '@/utils/classification';
-
-
-type PhotoRecord = {
-  id: string;
-  uri: string;
-  takenAt: string;
-  day: string;
-  period: number | null;
-  subject: string | null;
-};
-
-
-const isPhotoRecord = (
-  value: unknown
-): value is PhotoRecord => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const photo = value as Partial<PhotoRecord>;
-
-  return (
-    typeof photo.id === 'string' &&
-    typeof photo.uri === 'string' &&
-    typeof photo.takenAt === 'string' &&
-    typeof photo.day === 'string' &&
-    (typeof photo.period === 'number' ||
-      photo.period === null) &&
-    (typeof photo.subject === 'string' ||
-      photo.subject === null)
-  );
-};
+import { parsePhotoRecords } from '@/types/photo';
 
 
 export default function PeriodSettingsScreen() {
@@ -139,15 +108,8 @@ export default function PeriodSettingsScreen() {
         parseTimetable(savedTimetable) ?? {};
 
       if (savedPhotos !== null) {
-        const parsedPhotos: unknown =
-          JSON.parse(savedPhotos);
-
-        if (
-          !Array.isArray(parsedPhotos) ||
-          !parsedPhotos.every(isPhotoRecord)
-        ) {
-          throw new Error('photosの形式が不正です');
-        }
+        const parsedPhotos =
+          parsePhotoRecords(savedPhotos);
 
         const updatedPhotos = parsedPhotos.map(
           (photo) => {

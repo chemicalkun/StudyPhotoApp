@@ -10,37 +10,10 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-
-type PhotoRecord = {
-  id: string;
-  uri: string;
-  takenAt: string;
-  day: string;
-  period: number | null;
-  subject: string | null;
-};
-
-
-const isPhotoRecord = (
-  value: unknown
-): value is PhotoRecord => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const photo = value as Partial<PhotoRecord>;
-
-  return (
-    typeof photo.id === 'string' &&
-    typeof photo.uri === 'string' &&
-    typeof photo.takenAt === 'string' &&
-    typeof photo.day === 'string' &&
-    (typeof photo.period === 'number' ||
-      photo.period === null) &&
-    (typeof photo.subject === 'string' ||
-      photo.subject === null)
-  );
-};
+import {
+  parsePhotoRecords,
+  PhotoRecord,
+} from '@/types/photo';
 
 
 export default function HomeScreen() {
@@ -62,22 +35,7 @@ export default function HomeScreen() {
             return;
           }
 
-          const parsedPhotos: unknown =
-            JSON.parse(savedPhotos);
-
-          if (!Array.isArray(parsedPhotos)) {
-            throw new Error(
-              'photosが配列ではありません'
-            );
-          }
-
-          if (!parsedPhotos.every(isPhotoRecord)) {
-            throw new Error(
-              'photosに不正なデータが含まれています'
-            );
-          }
-
-          setPhotos(parsedPhotos);
+          setPhotos(parsePhotoRecords(savedPhotos));
         } catch (error) {
           console.log(
             'ホーム写真読み込みエラー:',
