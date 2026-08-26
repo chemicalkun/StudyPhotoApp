@@ -144,6 +144,8 @@ export default function TimetableScreen() {
 
     const key = `${selectedDay}-${selectedPeriod}`;
     const normalizedSubject = subjectName.trim();
+    const previousSubject =
+      timetable[key]?.trim() ?? '';
 
     const newTimetable = {
       ...timetable,
@@ -178,11 +180,22 @@ export default function TimetableScreen() {
 
         const updatedPhotos = parsedPhotos.map(
           (photo) => {
-            const shouldClassify =
+            const isSameClassTime =
               photo.day === selectedDay &&
-              photo.period === selectedPeriod &&
-              (photo.subject === null ||
-                photo.subject === '未分類');
+              photo.period === selectedPeriod;
+
+            const isUnclassified =
+              photo.subject === null ||
+              photo.subject === '未分類';
+
+            const hasPreviousSubject =
+              previousSubject !== '' &&
+              photo.subject === previousSubject;
+
+            const shouldClassify =
+              isSameClassTime &&
+              photo.subject !== normalizedSubject &&
+              (isUnclassified || hasPreviousSubject);
 
             if (!shouldClassify) {
               return photo;
@@ -219,7 +232,7 @@ export default function TimetableScreen() {
       if (updatedPhotoCount > 0) {
         Alert.alert(
           '時間割を保存しました',
-          `未分類の写真${updatedPhotoCount}枚を「${normalizedSubject}」に分類しました。`
+          `既存の写真${updatedPhotoCount}枚を「${normalizedSubject}」に更新しました。`
         );
       }
     } catch (error) {
