@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +15,7 @@ import { router, Stack } from 'expo-router';
 
 import {
   defaultPeriodTimes,
+  findPeriod,
   getPeriodTimesValidationError,
   loadPeriodTimes,
   PeriodTime,
@@ -21,6 +23,58 @@ import {
   periodNumbers,
   savePeriodTimes,
 } from '@/utils/period-times';
+
+
+type PhotoRecord = {
+  id: string;
+  uri: string;
+  takenAt: string;
+  day: string;
+  period: number | null;
+  subject: string | null;
+};
+
+
+const dayNames = ['', '月', '火', '水', '木', '金', ''];
+
+
+const isPhotoRecord = (
+  value: unknown
+): value is PhotoRecord => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const photo = value as Partial<PhotoRecord>;
+
+  return (
+    typeof photo.id === 'string' &&
+    typeof photo.uri === 'string' &&
+    typeof photo.takenAt === 'string' &&
+    typeof photo.day === 'string' &&
+    (typeof photo.period === 'number' ||
+      photo.period === null) &&
+    (typeof photo.subject === 'string' ||
+      photo.subject === null)
+  );
+};
+
+
+const isTimetable = (
+  value: unknown
+): value is Record<string, string> => {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value)
+  ) {
+    return false;
+  }
+
+  return Object.values(value).every(
+    (subject) => typeof subject === 'string'
+  );
+};
 
 
 export default function PeriodSettingsScreen() {
@@ -84,15 +138,150 @@ export default function PeriodSettingsScreen() {
 
     setSaving(true);
 
+    let originalPhotos: string | null = null;
+    let photosWereUpdated = false;
+    let updatedPhotoCount = 0;
+
     try {
+      const [savedPhotos, savedTimetable] =
+        await Promise.all([
+          AsyncStorage.getItem('photos'),
+          AsyncStorage.getItem('timetable'),
+        ]);
+
+      originalPhotos = savedPhotos;
+
+      let timetable: Record<string, string> = {};
+
+      if (savedTimetable !== null) {
+        const parsedTimetable: unknown =
+          JSON.parse(savedTimetable);
+
+        if (!isTimetable(parsedTimetable)) {
+          throw new Error(
+            'timetableの形式が不正です'
+          );
+        }
+
+        timetable = parsedTimetable;
+      }
+
+      if (savedPhotos !== null) {
+        const parsedPhotos: unknown =
+          JSON.parse(savedPhotos);
+
+        if (
+          !Array.isArray(parsedPhotos) ||
+          !parsedPhotos.every(isPhotoRecord)
+        ) {
+          throw new Error('photosの形式が不正です');
+        }
+
+        const updatedPhotos = parsedPhotos.map(
+          (photo) => {
+            const currentTimetableSubject =
+              photo.period === null
+                ? null
+                : timetable[
+                    `${photo.day}-${photo.period}`
+                  ]?.trim() || null;
+
+            const isAutomaticallyClassified =
+              photo.subject === null ||
+              photo.subject === '未分類' ||
+              (currentTimetableSubject !== null &&
+                photo.subject ===
+                  currentTimetableSubject);
+
+            if (!isAutomaticallyClassified) {
+              return photo;
+            }
+
+            const takenAt = new Date(photo.takenAt);
+
+            if (Number.isNaN(takenAt.getTime())) {
+              return photo;
+            }
+
+            const newDay = dayNames[takenAt.getDay()];
+            const newPeriod = findPeriod(
+              takenAt.getHours(),
+              takenAt.getMinutes(),
+              periodTimes
+            );
+            const newSubject =
+              newDay !== '' && newPeriod !== null
+                ? timetable[
+                    `${newDay}-${newPeriod}`
+                  ]?.trim() || null
+                : null;
+
+            const shouldUpdate =
+              photo.day !== newDay ||
+              photo.period !== newPeriod ||
+              photo.subject !== newSubject;
+
+            if (!shouldUpdate) {
+              return photo;
+            }
+
+            updatedPhotoCount += 1;
+
+            return {
+              ...photo,
+              day: newDay,
+              period: newPeriod,
+              subject: newSubject,
+            };
+          }
+        );
+
+        if (updatedPhotoCount > 0) {
+          await AsyncStorage.setItem(
+            'photos',
+            JSON.stringify(updatedPhotos)
+          );
+
+          photosWereUpdated = true;
+        }
+      }
+
       await savePeriodTimes(periodTimes);
-      router.back();
+
+      if (updatedPhotoCount > 0) {
+        Alert.alert(
+          '時限設定を保存しました',
+          `既存の写真${updatedPhotoCount}枚を新しい時刻に合わせて再分類しました。`,
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      } else {
+        router.back();
+      }
     } catch (error) {
       console.log('時限設定保存エラー:', error);
 
+      if (photosWereUpdated && originalPhotos !== null) {
+        try {
+          await AsyncStorage.setItem(
+            'photos',
+            originalPhotos
+          );
+        } catch (rollbackError) {
+          console.log(
+            '写真再分類の復元エラー:',
+            rollbackError
+          );
+        }
+      }
+
       Alert.alert(
         '時限設定を保存できませんでした',
-        '保存中にエラーが発生しました。'
+        '保存中にエラーが発生しました。写真データは変更されていません。'
       );
     } finally {
       setSaving(false);
