@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
   PanResponder,
   Pressable,
@@ -9,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -64,6 +66,8 @@ const getDateKey = (takenAt: string) => {
 
 export default function PhotoScreen() {
   const params = useLocalSearchParams();
+  const { width: screenWidth } =
+    useWindowDimensions();
 
   const photoId =
     typeof params.id === 'string'
@@ -76,6 +80,8 @@ export default function PhotoScreen() {
     useState<PhotoRecord[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [transitioning, setTransitioning] =
+    useState(false);
   const [imageLoadFailed, setImageLoadFailed] =
     useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -92,6 +98,9 @@ export default function PhotoScreen() {
     useState('');
 
   const zoomScale = useRef(1);
+  const translateX = useRef(
+    new Animated.Value(0)
+  ).current;
 
 
   useEffect(() => {
@@ -214,14 +223,51 @@ export default function PhotoScreen() {
   const goToPhoto = (targetIndex: number) => {
     const targetPhoto = lecturePhotos[targetIndex];
 
-    if (!targetPhoto) {
+    if (!targetPhoto || transitioning) {
       return;
     }
 
-    router.replace({
-      pathname: '/photo/[id]',
-      params: { id: targetPhoto.id },
+    const exitDirection =
+      targetIndex > currentPhotoIndex ? -1 : 1;
+
+    setTransitioning(true);
+
+    Animated.timing(translateX, {
+      toValue: exitDirection * screenWidth,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) {
+        setTransitioning(false);
+        return;
+      }
+
+      setPhoto(targetPhoto);
+      setImageLoadFailed(false);
+      zoomScale.current = 1;
+
+      translateX.setValue(
+        -exitDirection * screenWidth
+      );
+
+      Animated.timing(translateX, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(() => {
+        setTransitioning(false);
+      });
     });
+  };
+
+
+  const resetSwipePosition = () => {
+    Animated.spring(translateX, {
+      toValue: 0,
+      speed: 20,
+      bounciness: 4,
+      useNativeDriver: true,
+    }).start();
   };
 
 
@@ -237,14 +283,24 @@ export default function PhotoScreen() {
         Math.abs(gestureState.dy);
 
       return (
+        !transitioning &&
         gestureState.numberActiveTouches === 1 &&
         zoomScale.current <= 1.01 &&
         horizontalDistance > 10 &&
         horizontalDistance > verticalDistance
       );
     },
+    onPanResponderMove: (_, gestureState) => {
+      if (
+        !transitioning &&
+        zoomScale.current <= 1.01
+      ) {
+        translateX.setValue(gestureState.dx);
+      }
+    },
     onPanResponderRelease: (_, gestureState) => {
       if (zoomScale.current > 1.01) {
+        resetSwipePosition();
         return;
       }
 
@@ -261,8 +317,12 @@ export default function PhotoScreen() {
         currentPhotoIndex > 0
       ) {
         goToPhoto(currentPhotoIndex - 1);
+        return;
       }
+
+      resetSwipePosition();
     },
+    onPanResponderTerminate: resetSwipePosition,
   });
 
 
@@ -437,8 +497,13 @@ export default function PhotoScreen() {
         </View>
       ) : photo ? (
         <>
-          <View
-            style={styles.imageContainer}
+          <Animated.View
+            style={[
+              styles.imageContainer,
+              {
+                transform: [{ translateX }],
+              },
+            ]}
             {...swipeResponder.panHandlers}
           >
             {imageLoadFailed ? (
@@ -485,7 +550,7 @@ export default function PhotoScreen() {
                 />
               </ScrollView>
             )}
-          </View>
+          </Animated.View>
 
           <View style={styles.photoInfo}>
             <Text style={styles.subjectText}>
@@ -522,10 +587,14 @@ export default function PhotoScreen() {
                   <Pressable
                     style={[
                       styles.navigationButton,
-                      currentPhotoIndex <= 0 &&
+                      (currentPhotoIndex <= 0 ||
+                        transitioning) &&
                         styles.disabledButton,
                     ]}
-                    disabled={currentPhotoIndex <= 0}
+                    disabled={
+                      currentPhotoIndex <= 0 ||
+                      transitioning
+                    }
                     onPress={() =>
                       goToPhoto(currentPhotoIndex - 1)
                     }
@@ -538,13 +607,15 @@ export default function PhotoScreen() {
                   <Pressable
                     style={[
                       styles.navigationButton,
-                      currentPhotoIndex >=
-                        lecturePhotos.length - 1 &&
+                      (currentPhotoIndex >=
+                        lecturePhotos.length - 1 ||
+                        transitioning) &&
                         styles.disabledButton,
                     ]}
                     disabled={
                       currentPhotoIndex >=
-                      lecturePhotos.length - 1
+                        lecturePhotos.length - 1 ||
+                      transitioning
                     }
                     onPress={() =>
                       goToPhoto(currentPhotoIndex + 1)
