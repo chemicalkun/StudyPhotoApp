@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
   PanResponder,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -79,6 +80,8 @@ export default function PhotoScreen() {
   const [errorMessage, setErrorMessage] =
     useState('');
 
+  const zoomScale = useRef(1);
+
 
   useEffect(() => {
     const loadPhoto = async () => {
@@ -87,6 +90,7 @@ export default function PhotoScreen() {
         setErrorMessage('');
         setPhoto(null);
         setImageLoadFailed(false);
+        zoomScale.current = 1;
 
         const savedPhotos =
           await AsyncStorage.getItem('photos');
@@ -192,11 +196,17 @@ export default function PhotoScreen() {
         Math.abs(gestureState.dy);
 
       return (
+        gestureState.numberActiveTouches === 1 &&
+        zoomScale.current <= 1.01 &&
         horizontalDistance > 10 &&
         horizontalDistance > verticalDistance
       );
     },
     onPanResponderRelease: (_, gestureState) => {
+      if (zoomScale.current > 1.01) {
+        return;
+      }
+
       if (
         gestureState.dx <= -swipeDistance &&
         currentPhotoIndex < lecturePhotos.length - 1
@@ -401,21 +411,38 @@ export default function PhotoScreen() {
                 </Text>
               </View>
             ) : (
-              <Image
-                source={{ uri: photo.uri }}
-                style={styles.image}
-                contentFit="contain"
-                allowDownscaling
-                cachePolicy="disk"
-                onError={(error) => {
-                  console.log(
-                    '画像表示エラー:',
-                    error.error
-                  );
-
-                  setImageLoadFailed(true);
+              <ScrollView
+                key={photo.id}
+                style={styles.zoomContainer}
+                contentContainerStyle={styles.zoomContent}
+                minimumZoomScale={1}
+                maximumZoomScale={4}
+                centerContent
+                bouncesZoom
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScroll={(event) => {
+                  zoomScale.current =
+                    event.nativeEvent.zoomScale ?? 1;
                 }}
-              />
+              >
+                <Image
+                  source={{ uri: photo.uri }}
+                  style={styles.image}
+                  contentFit="contain"
+                  allowDownscaling
+                  cachePolicy="disk"
+                  onError={(error) => {
+                    console.log(
+                      '画像表示エラー:',
+                      error.error
+                    );
+
+                    setImageLoadFailed(true);
+                  }}
+                />
+              </ScrollView>
             )}
           </View>
 
@@ -438,7 +465,7 @@ export default function PhotoScreen() {
             {lecturePhotos.length > 1 ? (
               <>
                 <Text style={styles.swipeHint}>
-                  画像を左右にスワイプして移動
+                  左右スワイプで移動・ピンチ操作で拡大
                 </Text>
 
                 <View style={styles.navigationRow}>
@@ -600,6 +627,14 @@ const styles = StyleSheet.create({
   imageContainer: {
     flex: 1,
     width: '100%',
+  },
+
+  zoomContainer: {
+    flex: 1,
+  },
+
+  zoomContent: {
+    flexGrow: 1,
   },
 
   imageErrorContainer: {
