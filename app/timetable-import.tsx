@@ -12,6 +12,12 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack } from 'expo-router';
 
+import {
+  isStudyPhotoVisionAvailable,
+  recognizeText,
+  type RecognizedTextBlock,
+} from '../modules/study-photo-vision';
+
 
 type SelectedTimetableImage = {
   uri: string;
@@ -25,6 +31,9 @@ export default function TimetableImportScreen() {
   const [selectedImage, setSelectedImage] =
     useState<SelectedTimetableImage | null>(null);
   const [selecting, setSelecting] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
+  const [recognizedTextBlocks, setRecognizedTextBlocks] =
+    useState<RecognizedTextBlock[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
 
 
@@ -72,6 +81,7 @@ export default function TimetableImportScreen() {
         width: asset.width,
         height: asset.height,
       });
+      setRecognizedTextBlocks([]);
     } catch (error) {
       console.log('時間割画像選択エラー:', error);
 
@@ -80,6 +90,46 @@ export default function TimetableImportScreen() {
       );
     } finally {
       setSelecting(false);
+    }
+  };
+
+
+  const analyzeTimetableImage = async () => {
+    if (selectedImage === null || recognizing) {
+      return;
+    }
+
+    if (!isStudyPhotoVisionAvailable) {
+      setErrorMessage(
+        '画像認識を試すには、Apple Visionを組み込んだ開発ビルドが必要です。Expo Goでは画像選択まで確認できます。'
+      );
+      return;
+    }
+
+    setRecognizing(true);
+    setRecognizedTextBlocks([]);
+    setErrorMessage('');
+
+    try {
+      const recognizedBlocks = await recognizeText(
+        selectedImage.uri
+      );
+
+      setRecognizedTextBlocks(recognizedBlocks);
+
+      if (recognizedBlocks.length === 0) {
+        setErrorMessage(
+          '画像から文字を見つけられませんでした。文字がはっきり見える画像でもう一度お試しください。'
+        );
+      }
+    } catch (error) {
+      console.log('時間割画像認識エラー:', error);
+
+      setErrorMessage(
+        '時間割画像を解析できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setRecognizing(false);
     }
   };
 
@@ -103,7 +153,7 @@ export default function TimetableImportScreen() {
 
       <View style={styles.noticeBox}>
         <Text style={styles.noticeText}>
-          現在は画像選択とプレビューまで対応しています。画像認識と登録内容の確認は次のステップで追加します。
+          Apple Visionを使い、端末内で時間割画像の文字を認識します。今回は認識結果の確認まで行います。
         </Text>
       </View>
 
@@ -165,8 +215,60 @@ export default function TimetableImportScreen() {
         )}
       </Pressable>
 
+      {selectedImage !== null ? (
+        <>
+          {!isStudyPhotoVisionAvailable ? (
+            <View style={styles.developmentBuildBox}>
+              <Text style={styles.developmentBuildText}>
+                Expo GoにはApple Vision機能が含まれないため、文字認識には開発ビルドが必要です。
+              </Text>
+            </View>
+          ) : null}
+
+          <Pressable
+            style={[
+              styles.analyzeButton,
+              recognizing && styles.disabledButton,
+            ]}
+            disabled={recognizing}
+            onPress={analyzeTimetableImage}
+          >
+            {recognizing ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={styles.selectButtonText}>
+                画像内の文字を認識
+              </Text>
+            )}
+          </Pressable>
+        </>
+      ) : null}
+
+      {recognizedTextBlocks.length > 0 ? (
+        <View style={styles.resultContainer}>
+          <Text style={styles.resultTitle}>
+            認識した文字（{recognizedTextBlocks.length}件）
+          </Text>
+
+          {recognizedTextBlocks.map((block, index) => (
+            <View
+              style={styles.resultRow}
+              key={`${block.text}-${index}`}
+            >
+              <Text style={styles.resultText}>
+                {block.text}
+              </Text>
+
+              <Text style={styles.confidenceText}>
+                信頼度 {Math.round(block.confidence * 100)}%
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       <Text style={styles.privacyText}>
-        この段階では、選択した画像を外部サービスへ送信しません。
+        選択した画像と認識結果は外部サービスへ送信しません。
       </Text>
     </ScrollView>
   );
@@ -296,6 +398,65 @@ const styles = StyleSheet.create({
 
   disabledButton: {
     opacity: 0.5,
+  },
+
+  developmentBuildBox: {
+    backgroundColor: '#fff7df',
+    borderWidth: 1,
+    borderColor: '#e4c66d',
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 16,
+  },
+
+  developmentBuildText: {
+    color: '#6d5410',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+
+  analyzeButton: {
+    backgroundColor: '#28794c',
+    borderRadius: 10,
+    minHeight: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    marginTop: 12,
+  },
+
+  resultContainer: {
+    backgroundColor: '#f7f9fc',
+    borderWidth: 1,
+    borderColor: '#cdd5e1',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 24,
+  },
+
+  resultTitle: {
+    color: '#222',
+    fontSize: 17,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+
+  resultRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#dde3ec',
+    paddingVertical: 10,
+  },
+
+  resultText: {
+    color: '#222',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+
+  confidenceText: {
+    color: '#777',
+    fontSize: 11,
+    marginTop: 3,
   },
 
   privacyText: {
