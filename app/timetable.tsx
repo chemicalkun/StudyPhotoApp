@@ -428,6 +428,15 @@ export default function TimetableScreen() {
       ) : null}
 
       <Pressable
+        style={styles.imageImportButton}
+        onPress={() => router.push('/timetable-import')}
+      >
+        <Text style={styles.imageImportButtonText}>
+          🖼️ 時間割画像から登録
+        </Text>
+      </Pressable>
+
+      <Pressable
         style={styles.periodSettingsButton}
         onPress={() => router.push('/period-settings')}
       >
@@ -594,6 +603,20 @@ const styles = StyleSheet.create({
   periodTime: {
     fontSize: 9,
     color: '#666',
+  },
+
+  imageImportButton: {
+    backgroundColor: '#2454a6',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+  },
+
+  imageImportButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 
   periodSettingsButton: {
