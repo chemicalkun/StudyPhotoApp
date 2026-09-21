@@ -1,10 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
+  Animated,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -37,6 +40,10 @@ const getDateLabel = (dateKey: string) => {
 
 
 export default function ReviewScreen() {
+  const { width: screenWidth } = useWindowDimensions();
+  const lectureSwipeX = useRef(
+    new Animated.Value(0)
+  ).current;
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
   const [selectedSummary, setSelectedSummary] =
@@ -87,6 +94,56 @@ export default function ReviewScreen() {
           .findIndex(
             (summary) => summary.id === selectedSummary.id
           ) ?? -1;
+
+  const lectureSubjectSwipeResponder =
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const horizontalDistance =
+          Math.abs(gestureState.dx);
+        const verticalDistance =
+          Math.abs(gestureState.dy);
+
+        return (
+          selectedLectureSubject !== null &&
+          gestureState.numberActiveTouches === 1 &&
+          gestureState.dx > 12 &&
+          horizontalDistance > verticalDistance
+        );
+      },
+      onPanResponderMove: (_, gestureState) => {
+        lectureSwipeX.setValue(
+          Math.max(0, gestureState.dx)
+        );
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx >= screenWidth * 0.27) {
+          Animated.timing(lectureSwipeX, {
+            toValue: screenWidth,
+            duration: 180,
+            useNativeDriver: true,
+          }).start(() => {
+            setSelectedLectureSubject(null);
+            lectureSwipeX.setValue(0);
+          });
+          return;
+        }
+
+        Animated.spring(lectureSwipeX, {
+          toValue: 0,
+          speed: 22,
+          bounciness: 3,
+          useNativeDriver: true,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(lectureSwipeX, {
+          toValue: 0,
+          speed: 22,
+          bounciness: 3,
+          useNativeDriver: true,
+        }).start();
+      },
+    });
 
 
   useFocusEffect(
@@ -139,6 +196,7 @@ export default function ReviewScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
+        {...lectureSubjectSwipeResponder.panHandlers}
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
       >
@@ -340,11 +398,18 @@ export default function ReviewScreen() {
                     </View>
                   </>
                 ) : (
-                  <>
+                  <Animated.View
+                    style={{
+                      transform: [
+                        { translateX: lectureSwipeX },
+                      ],
+                    }}
+                  >
                     <Pressable
                       style={styles.subjectBackButton}
                       accessibilityRole="button"
                       accessibilityLabel="授業選択に戻る"
+                      hitSlop={10}
                       onPress={() =>
                         setSelectedLectureSubject(null)
                       }
@@ -398,7 +463,7 @@ export default function ReviewScreen() {
                         )
                       )}
                     </View>
-                  </>
+                  </Animated.View>
                 )}
               </View>
             )}
@@ -664,7 +729,7 @@ const styles = StyleSheet.create({
 
   subjectBackButtonText: {
     color: '#31518f',
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: 'bold',
   },
 
