@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import {
+  router,
   Stack,
   useFocusEffect,
   useLocalSearchParams,
@@ -364,6 +365,25 @@ export default function ExamPreparationScreen() {
                 </Text>
               </View>
             ) : null}
+
+            <Pressable
+              style={[
+                styles.practiceButton,
+                summaries.length === 0 &&
+                  styles.disabledButton,
+              ]}
+              disabled={summaries.length === 0}
+              onPress={() => {
+                router.push({
+                  pathname: '/practice/[subject]',
+                  params: { subject },
+                });
+              }}
+            >
+              <Text style={styles.practiceButtonText}>
+                練習問題に挑戦
+              </Text>
+            </Pressable>
           </>
         ) : null}
       </ScrollView>
@@ -482,6 +502,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     marginTop: 14,
+  },
+
+  practiceButton: {
+    backgroundColor: '#28794c',
+    borderRadius: 9,
+    padding: 13,
+    marginTop: 18,
+  },
+
+  practiceButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 
   resultCard: {

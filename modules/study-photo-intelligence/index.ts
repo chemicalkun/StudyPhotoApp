@@ -2,6 +2,10 @@ import {
   requireOptionalNativeModule,
 } from 'expo-modules-core';
 
+import type {
+  PracticeQuestion,
+} from '@/types/practice-question';
+
 
 export type LectureSummaryAvailability =
   | 'available'
@@ -21,6 +25,9 @@ type StudyPhotoIntelligenceNativeModule = {
     question: string
   ): Promise<string>;
   createExamPreparation(text: string): Promise<string>;
+  createPracticeQuestions(
+    text: string
+  ): Promise<PracticeQuestion[]>;
 };
 
 
@@ -80,4 +87,17 @@ export const createExamPreparation = async (
   }
 
   return nativeModule.createExamPreparation(text);
+};
+
+
+export const createPracticeQuestions = async (
+  text: string
+): Promise<PracticeQuestion[]> => {
+  if (nativeModule === null) {
+    throw new Error(
+      '端末内AI練習問題は新しい開発ビルドでのみ利用できます。'
+    );
+  }
+
+  return nativeModule.createPracticeQuestions(text);
 };
