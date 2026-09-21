@@ -563,7 +563,10 @@ export default function PhotoScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen
-        options={{ title: '写真' }}
+        options={{
+          title: '写真',
+          headerBackTitle: '授業',
+        }}
       />
 
       {loading ? (

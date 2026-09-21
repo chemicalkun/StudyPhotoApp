@@ -234,7 +234,12 @@ export default function ExamPreparationScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: '試験対策' }} />
+      <Stack.Screen
+        options={{
+          title: '試験対策',
+          headerBackTitle: '復習',
+        }}
+      />
 
       <ScrollView
         style={styles.scrollView}

@@ -244,7 +244,12 @@ export default function PeriodSettingsScreen() {
       contentContainerStyle={styles.contentContainer}
       keyboardShouldPersistTaps="handled"
     >
-      <Stack.Screen options={{ title: '時限設定' }} />
+      <Stack.Screen
+        options={{
+          title: '時限設定',
+          headerBackTitle: '時間割',
+        }}
+      />
 
       <Text style={styles.title}>
         時限設定

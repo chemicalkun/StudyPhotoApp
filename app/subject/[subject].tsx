@@ -15,6 +15,7 @@ import {
 import { Image } from 'expo-image';
 import {
   router,
+  Stack,
   useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
@@ -532,6 +533,15 @@ export default function SubjectScreen() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: isUnclassified
+            ? '未分類の写真'
+            : subject || '授業',
+          headerBackTitle: 'ホーム',
+        }}
+      />
+
       <SectionList
         style={styles.list}
         contentContainerStyle={styles.contentContainer}

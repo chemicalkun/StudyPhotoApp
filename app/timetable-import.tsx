@@ -349,7 +349,10 @@ export default function TimetableImportScreen() {
       contentContainerStyle={styles.contentContainer}
     >
       <Stack.Screen
-        options={{ title: '時間割画像から登録' }}
+        options={{
+          title: '時間割画像から登録',
+          headerBackTitle: '時間割',
+        }}
       />
 
       <Text style={styles.title}>
