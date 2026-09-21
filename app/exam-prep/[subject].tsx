@@ -347,6 +347,25 @@ export default function ExamPreparationScreen() {
                     練習問題に挑戦
                   </Text>
                 </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.flashcardButton,
+                    summaries.length === 0 &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={summaries.length === 0}
+                  onPress={() => {
+                    router.push({
+                      pathname: '/flashcards/[subject]',
+                      params: { subject },
+                    });
+                  }}
+                >
+                  <Text style={styles.flashcardButtonText}>
+                    フラッシュカードで覚える
+                  </Text>
+                </Pressable>
               </>
             ) : (
               <Text style={styles.unavailableText}>
@@ -388,19 +407,35 @@ export default function ExamPreparationScreen() {
             ) : null}
 
             {examPreparation !== '' ? (
-              <Pressable
-                style={styles.practiceButton}
-                onPress={() => {
-                  router.push({
-                    pathname: '/practice/[subject]',
-                    params: { subject },
-                  });
-                }}
-              >
-                <Text style={styles.practiceButtonText}>
-                  練習問題に挑戦
-                </Text>
-              </Pressable>
+              <>
+                <Pressable
+                  style={styles.practiceButton}
+                  onPress={() => {
+                    router.push({
+                      pathname: '/practice/[subject]',
+                      params: { subject },
+                    });
+                  }}
+                >
+                  <Text style={styles.practiceButtonText}>
+                    練習問題に挑戦
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.flashcardButton}
+                  onPress={() => {
+                    router.push({
+                      pathname: '/flashcards/[subject]',
+                      params: { subject },
+                    });
+                  }}
+                >
+                  <Text style={styles.flashcardButtonText}>
+                    フラッシュカードで覚える
+                  </Text>
+                </Pressable>
+              </>
             ) : null}
           </>
         ) : null}
@@ -530,6 +565,20 @@ const styles = StyleSheet.create({
   },
 
   practiceButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  flashcardButton: {
+    backgroundColor: '#6b3ca0',
+    borderRadius: 9,
+    padding: 13,
+    marginTop: 10,
+  },
+
+  flashcardButtonText: {
     color: 'white',
     fontSize: 15,
     fontWeight: 'bold',

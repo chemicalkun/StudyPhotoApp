@@ -5,6 +5,7 @@ import {
 import type {
   PracticeQuestion,
 } from '@/types/practice-question';
+import type { Flashcard } from '@/types/flashcard';
 
 
 export type LectureSummaryAvailability =
@@ -28,6 +29,7 @@ type StudyPhotoIntelligenceNativeModule = {
   createPracticeQuestions(
     text: string
   ): Promise<PracticeQuestion[]>;
+  createFlashcards(text: string): Promise<Flashcard[]>;
 };
 
 
@@ -100,4 +102,17 @@ export const createPracticeQuestions = async (
   }
 
   return nativeModule.createPracticeQuestions(text);
+};
+
+
+export const createFlashcards = async (
+  text: string
+): Promise<Flashcard[]> => {
+  if (nativeModule === null) {
+    throw new Error(
+      '端末内AIフラッシュカードは新しい開発ビルドでのみ利用できます。'
+    );
+  }
+
+  return nativeModule.createFlashcards(text);
 };
