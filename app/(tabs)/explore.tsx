@@ -10,7 +10,13 @@ import {
 
 import { router, useFocusEffect } from 'expo-router';
 
+import { loadExamPreparationRecords } from '@/services/exam-preparation-storage';
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
+import {
+  createExamPreparationRecordId,
+  createExamPreparationSourceSignature,
+  type ExamPreparationRecords,
+} from '@/types/exam-preparation';
 import type {
   LectureSummaryRecord,
 } from '@/types/lecture-summary';
@@ -38,6 +44,8 @@ export default function ReviewScreen() {
   const [loadError, setLoadError] = useState('');
   const [reviewMode, setReviewMode] =
     useState<ReviewMode>('subject');
+  const [examPreparationRecords, setExamPreparationRecords] =
+    useState<ExamPreparationRecords>({});
 
   const subjectGroups = Object.entries(
     summaries.reduce<Record<string, LectureSummaryRecord[]>>(
@@ -76,6 +84,21 @@ export default function ReviewScreen() {
             });
 
           setSummaries(sortedSummaries);
+
+          try {
+            const savedExamPreparations =
+              await loadExamPreparationRecords();
+
+            setExamPreparationRecords(
+              savedExamPreparations
+            );
+          } catch (examPreparationError) {
+            console.log(
+              '試験対策保存状態読み込みエラー:',
+              examPreparationError
+            );
+            setExamPreparationRecords({});
+          }
         } catch (error) {
           console.log('復習まとめ読み込みエラー:', error);
           setSummaries([]);
@@ -187,34 +210,62 @@ export default function ReviewScreen() {
 
                 <View style={styles.examList}>
                   {subjectGroups.map(
-                    ([groupSubject, subjectSummaries]) => (
-                      <Pressable
-                        key={groupSubject}
-                        style={styles.examCard}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${groupSubject}の授業全体まとめを開く`}
-                        onPress={() => {
-                          router.push({
-                            pathname: '/exam-prep/[subject]',
-                            params: { subject: groupSubject },
-                          });
-                        }}
-                      >
-                        <View style={styles.examCardText}>
-                          <Text style={styles.examSubject}>
-                            {groupSubject}
-                          </Text>
+                    ([groupSubject, subjectSummaries]) => {
+                      const savedExamPreparation =
+                        examPreparationRecords[
+                          createExamPreparationRecordId(
+                            groupSubject
+                          )
+                        ];
+                      const isSaved =
+                        savedExamPreparation !== undefined &&
+                        savedExamPreparation.sourceSummarySignature ===
+                          createExamPreparationSourceSignature(
+                            subjectSummaries
+                          );
 
-                          <Text style={styles.examCount}>
-                            {subjectSummaries.length}回分のまとめ
-                          </Text>
-                        </View>
+                      return (
+                        <Pressable
+                          key={groupSubject}
+                          style={styles.examCard}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${groupSubject}の授業全体まとめを開く、${isSaved ? '保存済み' : '未作成'}`}
+                          onPress={() => {
+                            router.push({
+                              pathname: '/exam-prep/[subject]',
+                              params: { subject: groupSubject },
+                            });
+                          }}
+                        >
+                          <View style={styles.examCardText}>
+                            <Text style={styles.examSubject}>
+                              {groupSubject}
+                            </Text>
 
-                        <Text style={styles.examOpenText}>
-                          全体を見る ›
-                        </Text>
-                      </Pressable>
-                    )
+                            <Text style={styles.examCount}>
+                              {subjectSummaries.length}回分のまとめ
+                            </Text>
+
+                            <Text
+                              style={[
+                                styles.examStatus,
+                                isSaved
+                                  ? styles.examStatusSaved
+                                  : styles.examStatusNotCreated,
+                              ]}
+                            >
+                              {isSaved ? '保存済み' : '未作成'}
+                            </Text>
+                          </View>
+
+                          <Text style={styles.examOpenText}>
+                            {isSaved
+                              ? '保存済みを見る ›'
+                              : '作成する ›'}
+                          </Text>
+                        </Pressable>
+                      );
+                    }
                   )}
                 </View>
               </View>
@@ -447,6 +498,27 @@ const styles = StyleSheet.create({
     color: '#5d6470',
     fontSize: 12,
     marginTop: 4,
+  },
+
+  examStatus: {
+    alignSelf: 'flex-start',
+    borderRadius: 5,
+    fontSize: 11,
+    fontWeight: 'bold',
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginTop: 7,
+  },
+
+  examStatusSaved: {
+    color: '#28794c',
+    backgroundColor: '#dff2e6',
+  },
+
+  examStatusNotCreated: {
+    color: '#725b24',
+    backgroundColor: '#fff0c8',
   },
 
   examOpenText: {
