@@ -23,6 +23,16 @@ export type StudyPhotoBackup = {
 };
 
 
+export const restorableBackupStorageKeys = [
+  'timetable',
+  'periodTimes',
+  'lectureSummaryRecords',
+  'examPreparationRecords',
+  'practiceQuestionRecords',
+  'flashcardRecords',
+] as const satisfies readonly BackupStorageKey[];
+
+
 export const createStudyPhotoBackup = (
   entries: readonly (
     readonly [string, string | null]
@@ -44,4 +54,53 @@ export const createStudyPhotoBackup = (
     includesPhotoFiles: false,
     storage,
   };
+};
+
+
+export const parseStudyPhotoBackup = (
+  savedBackup: string
+): StudyPhotoBackup => {
+  const parsedBackup: unknown = JSON.parse(savedBackup);
+
+  if (
+    typeof parsedBackup !== 'object' ||
+    parsedBackup === null ||
+    Array.isArray(parsedBackup)
+  ) {
+    throw new Error('バックアップ形式が不正です');
+  }
+
+  const backup = parsedBackup as Partial<StudyPhotoBackup>;
+
+  if (
+    backup.format !== 'studyphoto-backup' ||
+    backup.version !== 1 ||
+    typeof backup.exportedAt !== 'string' ||
+    Number.isNaN(new Date(backup.exportedAt).getTime()) ||
+    backup.includesPhotoFiles !== false ||
+    typeof backup.storage !== 'object' ||
+    backup.storage === null ||
+    Array.isArray(backup.storage)
+  ) {
+    throw new Error('対応していないバックアップです');
+  }
+
+  const storage = backup.storage as Record<
+    string,
+    unknown
+  >;
+  const hasValidStorageValues = backupStorageKeys.every(
+    (key) =>
+      Object.hasOwn(storage, key) &&
+      (
+        typeof storage[key] === 'string' ||
+        storage[key] === null
+      )
+  );
+
+  if (!hasValidStorageValues) {
+    throw new Error('バックアップ内のデータが不正です');
+  }
+
+  return backup as StudyPhotoBackup;
 };

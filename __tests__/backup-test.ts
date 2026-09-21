@@ -1,10 +1,18 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { restoreBackup } from '@/services/backup-storage';
 import {
   backupStorageKeys,
   createStudyPhotoBackup,
+  parseStudyPhotoBackup,
 } from '@/types/backup';
 
 
 describe('StudyPhoto backup', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
   test('すべての保存項目をバックアップ形式にまとめる', () => {
     const backup = createStudyPhotoBackup(
       [
@@ -27,5 +35,54 @@ describe('StudyPhoto backup', () => {
       '{"月-1":"高分子化学"}'
     );
     expect(backup.storage.flashcardRecords).toBeNull();
+  });
+
+  test('対応していないバックアップを拒否する', () => {
+    expect(() =>
+      parseStudyPhotoBackup(JSON.stringify({
+        format: 'unknown',
+        version: 1,
+      }))
+    ).toThrow('対応していないバックアップです');
+  });
+
+  test('学習データを復元し写真情報は上書きしない', async () => {
+    await AsyncStorage.setItem(
+      'photos',
+      '[{"id":"current-photo"}]'
+    );
+    const backup = createStudyPhotoBackup([
+      ['timetable', '{"月-1":"高分子化学"}'],
+      ['photos', '[{"id":"old-photo"}]'],
+      ['lectureSummaryRecords', '{}'],
+    ]);
+
+    await restoreBackup(JSON.stringify(backup));
+
+    expect(await AsyncStorage.getItem('timetable')).toBe(
+      '{"月-1":"高分子化学"}'
+    );
+    expect(await AsyncStorage.getItem('photos')).toBe(
+      '[{"id":"current-photo"}]'
+    );
+  });
+
+  test('壊れた学習データがある場合は何も上書きしない', async () => {
+    await AsyncStorage.setItem(
+      'timetable',
+      '{"火-2":"現在の授業"}'
+    );
+    const backup = createStudyPhotoBackup([
+      ['timetable', '{"月-1":"古い授業"}'],
+      ['lectureSummaryRecords', '{"broken":true}'],
+    ]);
+
+    await expect(
+      restoreBackup(JSON.stringify(backup))
+    ).rejects.toThrow();
+
+    expect(await AsyncStorage.getItem('timetable')).toBe(
+      '{"火-2":"現在の授業"}'
+    );
   });
 });

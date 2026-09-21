@@ -4,7 +4,121 @@ import { File, Paths } from 'expo-file-system';
 import {
   backupStorageKeys,
   createStudyPhotoBackup,
+  parseStudyPhotoBackup,
+  restorableBackupStorageKeys,
 } from '@/types/backup';
+import { parseExamPreparationRecords } from '@/types/exam-preparation';
+import { parseFlashcardRecords } from '@/types/flashcard';
+import { parseLectureSummaryRecords } from '@/types/lecture-summary';
+import { parsePracticeQuestionRecords } from '@/types/practice-question';
+import {
+  getPeriodTimesValidationError,
+  periodNumbers,
+  type PeriodTimes,
+} from '@/utils/period-times';
+
+
+const parseJson = (savedValue: string) => {
+  const parsedValue: unknown = JSON.parse(savedValue);
+
+  return parsedValue;
+};
+
+
+const validateTimetable = (savedTimetable: string) => {
+  const timetable = parseJson(savedTimetable);
+
+  if (
+    typeof timetable !== 'object' ||
+    timetable === null ||
+    Array.isArray(timetable) ||
+    !Object.values(timetable).every(
+      (subject) => typeof subject === 'string'
+    )
+  ) {
+    throw new Error('時間割データが不正です');
+  }
+};
+
+
+const validatePeriodTimes = (
+  savedPeriodTimes: string
+) => {
+  const periodTimes = parseJson(savedPeriodTimes);
+
+  if (
+    typeof periodTimes !== 'object' ||
+    periodTimes === null ||
+    Array.isArray(periodTimes)
+  ) {
+    throw new Error('時限設定データが不正です');
+  }
+
+  const candidate = periodTimes as Record<
+    string,
+    unknown
+  >;
+
+  for (const period of periodNumbers) {
+    const time = candidate[String(period)];
+
+    if (
+      typeof time !== 'object' ||
+      time === null ||
+      Array.isArray(time) ||
+      typeof (time as { start?: unknown }).start !==
+        'string' ||
+      typeof (time as { end?: unknown }).end !== 'string'
+    ) {
+      throw new Error('時限設定データが不正です');
+    }
+  }
+
+  if (
+    getPeriodTimesValidationError(
+      periodTimes as PeriodTimes
+    ) !== null
+  ) {
+    throw new Error('時限設定データが不正です');
+  }
+};
+
+
+const validateRestorableData = (
+  storage: ReturnType<
+    typeof parseStudyPhotoBackup
+  >['storage']
+) => {
+  if (storage.timetable !== null) {
+    validateTimetable(storage.timetable);
+  }
+
+  if (storage.periodTimes !== null) {
+    validatePeriodTimes(storage.periodTimes);
+  }
+
+  if (storage.lectureSummaryRecords !== null) {
+    parseLectureSummaryRecords(
+      storage.lectureSummaryRecords
+    );
+  }
+
+  if (storage.examPreparationRecords !== null) {
+    parseExamPreparationRecords(
+      storage.examPreparationRecords
+    );
+  }
+
+  if (storage.practiceQuestionRecords !== null) {
+    parsePracticeQuestionRecords(
+      storage.practiceQuestionRecords
+    );
+  }
+
+  if (storage.flashcardRecords !== null) {
+    parseFlashcardRecords(storage.flashcardRecords);
+  }
+};
 
 
 export const createBackupFile = async () => {
@@ -24,4 +138,32 @@ export const createBackupFile = async () => {
   backupFile.write(JSON.stringify(backup, null, 2));
 
   return backupFile.uri;
+};
+
+
+export const restoreBackup = async (
+  savedBackup: string
+) => {
+  const backup = parseStudyPhotoBackup(savedBackup);
+
+  validateRestorableData(backup.storage);
+
+  const entriesToRestore = restorableBackupStorageKeys
+    .flatMap((key) => {
+      const value = backup.storage[key];
+
+      return value === null ? [] : [[key, value] as const];
+    });
+  const keysToRemove = restorableBackupStorageKeys
+    .filter((key) => backup.storage[key] === null);
+
+  if (entriesToRestore.length > 0) {
+    await AsyncStorage.multiSet(entriesToRestore);
+  }
+
+  if (keysToRemove.length > 0) {
+    await AsyncStorage.multiRemove(keysToRemove);
+  }
+
+  return backup;
 };
