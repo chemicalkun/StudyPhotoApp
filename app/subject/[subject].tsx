@@ -20,17 +20,20 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-import {
-  parsePhotoRecords,
-  PhotoRecord,
-} from '@/types/photo';
+import { PhotoRecord } from '@/types/photo';
 import type {
   PhotoOcrRecord,
   PhotoOcrRecords,
 } from '@/types/photo-ocr';
-import { loadPhotoOcrRecords } from '@/services/photo-ocr-storage';
+import {
+  loadPhotoOcrRecords,
+  savePhotoOcrRecord,
+} from '@/services/photo-ocr-storage';
+import { loadPhotoRecords } from '@/services/photo-storage';
+import {
+  isStudyPhotoVisionAvailable,
+  recognizeText,
+} from '@/modules/study-photo-vision';
 import {
   answerLectureQuestion,
   getLectureSummaryAvailability,
@@ -78,6 +81,22 @@ type LectureOcrItem = {
 };
 
 
+const getLectureOcrItems = (
+  photos: PhotoRecord[],
+  records: PhotoOcrRecords
+) =>
+  photos.flatMap((photo, photoIndex) => {
+    const record = records[photo.id];
+
+    return record === undefined
+      ? []
+      : [{
+          photoNumber: photoIndex + 1,
+          record,
+        }];
+  });
+
+
 export default function SubjectScreen() {
   const params = useLocalSearchParams();
 
@@ -120,6 +139,12 @@ export default function SubjectScreen() {
   const [questionError, setQuestionError] = useState('');
   const [isAnsweringQuestion, setIsAnsweringQuestion] =
     useState(false);
+  const [processingLectureDateKey, setProcessingLectureDateKey] =
+    useState<string | null>(null);
+  const [lectureProcessingStatus, setLectureProcessingStatus] =
+    useState('');
+  const [lectureProcessingWarning, setLectureProcessingWarning] =
+    useState('');
 
 
   const getPhotoLabel = (photo: PhotoRecord) => {
@@ -170,17 +195,13 @@ export default function SubjectScreen() {
           setSummaryLoadError('');
           setSelectedLectureSection(null);
 
-          const savedPhotos =
-            await AsyncStorage.getItem('photos');
+          const allPhotos = await loadPhotoRecords();
 
-          if (savedPhotos === null) {
+          if (allPhotos.length === 0) {
             setLectureGroups([]);
             setStatus('写真がありません');
             return;
           }
-
-          const allPhotos =
-            parsePhotoRecords(savedPhotos);
 
 
           const subjectPhotos =
@@ -333,6 +354,8 @@ export default function SubjectScreen() {
     setLectureAnswer('');
     setQuestionError('');
     setIsAnsweringQuestion(false);
+    setLectureProcessingStatus('');
+    setLectureProcessingWarning('');
 
     try {
       const availability =
@@ -346,15 +369,9 @@ export default function SubjectScreen() {
   };
 
 
-  const createLectureSummary = async () => {
-    if (
-      selectedLectureSection === null ||
-      summaryAvailability !== 'available'
-    ) {
-      return;
-    }
-
-    const section = selectedLectureSection;
+  const generateAndSaveLectureSummary = async (
+    section: LectureSection
+  ) => {
     const combinedOcrText =
       section.ocrItems
         .map(
@@ -416,6 +433,133 @@ export default function SubjectScreen() {
       );
     } finally {
       setIsGeneratingSummary(false);
+    }
+  };
+
+
+  const createCompleteLectureSummary = async (
+    section: LectureSection
+  ) => {
+    if (processingLectureDateKey !== null) {
+      return;
+    }
+
+    setSelectedLectureSection(section);
+    setLectureSummary('');
+    setIsLectureSummarySaved(false);
+    setSummaryError('');
+    setSummarySaveError('');
+    setSummaryAvailability(null);
+    setLectureQuestion('');
+    setLectureAnswer('');
+    setQuestionError('');
+    setLectureProcessingWarning('');
+    setProcessingLectureDateKey(section.dateKey);
+
+    try {
+      const availability =
+        await getLectureSummaryAvailability();
+
+      setSummaryAvailability(availability);
+
+      if (availability !== 'available') {
+        return;
+      }
+
+      const missingPhotos = section.photos.filter(
+        (photo) => photoOcrRecords[photo.id] === undefined
+      );
+
+      if (
+        missingPhotos.length > 0 &&
+        !isStudyPhotoVisionAvailable
+      ) {
+        setSummaryError(
+          '写真の文字認識を利用するには、開発ビルドの再インストールが必要です。'
+        );
+        return;
+      }
+
+      const updatedOcrRecords = {
+        ...photoOcrRecords,
+      };
+      const failedPhotoNumbers: number[] = [];
+
+      for (
+        let photoIndex = 0;
+        photoIndex < section.photos.length;
+        photoIndex += 1
+      ) {
+        const photo = section.photos[photoIndex];
+
+        setLectureProcessingStatus(
+          `写真の文字を認識中 ${photoIndex + 1}/${section.photos.length}`
+        );
+
+        if (updatedOcrRecords[photo.id] !== undefined) {
+          continue;
+        }
+
+        try {
+          const blocks = await recognizeText(photo.uri);
+
+          if (blocks.length === 0) {
+            failedPhotoNumbers.push(photoIndex + 1);
+            continue;
+          }
+
+          const savedRecord = await savePhotoOcrRecord(
+            photo.id,
+            blocks
+          );
+
+          updatedOcrRecords[photo.id] = savedRecord;
+          setPhotoOcrRecords({ ...updatedOcrRecords });
+        } catch (error) {
+          console.log(
+            `写真${photoIndex + 1}文字認識エラー:`,
+            error
+          );
+          failedPhotoNumbers.push(photoIndex + 1);
+        }
+      }
+
+      const updatedSection: LectureSection = {
+        ...section,
+        ocrItems: getLectureOcrItems(
+          section.photos,
+          updatedOcrRecords
+        ),
+      };
+
+      setSelectedLectureSection(updatedSection);
+
+      if (updatedSection.ocrItems.length === 0) {
+        setSummaryError(
+          '写真から文字を認識できなかったため、まとめを作成できませんでした。'
+        );
+        return;
+      }
+
+      if (failedPhotoNumbers.length > 0) {
+        setLectureProcessingWarning(
+          `写真${failedPhotoNumbers.join('、')}は文字を認識できなかったため、認識できた写真だけでまとめました。`
+        );
+      }
+
+      setLectureProcessingStatus('まとめを作成中...');
+      await generateAndSaveLectureSummary(updatedSection);
+    } catch (error) {
+      console.log('授業まとめ一括作成エラー:', error);
+      setSummaryAvailability((availability) =>
+        availability ?? 'unknown'
+      );
+      setSummaryError(
+        'まとめを作成できませんでした。少し待ってから再試行してください。'
+      );
+    } finally {
+      setLectureProcessingStatus('');
+      setProcessingLectureDateKey(null);
     }
   };
 
@@ -515,20 +659,37 @@ export default function SubjectScreen() {
           ? '撮影日'
           : `第${index + 1}回`,
         data: rows,
-        ocrItems: group.photos.flatMap(
-          (photo, photoIndex) => {
-            const record = photoOcrRecords[photo.id];
-
-            return record === undefined
-              ? []
-              : [{
-                  photoNumber: photoIndex + 1,
-                  record,
-                }];
-          }
+        ocrItems: getLectureOcrItems(
+          group.photos,
+          photoOcrRecords
         ),
       };
     });
+
+
+  const hasCurrentLectureSummary = (
+    section: LectureSection
+  ) => {
+    if (
+      section.ocrItems.length !== section.photos.length
+    ) {
+      return false;
+    }
+
+    const summaryId = createLectureSummaryId(
+      subject,
+      section.dateKey
+    );
+    const savedSummary = lectureSummaryRecords[summaryId];
+
+    return (
+      savedSummary !== undefined &&
+      savedSummary.sourceOcrSignature ===
+        createLectureSummarySourceSignature(
+          section.ocrItems.map((item) => item.record)
+        )
+    );
+  };
 
 
   return (
@@ -605,20 +766,39 @@ export default function SubjectScreen() {
               </Text>
             </View>
 
-            {section.ocrItems.length > 0 ? (
-              <Pressable
-                style={styles.lectureOcrButton}
-                onPress={() => {
+            <Pressable
+              style={[
+                styles.lectureOcrButton,
+                processingLectureDateKey !== null &&
+                  styles.summaryButtonDisabled,
+              ]}
+              disabled={processingLectureDateKey !== null}
+              onPress={() => {
+                if (hasCurrentLectureSummary(section)) {
                   void openLectureOcr(section);
-                }}
-              >
-                <Text style={styles.lectureOcrButtonText}>
-                  認識文字をまとめて見る（
-                  {section.ocrItems.length}/
-                  {section.photos.length}枚）
-                </Text>
-              </Pressable>
-            ) : null}
+                  return;
+                }
+
+                void createCompleteLectureSummary(section);
+              }}
+            >
+              {processingLectureDateKey ===
+              section.dateKey ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#28794c"
+                />
+              ) : null}
+
+              <Text style={styles.lectureOcrButtonText}>
+                {processingLectureDateKey === section.dateKey
+                  ? lectureProcessingStatus ||
+                    '準備中...'
+                  : hasCurrentLectureSummary(section)
+                    ? 'まとめを見る'
+                    : 'まとめを作成'}
+              </Text>
+            </Pressable>
           </View>
         )}
         renderItem={({ item: row }) => (
@@ -678,14 +858,16 @@ export default function SubjectScreen() {
         visible={selectedLectureSection !== null}
         transparent
         animationType="fade"
-        onRequestClose={() =>
-          setSelectedLectureSection(null)
-        }
+        onRequestClose={() => {
+          if (processingLectureDateKey === null) {
+            setSelectedLectureSection(null);
+          }
+        }}
       >
         <View style={styles.modalBackground}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
-              {selectedLectureSection?.title}の認識文字
+              {selectedLectureSection?.title}のまとめ
             </Text>
 
             <Text style={styles.modalSubtitle}>
@@ -695,8 +877,21 @@ export default function SubjectScreen() {
             </Text>
 
             <Text style={styles.ocrNotice}>
-              各写真のOCR結果を撮影順にまとめた内容です。
+              写真の文字認識とまとめ作成は、このiPhone内で行います。
             </Text>
+
+            {lectureProcessingStatus !== '' ? (
+              <View style={styles.summaryStatusRow}>
+                <ActivityIndicator
+                  size="small"
+                  color="#28794c"
+                />
+
+                <Text style={styles.summaryStatusText}>
+                  {lectureProcessingStatus}
+                </Text>
+              </View>
+            ) : null}
 
             {summaryAvailability === null ? (
               <View style={styles.summaryStatusRow}>
@@ -714,12 +909,20 @@ export default function SubjectScreen() {
                 <Pressable
                   style={[
                     styles.summaryButton,
-                    isGeneratingSummary &&
+                    (isGeneratingSummary ||
+                      processingLectureDateKey !== null) &&
                       styles.summaryButtonDisabled,
                   ]}
-                  disabled={isGeneratingSummary}
+                  disabled={
+                    isGeneratingSummary ||
+                    processingLectureDateKey !== null
+                  }
                   onPress={() => {
-                    void createLectureSummary();
+                    if (selectedLectureSection !== null) {
+                      void createCompleteLectureSummary(
+                        selectedLectureSection
+                      );
+                    }
                   }}
                 >
                   {isGeneratingSummary ? (
@@ -757,6 +960,12 @@ export default function SubjectScreen() {
             {summarySaveError !== '' ? (
               <Text style={styles.summaryErrorText}>
                 {summarySaveError}
+              </Text>
+            ) : null}
+
+            {lectureProcessingWarning !== '' ? (
+              <Text style={styles.summaryWarningText}>
+                {lectureProcessingWarning}
               </Text>
             ) : null}
 
@@ -880,10 +1089,13 @@ export default function SubjectScreen() {
             </ScrollView>
 
             <Pressable
-              style={styles.closeButton}
-              onPress={() =>
-                setSelectedLectureSection(null)
-              }
+              style={[
+                styles.closeButton,
+                processingLectureDateKey !== null &&
+                  styles.summaryButtonDisabled,
+              ]}
+              disabled={processingLectureDateKey !== null}
+              onPress={() => setSelectedLectureSection(null)}
             >
               <Text style={styles.closeButtonText}>
                 閉じる
@@ -961,6 +1173,9 @@ const styles = StyleSheet.create({
 
   lectureOcrButton: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
     backgroundColor: '#eef8f2',
     borderWidth: 1,
     borderColor: '#9bc9aa',
@@ -1128,6 +1343,16 @@ const styles = StyleSheet.create({
     color: '#9b2c2c',
     fontSize: 12,
     lineHeight: 18,
+    marginTop: 10,
+  },
+
+  summaryWarningText: {
+    color: '#725b24',
+    backgroundColor: '#fff3d6',
+    borderRadius: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    padding: 10,
     marginTop: 10,
   },
 
