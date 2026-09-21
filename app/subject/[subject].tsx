@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -28,6 +29,13 @@ import type {
   PhotoOcrRecords,
 } from '@/types/photo-ocr';
 import { loadPhotoOcrRecords } from '@/services/photo-ocr-storage';
+import {
+  getLectureSummaryAvailability,
+  summarizeLecture,
+} from '@/modules/study-photo-intelligence';
+import type {
+  LectureSummaryAvailability,
+} from '@/modules/study-photo-intelligence';
 
 
 type LectureGroup = {
@@ -79,6 +87,12 @@ export default function SubjectScreen() {
   const [ocrLoadError, setOcrLoadError] = useState('');
   const [selectedLectureSection, setSelectedLectureSection] =
     useState<LectureSection | null>(null);
+  const [summaryAvailability, setSummaryAvailability] =
+    useState<LectureSummaryAvailability | null>(null);
+  const [lectureSummary, setLectureSummary] = useState('');
+  const [summaryError, setSummaryError] = useState('');
+  const [isGeneratingSummary, setIsGeneratingSummary] =
+    useState(false);
 
 
   const getPhotoLabel = (photo: PhotoRecord) => {
@@ -242,6 +256,84 @@ export default function SubjectScreen() {
   );
 
 
+  const openLectureOcr = async (
+    section: LectureSection
+  ) => {
+    setSelectedLectureSection(section);
+    setLectureSummary('');
+    setSummaryError('');
+    setIsGeneratingSummary(false);
+    setSummaryAvailability(null);
+
+    try {
+      const availability =
+        await getLectureSummaryAvailability();
+
+      setSummaryAvailability(availability);
+    } catch (error) {
+      console.log('端末内AI利用可否確認エラー:', error);
+      setSummaryAvailability('unknown');
+    }
+  };
+
+
+  const createLectureSummary = async () => {
+    if (
+      selectedLectureSection === null ||
+      summaryAvailability !== 'available'
+    ) {
+      return;
+    }
+
+    const combinedOcrText =
+      selectedLectureSection.ocrItems
+        .map(
+          (item) =>
+            `写真${item.photoNumber}\n${item.record.text}`
+        )
+        .join('\n\n');
+
+    try {
+      setIsGeneratingSummary(true);
+      setSummaryError('');
+
+      const summary = await summarizeLecture(
+        combinedOcrText
+      );
+
+      setLectureSummary(summary.trim());
+    } catch (error) {
+      console.log('授業まとめ作成エラー:', error);
+
+      setSummaryError(
+        'まとめを作成できませんでした。少し待ってから再試行してください。'
+      );
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+
+  const getSummaryUnavailableMessage = () => {
+    switch (summaryAvailability) {
+      case 'unsupportedBuild':
+        return '要約機能を利用するには、開発ビルドの再インストールが必要です。';
+      case 'unsupportedOS':
+        return '端末内AI要約にはiOS 26以降が必要です。';
+      case 'deviceNotEligible':
+        return 'この端末はApple Intelligenceに対応していないため、端末内要約を利用できません。';
+      case 'appleIntelligenceNotEnabled':
+        return 'iPhoneの設定でApple Intelligenceを有効にしてください。';
+      case 'modelNotReady':
+        return 'Apple Intelligenceのモデルを準備中です。しばらく待ってから再試行してください。';
+      case 'unknown':
+        return '端末内AI要約を現在利用できません。';
+      default:
+        return '';
+    }
+  };
+
+
   const sections: LectureSection[] =
     lectureGroups.map((group, index) => {
       const rows: PhotoRow[] = [];
@@ -344,9 +436,9 @@ export default function SubjectScreen() {
             {section.ocrItems.length > 0 ? (
               <Pressable
                 style={styles.lectureOcrButton}
-                onPress={() =>
-                  setSelectedLectureSection(section)
-                }
+                onPress={() => {
+                  void openLectureOcr(section);
+                }}
               >
                 <Text style={styles.lectureOcrButtonText}>
                   認識文字をまとめて見る（
@@ -431,10 +523,81 @@ export default function SubjectScreen() {
             </Text>
 
             <Text style={styles.ocrNotice}>
-              AI要約ではなく、各写真のOCR結果を撮影順にまとめた内容です。
+              各写真のOCR結果を撮影順にまとめた内容です。
             </Text>
 
+            {summaryAvailability === null ? (
+              <View style={styles.summaryStatusRow}>
+                <ActivityIndicator
+                  size="small"
+                  color="#28794c"
+                />
+
+                <Text style={styles.summaryStatusText}>
+                  端末内AIを確認中...
+                </Text>
+              </View>
+            ) : summaryAvailability === 'available' ? (
+              <View>
+                <Pressable
+                  style={[
+                    styles.summaryButton,
+                    isGeneratingSummary &&
+                      styles.summaryButtonDisabled,
+                  ]}
+                  disabled={isGeneratingSummary}
+                  onPress={() => {
+                    void createLectureSummary();
+                  }}
+                >
+                  {isGeneratingSummary ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="white"
+                    />
+                  ) : null}
+
+                  <Text style={styles.summaryButtonText}>
+                    {isGeneratingSummary
+                      ? 'まとめを作成中...'
+                      : lectureSummary === ''
+                        ? 'この回のまとめを作成'
+                        : 'まとめを作り直す'}
+                  </Text>
+                </Pressable>
+
+                <Text style={styles.onDeviceNotice}>
+                  OCR文字は外部に送信せず、このiPhone内でまとめます。
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.summaryUnavailableText}>
+                {getSummaryUnavailableMessage()}
+              </Text>
+            )}
+
+            {summaryError !== '' ? (
+              <Text style={styles.summaryErrorText}>
+                {summaryError}
+              </Text>
+            ) : null}
+
             <ScrollView style={styles.ocrScrollView}>
+              {lectureSummary !== '' ? (
+                <View style={styles.summaryResult}>
+                  <Text style={styles.summaryResultTitle}>
+                    この回のまとめ
+                  </Text>
+
+                  <Text
+                    style={styles.summaryResultText}
+                    selectable
+                  >
+                    {lectureSummary}
+                  </Text>
+                </View>
+              ) : null}
+
               {selectedLectureSection?.ocrItems.map((item) => (
                 <View
                   style={styles.ocrPhotoSection}
@@ -646,6 +809,86 @@ const styles = StyleSheet.create({
 
   ocrScrollView: {
     marginTop: 8,
+    flexShrink: 1,
+  },
+
+  summaryStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+
+  summaryStatusText: {
+    color: '#555',
+    fontSize: 13,
+    marginLeft: 8,
+  },
+
+  summaryButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#28794c',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+  },
+
+  summaryButtonDisabled: {
+    opacity: 0.65,
+  },
+
+  summaryButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  onDeviceNotice: {
+    color: '#555',
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 6,
+  },
+
+  summaryUnavailableText: {
+    color: '#725b24',
+    backgroundColor: '#fff3d6',
+    borderRadius: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    padding: 10,
+    marginTop: 12,
+  },
+
+  summaryErrorText: {
+    color: '#9b2c2c',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+
+  summaryResult: {
+    backgroundColor: '#eef8f2',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 10,
+    padding: 13,
+    marginBottom: 12,
+  },
+
+  summaryResultTitle: {
+    color: '#28794c',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+
+  summaryResultText: {
+    color: '#222',
+    fontSize: 14,
+    lineHeight: 22,
   },
 
   ocrPhotoSection: {
