@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "StudyPhotoApp",
+    "name": "StudyPhoto",
     "slug": "StudyPhotoApp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "studyphotoapp",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -29,15 +29,35 @@
     "plugins": [
       "expo-router",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "授業中の黒板やスライドを撮影するためにカメラを使用します。",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "授業写真や時間割画像を選択するために写真ライブラリを使用します。",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "授業写真の撮影日時を確認し、授業ごとに分類するために写真ライブラリを使用します。",
+          "savePhotosPermission": false,
+          "granularPermissions": ["photo"]
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#ffffff"
         }
       ]
     ],
