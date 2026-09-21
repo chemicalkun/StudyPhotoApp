@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Alert,
@@ -44,41 +44,55 @@ export default function TimetableScreen() {
     useState<PeriodTimes>(defaultPeriodTimes);
 
 
-  useEffect(() => {
-    const loadTimetable = async () => {
-      try {
-        setLoadError('');
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-        const savedTimetable =
-          await AsyncStorage.getItem('timetable');
+      const loadTimetable = async () => {
+        try {
+          const savedTimetable =
+            await AsyncStorage.getItem('timetable');
 
-        if (savedTimetable === null) {
-          setTimetable({});
-          return;
+          if (savedTimetable === null) {
+            if (active) {
+              setTimetable({});
+              setLoadError('');
+            }
+            return;
+          }
+
+          const parsedTimetable: unknown =
+            JSON.parse(savedTimetable);
+
+          if (!isTimetable(parsedTimetable)) {
+            throw new Error(
+              'timetableの形式が不正です'
+            );
+          }
+
+          if (active) {
+            setTimetable(parsedTimetable);
+            setLoadError('');
+          }
+        } catch (error) {
+          console.log('時間割読み込みエラー:', error);
+
+          if (active) {
+            setTimetable({});
+            setLoadError(
+              '時間割データを読み込めませんでした。データは削除されていません。画面を開き直してください。'
+            );
+          }
         }
+      };
 
-        const parsedTimetable: unknown =
-          JSON.parse(savedTimetable);
+      loadTimetable();
 
-        if (!isTimetable(parsedTimetable)) {
-          throw new Error(
-            'timetableの形式が不正です'
-          );
-        }
-
-        setTimetable(parsedTimetable);
-      } catch (error) {
-        console.log('時間割読み込みエラー:', error);
-
-        setTimetable({});
-        setLoadError(
-          '時間割データを読み込めませんでした。データは削除されていません。画面を開き直してください。'
-        );
-      }
-    };
-
-    loadTimetable();
-  }, []);
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
 
 
   useFocusEffect(
