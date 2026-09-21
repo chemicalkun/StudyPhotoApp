@@ -19,9 +19,15 @@ import {
   getLectureSummaryAvailability,
   type LectureSummaryAvailability,
 } from '@/modules/study-photo-intelligence';
+import {
+  loadExamPreparationRecords,
+  saveExamPreparationRecord,
+} from '@/services/exam-preparation-storage';
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
 import {
   buildExamPreparationSource,
+  createExamPreparationRecordId,
+  createExamPreparationSourceSignature,
 } from '@/types/exam-preparation';
 import type {
   LectureSummaryRecord,
@@ -58,6 +64,9 @@ export default function ExamPreparationScreen() {
     useState('');
   const [isGenerating, setIsGenerating] =
     useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [isExamPreparationSaved, setIsExamPreparationSaved] =
+    useState(false);
 
 
   useFocusEffect(
@@ -69,11 +78,17 @@ export default function ExamPreparationScreen() {
           setLoading(true);
           setLoadError('');
           setGenerationError('');
+          setSaveError('');
 
-          const [records, modelAvailability] =
+          const [
+            records,
+            modelAvailability,
+            savedExamPreparations,
+          ] =
             await Promise.all([
               loadLectureSummaryRecords(),
               getLectureSummaryAvailability(),
+              loadExamPreparationRecords(),
             ]);
 
           if (!active) {
@@ -88,6 +103,28 @@ export default function ExamPreparationScreen() {
 
           setSummaries(subjectSummaries);
           setAvailability(modelAvailability);
+
+          const sourceSummarySignature =
+            createExamPreparationSourceSignature(
+              subjectSummaries
+            );
+          const savedExamPreparation =
+            savedExamPreparations[
+              createExamPreparationRecordId(subject)
+            ];
+          const canUseSavedExamPreparation =
+            savedExamPreparation !== undefined &&
+            savedExamPreparation.sourceSummarySignature ===
+              sourceSummarySignature;
+
+          setExamPreparation(
+            canUseSavedExamPreparation
+              ? savedExamPreparation.text
+              : ''
+          );
+          setIsExamPreparationSaved(
+            canUseSavedExamPreparation
+          );
         } catch (error) {
           console.log('試験対策読み込みエラー:', error);
 
@@ -134,6 +171,8 @@ export default function ExamPreparationScreen() {
     try {
       setIsGenerating(true);
       setGenerationError('');
+      setSaveError('');
+      setIsExamPreparationSaved(false);
 
       const result = await createExamPreparation(source);
       const trimmedResult = result.trim();
@@ -143,6 +182,25 @@ export default function ExamPreparationScreen() {
       }
 
       setExamPreparation(trimmedResult);
+
+      try {
+        await saveExamPreparationRecord(
+          subject,
+          trimmedResult,
+          createExamPreparationSourceSignature(
+            summaries
+          )
+        );
+        setIsExamPreparationSaved(true);
+      } catch (saveExamPreparationError) {
+        console.log(
+          '試験対策保存エラー:',
+          saveExamPreparationError
+        );
+        setSaveError(
+          '試験対策は表示できましたが、端末に保存できませんでした。'
+        );
+      }
     } catch (error) {
       console.log('試験対策作成エラー:', error);
       setGenerationError(
@@ -275,11 +333,23 @@ export default function ExamPreparationScreen() {
               </Text>
             ) : null}
 
+            {saveError !== '' ? (
+              <Text style={styles.errorText}>
+                {saveError}
+              </Text>
+            ) : null}
+
             {examPreparation !== '' ? (
               <View style={styles.resultCard}>
                 <Text style={styles.resultTitle}>
                   試験対策
                 </Text>
+
+                {isExamPreparationSaved ? (
+                  <Text style={styles.savedText}>
+                    端末に保存済み
+                  </Text>
+                ) : null}
 
                 <Text
                   style={styles.resultText}
@@ -423,6 +493,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 10,
+  },
+
+  savedText: {
+    color: '#28794c',
+    fontSize: 11,
+    marginTop: -6,
+    marginBottom: 9,
   },
 
   resultText: {
