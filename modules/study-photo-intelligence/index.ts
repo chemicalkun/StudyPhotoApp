@@ -16,6 +16,10 @@ export type LectureSummaryAvailability =
 type StudyPhotoIntelligenceNativeModule = {
   getAvailability(): Promise<LectureSummaryAvailability>;
   summarizeLecture(text: string): Promise<string>;
+  answerLectureQuestion(
+    text: string,
+    question: string
+  ): Promise<string>;
 };
 
 
@@ -45,4 +49,21 @@ export const summarizeLecture = async (
   }
 
   return nativeModule.summarizeLecture(text);
+};
+
+
+export const answerLectureQuestion = async (
+  text: string,
+  question: string
+): Promise<string> => {
+  if (nativeModule === null) {
+    throw new Error(
+      '端末内AI質問は新しい開発ビルドでのみ利用できます。'
+    );
+  }
+
+  return nativeModule.answerLectureQuestion(
+    text,
+    question
+  );
 };

@@ -8,6 +8,7 @@ import {
   SectionList,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -30,6 +31,7 @@ import type {
 } from '@/types/photo-ocr';
 import { loadPhotoOcrRecords } from '@/services/photo-ocr-storage';
 import {
+  answerLectureQuestion,
   getLectureSummaryAvailability,
   summarizeLecture,
 } from '@/modules/study-photo-intelligence';
@@ -111,6 +113,11 @@ export default function SubjectScreen() {
   const [summarySaveError, setSummarySaveError] =
     useState('');
   const [isLectureSummarySaved, setIsLectureSummarySaved] =
+    useState(false);
+  const [lectureQuestion, setLectureQuestion] = useState('');
+  const [lectureAnswer, setLectureAnswer] = useState('');
+  const [questionError, setQuestionError] = useState('');
+  const [isAnsweringQuestion, setIsAnsweringQuestion] =
     useState(false);
 
 
@@ -321,6 +328,10 @@ export default function SubjectScreen() {
     setSummarySaveError('');
     setIsGeneratingSummary(false);
     setSummaryAvailability(null);
+    setLectureQuestion('');
+    setLectureAnswer('');
+    setQuestionError('');
+    setIsAnsweringQuestion(false);
 
     try {
       const availability =
@@ -404,6 +415,57 @@ export default function SubjectScreen() {
       );
     } finally {
       setIsGeneratingSummary(false);
+    }
+  };
+
+
+  const askLectureQuestion = async () => {
+    if (
+      selectedLectureSection === null ||
+      summaryAvailability !== 'available' ||
+      isAnsweringQuestion
+    ) {
+      return;
+    }
+
+    const question = lectureQuestion.trim();
+
+    if (question === '') {
+      setQuestionError('質問を入力してください。');
+      return;
+    }
+
+    const combinedOcrText =
+      selectedLectureSection.ocrItems
+        .map(
+          (item) =>
+            `写真${item.photoNumber}\n${item.record.text}`
+        )
+        .join('\n\n');
+
+    try {
+      setIsAnsweringQuestion(true);
+      setQuestionError('');
+      setLectureAnswer('');
+
+      const answer = await answerLectureQuestion(
+        combinedOcrText,
+        question
+      );
+      const trimmedAnswer = answer.trim();
+
+      if (trimmedAnswer === '') {
+        throw new Error('生成された回答が空です');
+      }
+
+      setLectureAnswer(trimmedAnswer);
+    } catch (error) {
+      console.log('授業内容質問エラー:', error);
+      setQuestionError(
+        '回答を作成できませんでした。少し待ってから再試行してください。'
+      );
+    } finally {
+      setIsAnsweringQuestion(false);
     }
   };
 
@@ -688,7 +750,10 @@ export default function SubjectScreen() {
               </Text>
             ) : null}
 
-            <ScrollView style={styles.ocrScrollView}>
+            <ScrollView
+              style={styles.ocrScrollView}
+              keyboardShouldPersistTaps="handled"
+            >
               {lectureSummary !== '' ? (
                 <View style={styles.summaryResult}>
                   <Text style={styles.summaryResultTitle}>
@@ -707,6 +772,81 @@ export default function SubjectScreen() {
                   >
                     {lectureSummary}
                   </Text>
+                </View>
+              ) : null}
+
+              {summaryAvailability === 'available' ? (
+                <View style={styles.questionSection}>
+                  <Text style={styles.questionTitle}>
+                    この回について質問
+                  </Text>
+
+                  <Text style={styles.questionDescription}>
+                    認識した文字の範囲で、端末内AIが回答します。
+                  </Text>
+
+                  <TextInput
+                    style={styles.questionInput}
+                    value={lectureQuestion}
+                    onChangeText={(value) => {
+                      setLectureQuestion(value);
+                      setQuestionError('');
+                    }}
+                    placeholder="例：この回の重要な用語は？"
+                    multiline
+                    maxLength={500}
+                    editable={!isAnsweringQuestion}
+                  />
+
+                  <Pressable
+                    style={[
+                      styles.questionButton,
+                      (isAnsweringQuestion ||
+                        lectureQuestion.trim() === '') &&
+                        styles.summaryButtonDisabled,
+                    ]}
+                    disabled={
+                      isAnsweringQuestion ||
+                      lectureQuestion.trim() === ''
+                    }
+                    onPress={() => {
+                      void askLectureQuestion();
+                    }}
+                  >
+                    {isAnsweringQuestion ? (
+                      <ActivityIndicator
+                        size="small"
+                        color="white"
+                      />
+                    ) : null}
+
+                    <Text style={styles.questionButtonText}>
+                      {isAnsweringQuestion
+                        ? '回答を作成中...'
+                        : '質問する'}
+                    </Text>
+                  </Pressable>
+
+                  {questionError !== '' ? (
+                    <Text style={styles.summaryErrorText}>
+                      {questionError}
+                    </Text>
+                  ) : null}
+
+                  {lectureAnswer !== '' ? (
+                    <View style={styles.answerResult}>
+                      <Text style={styles.answerTitle}>
+                        回答
+                      </Text>
+
+                      <Text
+                        style={styles.answerText}
+                        selectable
+                      >
+                        {lectureAnswer}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
 
@@ -1005,6 +1145,80 @@ const styles = StyleSheet.create({
   },
 
   summaryResultText: {
+    color: '#222',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+
+  questionSection: {
+    backgroundColor: '#f3f6ff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 10,
+    padding: 13,
+    marginBottom: 12,
+  },
+
+  questionTitle: {
+    color: '#31518f',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+
+  questionDescription: {
+    color: '#555',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 5,
+  },
+
+  questionInput: {
+    minHeight: 72,
+    color: '#222',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#b9c5df',
+    borderRadius: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    marginTop: 10,
+    textAlignVertical: 'top',
+  },
+
+  questionButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#31518f',
+    borderRadius: 8,
+    padding: 11,
+    marginTop: 9,
+  },
+
+  questionButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  answerResult: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 11,
+    marginTop: 10,
+  },
+
+  answerTitle: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+
+  answerText: {
     color: '#222',
     fontSize: 14,
     lineHeight: 22,
