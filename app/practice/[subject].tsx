@@ -22,6 +22,7 @@ import {
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
 import {
   loadPracticeQuestionRecords,
+  savePracticeQuestionAssessment,
   savePracticeQuestionRecord,
 } from '@/services/practice-question-storage';
 import {
@@ -31,6 +32,7 @@ import {
   createPracticeQuestionRecordId,
   createPracticeQuestionSourceSignature,
   type PracticeQuestion,
+  type PracticeQuestionAssessment,
 } from '@/types/practice-question';
 import type {
   LectureSummaryRecord,
@@ -51,6 +53,9 @@ export default function PracticeQuestionScreen() {
   const [currentQuestionIndex, setCurrentQuestionIndex] =
     useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [assessments, setAssessments] = useState<
+    Record<string, PracticeQuestionAssessment>
+  >({});
   const [availability, setAvailability] =
     useState<LectureSummaryAvailability | null>(null);
   const [loading, setLoading] = useState(true);
@@ -112,6 +117,11 @@ export default function PracticeQuestionScreen() {
             canUseSavedRecord ? savedRecord.questions : []
           );
           setIsSaved(canUseSavedRecord);
+          setAssessments(
+            canUseSavedRecord
+              ? savedRecord.assessments ?? {}
+              : {}
+          );
           setCurrentQuestionIndex(0);
           setShowAnswer(false);
         } catch (error) {
@@ -183,6 +193,7 @@ export default function PracticeQuestionScreen() {
       setQuestions(validQuestions);
       setCurrentQuestionIndex(0);
       setShowAnswer(false);
+      setAssessments({});
 
       try {
         await savePracticeQuestionRecord(
@@ -204,6 +215,32 @@ export default function PracticeQuestionScreen() {
       );
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+
+  const saveAssessment = async (
+    assessment: PracticeQuestionAssessment
+  ) => {
+    const questionIndex = currentQuestionIndex;
+
+    setAssessments((currentAssessments) => ({
+      ...currentAssessments,
+      [String(questionIndex)]: assessment,
+    }));
+    setSaveError('');
+
+    try {
+      await savePracticeQuestionAssessment(
+        subject,
+        questionIndex,
+        assessment
+      );
+    } catch (error) {
+      console.log('練習問題自己評価保存エラー:', error);
+      setSaveError(
+        '自己評価を端末に保存できませんでした。'
+      );
     }
   };
 
@@ -230,6 +267,14 @@ export default function PracticeQuestionScreen() {
 
   const currentQuestion =
     questions[currentQuestionIndex] ?? null;
+  const currentAssessment =
+    assessments[String(currentQuestionIndex)];
+  const knownCount = Object.values(assessments)
+    .filter((assessment) => assessment === 'known')
+    .length;
+  const reviewCount = Object.values(assessments)
+    .filter((assessment) => assessment === 'review')
+    .length;
 
 
   return (
@@ -322,6 +367,10 @@ export default function PracticeQuestionScreen() {
                   ) : null}
                 </View>
 
+                <Text style={styles.assessmentSummary}>
+                  覚えた {knownCount}問・もう一度 {reviewCount}問
+                </Text>
+
                 <View style={styles.questionCard}>
                   <Text style={styles.questionLabel}>問題</Text>
                   <Text style={styles.questionText} selectable>
@@ -329,12 +378,50 @@ export default function PracticeQuestionScreen() {
                   </Text>
 
                   {showAnswer ? (
-                    <View style={styles.answerBox}>
-                      <Text style={styles.answerLabel}>答え</Text>
-                      <Text style={styles.answerText} selectable>
-                        {currentQuestion.answer}
+                    <>
+                      <View style={styles.answerBox}>
+                        <Text style={styles.answerLabel}>答え</Text>
+                        <Text style={styles.answerText} selectable>
+                          {currentQuestion.answer}
+                        </Text>
+                      </View>
+
+                      <Text style={styles.assessmentPrompt}>
+                        この問題を覚えましたか？
                       </Text>
-                    </View>
+
+                      <View style={styles.assessmentRow}>
+                        <Pressable
+                          style={[
+                            styles.reviewButton,
+                            currentAssessment === 'review' &&
+                              styles.reviewButtonSelected,
+                          ]}
+                          onPress={() =>
+                            void saveAssessment('review')
+                          }
+                        >
+                          <Text style={styles.reviewButtonText}>
+                            もう一度
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={[
+                            styles.knownButton,
+                            currentAssessment === 'known' &&
+                              styles.knownButtonSelected,
+                          ]}
+                          onPress={() =>
+                            void saveAssessment('known')
+                          }
+                        >
+                          <Text style={styles.knownButtonText}>
+                            覚えた
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </>
                   ) : (
                     <Pressable
                       style={styles.answerButton}
@@ -414,6 +501,7 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   progressText: { color: '#333', fontSize: 14, fontWeight: 'bold' },
   savedText: { color: '#28794c', fontSize: 11 },
+  assessmentSummary: { color: '#666', fontSize: 12, marginTop: 6 },
   questionCard: { backgroundColor: '#eef8f2', borderWidth: 1, borderColor: '#9bc9aa', borderRadius: 14, padding: 18, marginTop: 10 },
   questionLabel: { color: '#28794c', fontSize: 13, fontWeight: 'bold' },
   questionText: { color: '#1d1d1d', fontSize: 18, fontWeight: 'bold', lineHeight: 28, marginTop: 8 },
@@ -422,6 +510,14 @@ const styles = StyleSheet.create({
   answerBox: { backgroundColor: 'white', borderRadius: 10, padding: 14, marginTop: 18 },
   answerLabel: { color: '#28794c', fontSize: 13, fontWeight: 'bold' },
   answerText: { color: '#222', fontSize: 15, lineHeight: 23, marginTop: 6 },
+  assessmentPrompt: { color: '#444', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginTop: 16 },
+  assessmentRow: { flexDirection: 'row', gap: 10, marginTop: 9 },
+  reviewButton: { flex: 1, backgroundColor: '#fff3d6', borderWidth: 1, borderColor: '#dfbd6d', borderRadius: 9, padding: 11 },
+  reviewButtonSelected: { backgroundColor: '#f3cf78', borderColor: '#a77916' },
+  reviewButtonText: { color: '#725b24', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
+  knownButton: { flex: 1, backgroundColor: '#e3f4e9', borderWidth: 1, borderColor: '#94c5a5', borderRadius: 9, padding: 11 },
+  knownButtonSelected: { backgroundColor: '#a9ddb9', borderColor: '#28794c' },
+  knownButtonText: { color: '#28794c', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   navigationRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   navigationButton: { flex: 1, backgroundColor: '#333', borderRadius: 9, padding: 12 },
   navigationButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },

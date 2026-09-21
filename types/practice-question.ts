@@ -9,10 +9,19 @@ export type PracticeQuestion = {
 };
 
 
+export type PracticeQuestionAssessment =
+  | 'known'
+  | 'review';
+
+
 export type PracticeQuestionRecord = {
   id: string;
   subject: string;
   questions: PracticeQuestion[];
+  assessments?: Record<
+    string,
+    PracticeQuestionAssessment
+  >;
   sourceSummarySignature: string;
   createdAt: string;
 };
@@ -71,6 +80,21 @@ const isPracticeQuestionRecord = (
   }
 
   const record = value as Partial<PracticeQuestionRecord>;
+  const assessmentsAreValid =
+    record.assessments === undefined ||
+    (
+      typeof record.assessments === 'object' &&
+      record.assessments !== null &&
+      !Array.isArray(record.assessments) &&
+      Object.entries(record.assessments).every(
+        ([questionIndex, assessment]) =>
+          /^\d+$/.test(questionIndex) &&
+          (
+            assessment === 'known' ||
+            assessment === 'review'
+          )
+      )
+    );
 
   return (
     typeof record.id === 'string' &&
@@ -79,6 +103,7 @@ const isPracticeQuestionRecord = (
     Array.isArray(record.questions) &&
     record.questions.length > 0 &&
     record.questions.every(isPracticeQuestion) &&
+    assessmentsAreValid &&
     typeof record.sourceSummarySignature === 'string' &&
     record.sourceSummarySignature !== '' &&
     typeof record.createdAt === 'string' &&

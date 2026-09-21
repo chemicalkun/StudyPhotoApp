@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   loadPracticeQuestionRecords,
+  savePracticeQuestionAssessment,
   savePracticeQuestionRecord,
 } from '@/services/practice-question-storage';
 import {
@@ -54,5 +55,31 @@ describe('practice question storage', () => {
         },
       }))
     ).toThrow('practiceQuestionRecordsの形式が不正です');
+  });
+
+  test('問題ごとの自己評価を保存する', async () => {
+    await savePracticeQuestionRecord(
+      '高分子化学',
+      [{
+        question: '重合とは何ですか？',
+        answer: '単量体が結合する反応です。',
+      }],
+      'signature'
+    );
+
+    await savePracticeQuestionAssessment(
+      '高分子化学',
+      0,
+      'review'
+    );
+
+    const records = await loadPracticeQuestionRecords();
+    const record = records[
+      createPracticeQuestionRecordId('高分子化学')
+    ];
+
+    expect(record.assessments).toEqual({
+      '0': 'review',
+    });
   });
 });
