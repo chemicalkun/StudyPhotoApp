@@ -262,7 +262,7 @@ export default function PracticeQuestionScreen() {
         {!loading && loadError === '' ? (
           <>
             <Text style={styles.notice}>
-              {summaries.length}回分の保存済みまとめから、このiPhone内で5問作成します。
+              {summaries.length}回分の保存済みまとめから、このiPhone内で5問作成します。作成後、別のAIが根拠と一般知識に照らして解答を再確認します。
             </Text>
 
             {availability === 'available' ? (

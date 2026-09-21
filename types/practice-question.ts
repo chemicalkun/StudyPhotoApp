@@ -24,6 +24,9 @@ export type PracticeQuestionRecords = Record<
 >;
 
 
+const practiceQuestionGenerationVersion = 'v2-verified';
+
+
 export const createPracticeQuestionRecordId = (
   subject: string
 ) => JSON.stringify([subject]);
@@ -34,11 +37,12 @@ export const createPracticeQuestionSourceSignature = (
     LectureSummaryRecord,
     'id' | 'createdAt'
   >[]
-) => JSON.stringify(
+) => JSON.stringify([
+  practiceQuestionGenerationVersion,
   [...summaries]
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((summary) => [summary.id, summary.createdAt])
-);
+]);
 
 
 const isPracticeQuestion = (
