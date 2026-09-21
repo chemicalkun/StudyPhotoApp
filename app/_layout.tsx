@@ -78,6 +78,13 @@ export default function RootLayout() {
             headerBackTitle: '時間割',
           }}
         />
+        <Stack.Screen
+          name="backup"
+          options={{
+            title: 'バックアップ',
+            headerBackTitle: 'ホーム',
+          }}
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
