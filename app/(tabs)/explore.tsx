@@ -44,6 +44,8 @@ export default function ReviewScreen() {
   const [loadError, setLoadError] = useState('');
   const [reviewMode, setReviewMode] =
     useState<ReviewMode>('subject');
+  const [selectedLectureSubject, setSelectedLectureSubject] =
+    useState<string | null>(null);
   const [examPreparationRecords, setExamPreparationRecords] =
     useState<ExamPreparationRecords>({});
 
@@ -56,7 +58,9 @@ export default function ReviewScreen() {
         groups[summary.subject] = [
           ...subjectSummaries,
           summary,
-        ];
+        ].sort((a, b) =>
+          a.dateKey.localeCompare(b.dateKey)
+        );
 
         return groups;
       },
@@ -65,6 +69,24 @@ export default function ReviewScreen() {
   ).sort(([subjectA], [subjectB]) =>
     subjectA.localeCompare(subjectB, 'ja')
   );
+  const selectedSubjectSummaries =
+    selectedLectureSubject === null
+      ? []
+      : subjectGroups.find(
+          ([groupSubject]) =>
+            groupSubject === selectedLectureSubject
+        )?.[1] ?? [];
+  const selectedSummaryLectureNumber =
+    selectedSummary === null
+      ? null
+      : subjectGroups
+          .find(
+            ([groupSubject]) =>
+              groupSubject === selectedSummary.subject
+          )?.[1]
+          .findIndex(
+            (summary) => summary.id === selectedSummary.id
+          ) ?? -1;
 
 
   useFocusEffect(
@@ -72,6 +94,7 @@ export default function ReviewScreen() {
       const loadSummaries = async () => {
         try {
           setLoadError('');
+          setSelectedLectureSubject(null);
 
           const records =
             await loadLectureSummaryRecords();
@@ -184,7 +207,10 @@ export default function ReviewScreen() {
                 accessibilityState={{
                   selected: reviewMode === 'lecture',
                 }}
-                onPress={() => setReviewMode('lecture')}
+                onPress={() => {
+                  setReviewMode('lecture');
+                  setSelectedLectureSubject(null);
+                }}
               >
                 <Text
                   style={[
@@ -271,46 +297,109 @@ export default function ReviewScreen() {
               </View>
             ) : (
               <View>
-                <Text style={styles.sectionTitle}>
-                  授業回ごとのまとめ
-                </Text>
+                {selectedLectureSubject === null ? (
+                  <>
+                    <Text style={styles.sectionTitle}>
+                      授業を選択
+                    </Text>
 
-                <Text style={styles.sectionDescription}>
-                  撮影日ごとに保存したまとめを表示します。
-                </Text>
+                    <Text style={styles.sectionDescription}>
+                      授業を選んで、回ごとのまとめを表示します。
+                    </Text>
 
-                <View style={styles.summaryList}>
-                  {summaries.map((summary) => (
+                    <View style={styles.summaryList}>
+                      {subjectGroups.map(
+                        ([groupSubject, subjectSummaries]) => (
+                          <Pressable
+                            key={groupSubject}
+                            style={styles.lectureSubjectCard}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${groupSubject}、${subjectSummaries.length}回分のまとめ`}
+                            onPress={() =>
+                              setSelectedLectureSubject(
+                                groupSubject
+                              )
+                            }
+                          >
+                            <View style={styles.lectureSubjectText}>
+                              <Text style={styles.subjectName}>
+                                {groupSubject}
+                              </Text>
+
+                              <Text style={styles.lectureCount}>
+                                {subjectSummaries.length}回分のまとめ
+                              </Text>
+                            </View>
+
+                            <Text style={styles.openTextInline}>
+                              授業回を見る ›
+                            </Text>
+                          </Pressable>
+                        )
+                      )}
+                    </View>
+                  </>
+                ) : (
+                  <>
                     <Pressable
-                      key={summary.id}
-                      style={styles.summaryCard}
+                      style={styles.subjectBackButton}
                       accessibilityRole="button"
-                      accessibilityLabel={`${summary.subject}のまとめを開く`}
-                      onPress={() => setSelectedSummary(summary)}
+                      accessibilityLabel="授業選択に戻る"
+                      onPress={() =>
+                        setSelectedLectureSubject(null)
+                      }
                     >
-                      <View style={styles.cardHeader}>
-                        <Text style={styles.subjectName}>
-                          {summary.subject}
-                        </Text>
-
-                        <Text style={styles.dateText}>
-                          {getDateLabel(summary.dateKey)}
-                        </Text>
-                      </View>
-
-                      <Text
-                        style={styles.summaryPreview}
-                        numberOfLines={3}
-                      >
-                        {summary.text}
-                      </Text>
-
-                      <Text style={styles.openText}>
-                        まとめを開く ›
+                      <Text style={styles.subjectBackButtonText}>
+                        ‹ 授業を選び直す
                       </Text>
                     </Pressable>
-                  ))}
-                </View>
+
+                    <Text style={styles.sectionTitle}>
+                      {selectedLectureSubject}
+                    </Text>
+
+                    <Text style={styles.sectionDescription}>
+                      見たい授業回を選択してください。
+                    </Text>
+
+                    <View style={styles.summaryList}>
+                      {selectedSubjectSummaries.map(
+                        (summary, index) => (
+                          <Pressable
+                            key={summary.id}
+                            style={styles.summaryCard}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${selectedLectureSubject}第${index + 1}回のまとめを開く`}
+                            onPress={() =>
+                              setSelectedSummary(summary)
+                            }
+                          >
+                            <View style={styles.cardHeader}>
+                              <Text style={styles.subjectName}>
+                                第{index + 1}回
+                              </Text>
+
+                              <Text style={styles.dateText}>
+                                {getDateLabel(summary.dateKey)}
+                              </Text>
+                            </View>
+
+                            <Text
+                              style={styles.summaryPreview}
+                              numberOfLines={2}
+                            >
+                              {summary.text}
+                            </Text>
+
+                            <Text style={styles.openText}>
+                              まとめを開く ›
+                            </Text>
+                          </Pressable>
+                        )
+                      )}
+                    </View>
+                  </>
+                )}
               </View>
             )}
           </>
@@ -327,6 +416,10 @@ export default function ReviewScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
               {selectedSummary?.subject}
+              {selectedSummaryLectureNumber !== null &&
+              selectedSummaryLectureNumber >= 0
+                ? ` 第${selectedSummaryLectureNumber + 1}回`
+                : ''}
             </Text>
 
             <Text style={styles.modalDate}>
@@ -534,6 +627,45 @@ const styles = StyleSheet.create({
     borderColor: '#9bc9aa',
     borderRadius: 12,
     padding: 16,
+  },
+
+  lectureSubjectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eef8f2',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 12,
+    padding: 16,
+  },
+
+  lectureSubjectText: {
+    flex: 1,
+  },
+
+  lectureCount: {
+    color: '#5d6470',
+    fontSize: 12,
+    marginTop: 5,
+  },
+
+  openTextInline: {
+    color: '#28794c',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginLeft: 12,
+  },
+
+  subjectBackButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    marginBottom: 8,
+  },
+
+  subjectBackButtonText: {
+    color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 
   cardHeader: {
