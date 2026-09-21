@@ -27,6 +27,11 @@ import {
   parsePhotoRecords,
   PhotoRecord,
 } from '@/types/photo';
+import {
+  isStudyPhotoVisionAvailable,
+  recognizeText,
+  type RecognizedTextBlock,
+} from '@/modules/study-photo-vision';
 
 
 const swipeDistance = 60;
@@ -80,6 +85,14 @@ export default function PhotoScreen() {
   const [imageLoadFailed, setImageLoadFailed] =
     useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [recognizingText, setRecognizingText] =
+    useState(false);
+  const [recognizedTextBlocks, setRecognizedTextBlocks] =
+    useState<RecognizedTextBlock[]>([]);
+  const [textRecognitionError, setTextRecognitionError] =
+    useState('');
+  const [textRecognitionModalVisible, setTextRecognitionModalVisible] =
+    useState(false);
   const [
     classificationModalVisible,
     setClassificationModalVisible,
@@ -105,6 +118,9 @@ export default function PhotoScreen() {
         setErrorMessage('');
         setPhoto(null);
         setImageLoadFailed(false);
+        setRecognizedTextBlocks([]);
+        setTextRecognitionError('');
+        setTextRecognitionModalVisible(false);
         zoomScale.current = 1;
 
         const savedPhotos =
@@ -230,6 +246,9 @@ export default function PhotoScreen() {
 
       setPhoto(targetPhoto);
       setImageLoadFailed(false);
+      setRecognizedTextBlocks([]);
+      setTextRecognitionError('');
+      setTextRecognitionModalVisible(false);
       zoomScale.current = 1;
 
       translateX.setValue(
@@ -388,6 +407,46 @@ export default function PhotoScreen() {
         },
       ]
     );
+  };
+
+
+  const recognizePhotoText = async () => {
+    if (!photo || recognizingText) {
+      return;
+    }
+
+    if (!isStudyPhotoVisionAvailable) {
+      Alert.alert(
+        '開発ビルドが必要です',
+        '写真の文字認識はApple Visionを組み込んだ開発ビルドで利用できます。'
+      );
+      return;
+    }
+
+    setRecognizingText(true);
+    setRecognizedTextBlocks([]);
+    setTextRecognitionError('');
+    setTextRecognitionModalVisible(true);
+
+    try {
+      const recognizedBlocks = await recognizeText(photo.uri);
+
+      setRecognizedTextBlocks(recognizedBlocks);
+
+      if (recognizedBlocks.length === 0) {
+        setTextRecognitionError(
+          '写真から文字を見つけられませんでした。'
+        );
+      }
+    } catch (error) {
+      console.log('授業写真文字認識エラー:', error);
+
+      setTextRecognitionError(
+        '写真の文字を認識できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setRecognizingText(false);
+    }
   };
 
 
@@ -614,6 +673,24 @@ export default function PhotoScreen() {
             ) : null}
 
             <Pressable
+              style={[
+                styles.textRecognitionButton,
+                (recognizingText || imageLoadFailed) &&
+                  styles.disabledButton,
+              ]}
+              disabled={recognizingText || imageLoadFailed}
+              onPress={recognizePhotoText}
+            >
+              {recognizingText ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.textRecognitionButtonText}>
+                  写真の文字を認識
+                </Text>
+              )}
+            </Pressable>
+
+            <Pressable
               style={styles.classificationButton}
               onPress={openClassificationModal}
             >
@@ -695,6 +772,88 @@ export default function PhotoScreen() {
             >
               <Text style={styles.cancelButtonText}>
                 キャンセル
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={textRecognitionModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!recognizingText) {
+            setTextRecognitionModalVisible(false);
+          }
+        }}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.textRecognitionModalContent}>
+            <Text style={styles.modalTitle}>
+              写真から認識した文字
+            </Text>
+
+            <Text style={styles.recognitionPrivacyText}>
+              端末内で処理しています。認識結果はまだ保存されません。
+            </Text>
+
+            {recognizingText ? (
+              <View style={styles.recognitionLoading}>
+                <ActivityIndicator
+                  size="large"
+                  color="#3478f6"
+                />
+
+                <Text style={styles.recognitionLoadingText}>
+                  文字を認識しています...
+                </Text>
+              </View>
+            ) : textRecognitionError !== '' ? (
+              <Text style={styles.recognitionErrorText}>
+                {textRecognitionError}
+              </Text>
+            ) : (
+              <ScrollView
+                style={styles.recognitionResults}
+                contentContainerStyle={
+                  styles.recognitionResultsContent
+                }
+              >
+                <Text style={styles.recognitionCountText}>
+                  {recognizedTextBlocks.length}件の文字領域を認識しました
+                </Text>
+
+                {recognizedTextBlocks.map((block, index) => (
+                  <View
+                    style={styles.recognitionResultRow}
+                    key={`${block.text}-${index}`}
+                  >
+                    <Text
+                      style={styles.recognitionResultText}
+                      selectable
+                    >
+                      {block.text}
+                    </Text>
+
+                    <Text style={styles.recognitionConfidenceText}>
+                      OCR参考値{' '}
+                      {Math.round(block.confidence * 100)}%
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            <Pressable
+              style={styles.cancelButton}
+              disabled={recognizingText}
+              onPress={() =>
+                setTextRecognitionModalVisible(false)
+              }
+            >
+              <Text style={styles.cancelButtonText}>
+                閉じる
               </Text>
             </Pressable>
           </View>
@@ -824,6 +983,25 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
 
+  textRecognitionButton: {
+    alignSelf: 'flex-start',
+    minWidth: 150,
+    minHeight: 40,
+    backgroundColor: '#28794c',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    marginTop: 14,
+  },
+
+  textRecognitionButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
   classificationButtonText: {
     color: 'white',
     fontSize: 14,
@@ -861,6 +1039,71 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 22,
+  },
+
+  textRecognitionModalContent: {
+    maxHeight: '82%',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 22,
+  },
+
+  recognitionPrivacyText: {
+    color: '#555',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+
+  recognitionLoading: {
+    alignItems: 'center',
+    paddingVertical: 36,
+  },
+
+  recognitionLoadingText: {
+    color: '#555',
+    fontSize: 14,
+    marginTop: 12,
+  },
+
+  recognitionErrorText: {
+    color: '#a13333',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+
+  recognitionResults: {
+    marginTop: 14,
+  },
+
+  recognitionResultsContent: {
+    paddingBottom: 8,
+  },
+
+  recognitionCountText: {
+    color: '#555',
+    fontSize: 13,
+    marginBottom: 6,
+  },
+
+  recognitionResultRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+    paddingVertical: 10,
+  },
+
+  recognitionResultText: {
+    color: '#222',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+
+  recognitionConfidenceText: {
+    color: '#777',
+    fontSize: 11,
+    marginTop: 3,
   },
 
   modalTitle: {
