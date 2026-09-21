@@ -302,31 +302,52 @@ export default function ExamPreparationScreen() {
                 </Text>
               </View>
             ) : availability === 'available' ? (
-              <Pressable
-                style={[
-                  styles.generateButton,
-                  (isGenerating || summaries.length === 0) &&
-                    styles.disabledButton,
-                ]}
-                disabled={
-                  isGenerating || summaries.length === 0
-                }
-                onPress={() => {
-                  void generateExamPreparation();
-                }}
-              >
-                {isGenerating ? (
-                  <ActivityIndicator color="white" />
-                ) : null}
+              <>
+                <Pressable
+                  style={[
+                    styles.generateButton,
+                    (isGenerating || summaries.length === 0) &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={
+                    isGenerating || summaries.length === 0
+                  }
+                  onPress={() => {
+                    void generateExamPreparation();
+                  }}
+                >
+                  {isGenerating ? (
+                    <ActivityIndicator color="white" />
+                  ) : null}
 
-                <Text style={styles.generateButtonText}>
-                  {isGenerating
-                    ? '試験対策を作成中...'
-                    : examPreparation === ''
-                      ? '試験対策を作成'
-                      : '試験対策を作り直す'}
-                </Text>
-              </Pressable>
+                  <Text style={styles.generateButtonText}>
+                    {isGenerating
+                      ? '試験対策を作成中...'
+                      : examPreparation === ''
+                        ? '試験対策を作成'
+                        : '試験対策を作り直す'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.practiceButton,
+                    summaries.length === 0 &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={summaries.length === 0}
+                  onPress={() => {
+                    router.push({
+                      pathname: '/practice/[subject]',
+                      params: { subject },
+                    });
+                  }}
+                >
+                  <Text style={styles.practiceButtonText}>
+                    練習問題に挑戦
+                  </Text>
+                </Pressable>
+              </>
             ) : (
               <Text style={styles.unavailableText}>
                 {getUnavailableMessage()}
@@ -366,24 +387,21 @@ export default function ExamPreparationScreen() {
               </View>
             ) : null}
 
-            <Pressable
-              style={[
-                styles.practiceButton,
-                summaries.length === 0 &&
-                  styles.disabledButton,
-              ]}
-              disabled={summaries.length === 0}
-              onPress={() => {
-                router.push({
-                  pathname: '/practice/[subject]',
-                  params: { subject },
-                });
-              }}
-            >
-              <Text style={styles.practiceButtonText}>
-                練習問題に挑戦
-              </Text>
-            </Pressable>
+            {examPreparation !== '' ? (
+              <Pressable
+                style={styles.practiceButton}
+                onPress={() => {
+                  router.push({
+                    pathname: '/practice/[subject]',
+                    params: { subject },
+                  });
+                }}
+              >
+                <Text style={styles.practiceButtonText}>
+                  練習問題に挑戦
+                </Text>
+              </Pressable>
+            ) : null}
           </>
         ) : null}
       </ScrollView>
