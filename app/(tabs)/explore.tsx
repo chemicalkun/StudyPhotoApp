@@ -16,6 +16,9 @@ import type {
 } from '@/types/lecture-summary';
 
 
+type ReviewMode = 'lecture' | 'subject';
+
+
 const getDateLabel = (dateKey: string) => {
   const [, month, day] = dateKey.split('-');
 
@@ -33,6 +36,8 @@ export default function ReviewScreen() {
   const [selectedSummary, setSelectedSummary] =
     useState<LectureSummaryRecord | null>(null);
   const [loadError, setLoadError] = useState('');
+  const [reviewMode, setReviewMode] =
+    useState<ReviewMode>('subject');
 
   const subjectGroups = Object.entries(
     summaries.reduce<Record<string, LectureSummaryRecord[]>>(
@@ -96,7 +101,7 @@ export default function ReviewScreen() {
         </Text>
 
         <Text style={styles.subtitle}>
-          保存した授業まとめ
+          見たい単位を選んで復習
         </Text>
 
         {loadError !== '' ? (
@@ -119,85 +124,144 @@ export default function ReviewScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.examSection}>
-              <Text style={styles.sectionTitle}>
-                試験対策
-              </Text>
+            <View
+              style={styles.modeSelector}
+              accessibilityRole="tablist"
+            >
+              <Pressable
+                style={[
+                  styles.modeButton,
+                  reviewMode === 'subject' &&
+                    styles.modeButtonActive,
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{
+                  selected: reviewMode === 'subject',
+                }}
+                onPress={() => setReviewMode('subject')}
+              >
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    reviewMode === 'subject' &&
+                      styles.modeButtonTextActive,
+                  ]}
+                >
+                  授業全体
+                </Text>
+              </Pressable>
 
-              <Text style={styles.sectionDescription}>
-                保存済みの授業回まとめから、科目ごとの復習資料を作成します。
-              </Text>
+              <Pressable
+                style={[
+                  styles.modeButton,
+                  reviewMode === 'lecture' &&
+                    styles.modeButtonActive,
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{
+                  selected: reviewMode === 'lecture',
+                }}
+                onPress={() => setReviewMode('lecture')}
+              >
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    reviewMode === 'lecture' &&
+                      styles.modeButtonTextActive,
+                  ]}
+                >
+                  授業回ごと
+                </Text>
+              </Pressable>
+            </View>
 
-              <View style={styles.examList}>
-                {subjectGroups.map(
-                  ([groupSubject, subjectSummaries]) => (
+            {reviewMode === 'subject' ? (
+              <View>
+                <Text style={styles.sectionTitle}>
+                  授業全体のまとめ
+                </Text>
+
+                <Text style={styles.sectionDescription}>
+                  保存済みの授業回まとめから、科目全体の試験対策を表示します。
+                </Text>
+
+                <View style={styles.examList}>
+                  {subjectGroups.map(
+                    ([groupSubject, subjectSummaries]) => (
+                      <Pressable
+                        key={groupSubject}
+                        style={styles.examCard}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${groupSubject}の授業全体まとめを開く`}
+                        onPress={() => {
+                          router.push({
+                            pathname: '/exam-prep/[subject]',
+                            params: { subject: groupSubject },
+                          });
+                        }}
+                      >
+                        <View style={styles.examCardText}>
+                          <Text style={styles.examSubject}>
+                            {groupSubject}
+                          </Text>
+
+                          <Text style={styles.examCount}>
+                            {subjectSummaries.length}回分のまとめ
+                          </Text>
+                        </View>
+
+                        <Text style={styles.examOpenText}>
+                          全体を見る ›
+                        </Text>
+                      </Pressable>
+                    )
+                  )}
+                </View>
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.sectionTitle}>
+                  授業回ごとのまとめ
+                </Text>
+
+                <Text style={styles.sectionDescription}>
+                  撮影日ごとに保存したまとめを表示します。
+                </Text>
+
+                <View style={styles.summaryList}>
+                  {summaries.map((summary) => (
                     <Pressable
-                      key={groupSubject}
-                      style={styles.examCard}
+                      key={summary.id}
+                      style={styles.summaryCard}
                       accessibilityRole="button"
-                      accessibilityLabel={`${groupSubject}の試験対策を開く`}
-                      onPress={() => {
-                        router.push({
-                          pathname: '/exam-prep/[subject]',
-                          params: { subject: groupSubject },
-                        });
-                      }}
+                      accessibilityLabel={`${summary.subject}のまとめを開く`}
+                      onPress={() => setSelectedSummary(summary)}
                     >
-                      <View style={styles.examCardText}>
-                        <Text style={styles.examSubject}>
-                          {groupSubject}
+                      <View style={styles.cardHeader}>
+                        <Text style={styles.subjectName}>
+                          {summary.subject}
                         </Text>
 
-                        <Text style={styles.examCount}>
-                          {subjectSummaries.length}回分のまとめ
+                        <Text style={styles.dateText}>
+                          {getDateLabel(summary.dateKey)}
                         </Text>
                       </View>
 
-                      <Text style={styles.examOpenText}>
-                        作成する ›
+                      <Text
+                        style={styles.summaryPreview}
+                        numberOfLines={3}
+                      >
+                        {summary.text}
+                      </Text>
+
+                      <Text style={styles.openText}>
+                        まとめを開く ›
                       </Text>
                     </Pressable>
-                  )
-                )}
+                  ))}
+                </View>
               </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>
-              授業回のまとめ
-            </Text>
-
-            <View style={styles.summaryList}>
-              {summaries.map((summary) => (
-                <Pressable
-                  key={summary.id}
-                  style={styles.summaryCard}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${summary.subject}のまとめを開く`}
-                  onPress={() => setSelectedSummary(summary)}
-                >
-                  <View style={styles.cardHeader}>
-                    <Text style={styles.subjectName}>
-                      {summary.subject}
-                    </Text>
-
-                    <Text style={styles.dateText}>
-                      {getDateLabel(summary.dateKey)}
-                    </Text>
-                  </View>
-
-                  <Text
-                    style={styles.summaryPreview}
-                    numberOfLines={3}
-                  >
-                    {summary.text}
-                  </Text>
-
-                  <Text style={styles.openText}>
-                    まとめを開く ›
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+            )}
           </>
         )}
       </ScrollView>
@@ -271,7 +335,36 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: 16,
     marginTop: 8,
-    marginBottom: 28,
+    marginBottom: 18,
+  },
+
+  modeSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#ededed',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 24,
+  },
+
+  modeButton: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 8,
+    paddingVertical: 10,
+  },
+
+  modeButtonActive: {
+    backgroundColor: 'white',
+  },
+
+  modeButtonText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  modeButtonTextActive: {
+    color: '#31518f',
   },
 
   errorBox: {
@@ -310,10 +403,6 @@ const styles = StyleSheet.create({
   summaryList: {
     gap: 12,
     marginTop: 12,
-  },
-
-  examSection: {
-    marginBottom: 28,
   },
 
   sectionTitle: {
