@@ -50,9 +50,13 @@ export default function PracticeQuestionScreen() {
     useState<LectureSummaryRecord[]>([]);
   const [questions, setQuestions] =
     useState<PracticeQuestion[]>([]);
-  const [currentQuestionIndex, setCurrentQuestionIndex] =
+  const [questionOrder, setQuestionOrder] =
+    useState<number[]>([]);
+  const [currentQuestionPosition, setCurrentQuestionPosition] =
     useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [isReviewRound, setIsReviewRound] = useState(false);
   const [assessments, setAssessments] = useState<
     Record<string, PracticeQuestionAssessment>
   >({});
@@ -113,8 +117,13 @@ export default function PracticeQuestionScreen() {
 
           setSummaries(subjectSummaries);
           setAvailability(modelAvailability);
-          setQuestions(
-            canUseSavedRecord ? savedRecord.questions : []
+          const loadedQuestions = canUseSavedRecord
+            ? savedRecord.questions
+            : [];
+
+          setQuestions(loadedQuestions);
+          setQuestionOrder(
+            loadedQuestions.map((_, index) => index)
           );
           setIsSaved(canUseSavedRecord);
           setAssessments(
@@ -122,8 +131,10 @@ export default function PracticeQuestionScreen() {
               ? savedRecord.assessments ?? {}
               : {}
           );
-          setCurrentQuestionIndex(0);
+          setCurrentQuestionPosition(0);
           setShowAnswer(false);
+          setIsFinished(false);
+          setIsReviewRound(false);
         } catch (error) {
           console.log('練習問題読み込みエラー:', error);
 
@@ -191,8 +202,13 @@ export default function PracticeQuestionScreen() {
       }
 
       setQuestions(validQuestions);
-      setCurrentQuestionIndex(0);
+      setQuestionOrder(
+        validQuestions.map((_, index) => index)
+      );
+      setCurrentQuestionPosition(0);
       setShowAnswer(false);
+      setIsFinished(false);
+      setIsReviewRound(false);
       setAssessments({});
 
       try {
@@ -222,7 +238,12 @@ export default function PracticeQuestionScreen() {
   const saveAssessment = async (
     assessment: PracticeQuestionAssessment
   ) => {
-    const questionIndex = currentQuestionIndex;
+    const questionIndex =
+      questionOrder[currentQuestionPosition];
+
+    if (questionIndex === undefined) {
+      return;
+    }
 
     setAssessments((currentAssessments) => ({
       ...currentAssessments,
@@ -265,16 +286,31 @@ export default function PracticeQuestionScreen() {
   };
 
 
-  const currentQuestion =
-    questions[currentQuestionIndex] ?? null;
+  const currentQuestionIndex =
+    questionOrder[currentQuestionPosition];
+  const currentQuestion = currentQuestionIndex === undefined
+    ? null
+    : questions[currentQuestionIndex] ?? null;
   const currentAssessment =
-    assessments[String(currentQuestionIndex)];
+    currentQuestionIndex === undefined
+      ? undefined
+      : assessments[String(currentQuestionIndex)];
   const knownCount = Object.values(assessments)
     .filter((assessment) => assessment === 'known')
     .length;
   const reviewCount = Object.values(assessments)
     .filter((assessment) => assessment === 'review')
     .length;
+  const unansweredCount = Math.max(
+    0,
+    questions.length - knownCount - reviewCount
+  );
+  const reviewQuestionIndexes = questions.flatMap(
+    (_, questionIndex) =>
+      assessments[String(questionIndex)] === 'review'
+        ? [questionIndex]
+        : []
+  );
 
 
   return (
@@ -355,12 +391,63 @@ export default function PracticeQuestionScreen() {
               <Text style={styles.errorText}>{saveError}</Text>
             ) : null}
 
-            {currentQuestion !== null ? (
+            {isFinished && questions.length > 0 ? (
+              <View style={styles.completionCard}>
+                <Text style={styles.completionTitle}>
+                  練習終了
+                </Text>
+
+                <Text style={styles.completionText}>
+                  覚えた {knownCount}問
+                </Text>
+                <Text style={styles.completionText}>
+                  もう一度 {reviewCount}問
+                </Text>
+                <Text style={styles.completionText}>
+                  未評価 {unansweredCount}問
+                </Text>
+
+                {reviewQuestionIndexes.length > 0 ? (
+                  <Pressable
+                    style={styles.retryReviewButton}
+                    onPress={() => {
+                      setQuestionOrder(reviewQuestionIndexes);
+                      setCurrentQuestionPosition(0);
+                      setShowAnswer(false);
+                      setIsFinished(false);
+                      setIsReviewRound(true);
+                    }}
+                  >
+                    <Text style={styles.retryReviewButtonText}>
+                      「もう一度」の問題を復習
+                    </Text>
+                  </Pressable>
+                ) : null}
+
+                <Pressable
+                  style={styles.retryAllButton}
+                  onPress={() => {
+                    setQuestionOrder(
+                      questions.map((_, index) => index)
+                    );
+                    setCurrentQuestionPosition(0);
+                    setShowAnswer(false);
+                    setIsFinished(false);
+                    setIsReviewRound(false);
+                  }}
+                >
+                  <Text style={styles.retryAllButtonText}>
+                    すべての問題を見直す
+                  </Text>
+                </Pressable>
+              </View>
+            ) : currentQuestion !== null ? (
               <View style={styles.questionSection}>
                 <View style={styles.progressRow}>
                   <Text style={styles.progressText}>
-                    問題 {currentQuestionIndex + 1} /{' '}
-                    {questions.length}
+                    {isReviewRound ? '復習 ' : '問題 '}
+                    {currentQuestionPosition + 1} /{' '}
+                    {questionOrder.length}
                   </Text>
                   {isSaved ? (
                     <Text style={styles.savedText}>端末に保存済み</Text>
@@ -438,12 +525,14 @@ export default function PracticeQuestionScreen() {
                   <Pressable
                     style={[
                       styles.navigationButton,
-                      currentQuestionIndex === 0 &&
+                      currentQuestionPosition === 0 &&
                         styles.disabledButton,
                     ]}
-                    disabled={currentQuestionIndex === 0}
+                    disabled={currentQuestionPosition === 0}
                     onPress={() => {
-                      setCurrentQuestionIndex((index) => index - 1);
+                      setCurrentQuestionPosition(
+                        (position) => position - 1
+                      );
                       setShowAnswer(false);
                     }}
                   >
@@ -453,23 +542,28 @@ export default function PracticeQuestionScreen() {
                   </Pressable>
 
                   <Pressable
-                    style={[
-                      styles.navigationButton,
-                      currentQuestionIndex ===
-                        questions.length - 1 &&
-                        styles.disabledButton,
-                    ]}
-                    disabled={
-                      currentQuestionIndex ===
-                      questions.length - 1
-                    }
+                    style={styles.navigationButton}
                     onPress={() => {
-                      setCurrentQuestionIndex((index) => index + 1);
+                      if (
+                        currentQuestionPosition ===
+                        questionOrder.length - 1
+                      ) {
+                        setIsFinished(true);
+                        setShowAnswer(false);
+                        return;
+                      }
+
+                      setCurrentQuestionPosition(
+                        (position) => position + 1
+                      );
                       setShowAnswer(false);
                     }}
                   >
                     <Text style={styles.navigationButtonText}>
-                      次の問題
+                      {currentQuestionPosition ===
+                      questionOrder.length - 1
+                        ? '終了する'
+                        : '次の問題'}
                     </Text>
                   </Pressable>
                 </View>
@@ -497,6 +591,13 @@ const styles = StyleSheet.create({
   disabledButton: { opacity: 0.45 },
   unavailableText: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 13, lineHeight: 20, padding: 12, marginTop: 14 },
   errorText: { color: '#9b2c2c', fontSize: 13, lineHeight: 20, marginTop: 12 },
+  completionCard: { backgroundColor: '#f3f6ff', borderWidth: 1, borderColor: '#aebee6', borderRadius: 14, padding: 20, marginTop: 22 },
+  completionTitle: { color: '#31518f', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 14 },
+  completionText: { color: '#333', fontSize: 15, lineHeight: 25, textAlign: 'center' },
+  retryReviewButton: { backgroundColor: '#b57c13', borderRadius: 9, padding: 13, marginTop: 18 },
+  retryReviewButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
+  retryAllButton: { backgroundColor: '#31518f', borderRadius: 9, padding: 13, marginTop: 10 },
+  retryAllButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   questionSection: { marginTop: 22 },
   progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   progressText: { color: '#333', fontSize: 14, fontWeight: 'bold' },
