@@ -1,112 +1,338 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { useFocusEffect } from 'expo-router';
 
-export default function TabTwoScreen() {
+import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
+import type {
+  LectureSummaryRecord,
+} from '@/types/lecture-summary';
+
+
+const getDateLabel = (dateKey: string) => {
+  const [, month, day] = dateKey.split('-');
+
+  if (month === undefined || day === undefined) {
+    return dateKey;
+  }
+
+  return `${Number(month)}月${Number(day)}日`;
+};
+
+
+export default function ReviewScreen() {
+  const [summaries, setSummaries] =
+    useState<LectureSummaryRecord[]>([]);
+  const [selectedSummary, setSelectedSummary] =
+    useState<LectureSummaryRecord | null>(null);
+  const [loadError, setLoadError] = useState('');
+
+
+  useFocusEffect(
+    useCallback(() => {
+      const loadSummaries = async () => {
+        try {
+          setLoadError('');
+
+          const records =
+            await loadLectureSummaryRecords();
+          const sortedSummaries = Object.values(records)
+            .sort((a, b) => {
+              return (
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime()
+              );
+            });
+
+          setSummaries(sortedSummaries);
+        } catch (error) {
+          console.log('復習まとめ読み込みエラー:', error);
+          setSummaries([]);
+          setLoadError(
+            '保存済みの授業まとめを読み込めませんでした。'
+          );
+        }
+      };
+
+      void loadSummaries();
+    }, [])
+  );
+
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+      >
+        <Text style={styles.title}>
+          復習
+        </Text>
+
+        <Text style={styles.subtitle}>
+          保存した授業まとめ
+        </Text>
+
+        {loadError !== '' ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>
+              {loadError}
+            </Text>
+          </View>
+        ) : null}
+
+        {summaries.length === 0 && loadError === '' ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyTitle}>
+              まだ授業まとめがありません
+            </Text>
+
+            <Text style={styles.emptyText}>
+              授業写真の文字を認識し、「この回のまとめを作成」を押すとここに表示されます。
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.summaryList}>
+            {summaries.map((summary) => (
+              <Pressable
+                key={summary.id}
+                style={styles.summaryCard}
+                accessibilityRole="button"
+                accessibilityLabel={`${summary.subject}のまとめを開く`}
+                onPress={() => setSelectedSummary(summary)}
+              >
+                <View style={styles.cardHeader}>
+                  <Text style={styles.subjectName}>
+                    {summary.subject}
+                  </Text>
+
+                  <Text style={styles.dateText}>
+                    {getDateLabel(summary.dateKey)}
+                  </Text>
+                </View>
+
+                <Text
+                  style={styles.summaryPreview}
+                  numberOfLines={3}
+                >
+                  {summary.text}
+                </Text>
+
+                <Text style={styles.openText}>
+                  まとめを開く ›
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      <Modal
+        visible={selectedSummary !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedSummary(null)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {selectedSummary?.subject}
+            </Text>
+
+            <Text style={styles.modalDate}>
+              {selectedSummary === null
+                ? ''
+                : getDateLabel(selectedSummary.dateKey)}
+            </Text>
+
+            <ScrollView style={styles.modalScrollView}>
+              <Text
+                style={styles.modalSummaryText}
+                selectable
+              >
+                {selectedSummary?.text}
+              </Text>
+            </ScrollView>
+
+            <Pressable
+              style={styles.closeButton}
+              onPress={() => setSelectedSummary(null)}
+            >
+              <Text style={styles.closeButtonText}>
+                閉じる
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
+
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
+    backgroundColor: 'white',
   },
-  titleContainer: {
+
+  scrollView: {
+    flex: 1,
+  },
+
+  contentContainer: {
+    padding: 24,
+    paddingBottom: 48,
+  },
+
+  title: {
+    color: '#111',
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginTop: 40,
+  },
+
+  subtitle: {
+    color: '#555',
+    fontSize: 16,
+    marginTop: 8,
+    marginBottom: 28,
+  },
+
+  errorBox: {
+    backgroundColor: '#ffe8e8',
+    borderWidth: 1,
+    borderColor: '#e39a9a',
+    borderRadius: 10,
+    padding: 14,
+  },
+
+  errorText: {
+    color: '#8a2020',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  emptyBox: {
+    backgroundColor: '#f4f4f4',
+    borderRadius: 12,
+    padding: 18,
+  },
+
+  emptyTitle: {
+    color: '#222',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  emptyText: {
+    color: '#666',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+
+  summaryList: {
+    gap: 12,
+  },
+
+  summaryCard: {
+    backgroundColor: '#eef8f2',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 12,
+    padding: 16,
+  },
+
+  cardHeader: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+
+  subjectName: {
+    flex: 1,
+    color: '#1f633e',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+
+  dateText: {
+    color: '#555',
+    fontSize: 13,
+  },
+
+  summaryPreview: {
+    color: '#333',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 10,
+  },
+
+  openText: {
+    color: '#28794c',
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'right',
+    marginTop: 10,
+  },
+
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    padding: 22,
+  },
+
+  modalContent: {
+    maxHeight: '82%',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+  },
+
+  modalTitle: {
+    color: '#111',
+    fontSize: 21,
+    fontWeight: 'bold',
+  },
+
+  modalDate: {
+    color: '#555',
+    fontSize: 13,
+    marginTop: 5,
+  },
+
+  modalScrollView: {
+    flexShrink: 1,
+    marginTop: 16,
+  },
+
+  modalSummaryText: {
+    color: '#222',
+    fontSize: 15,
+    lineHeight: 23,
+  },
+
+  closeButton: {
+    backgroundColor: '#333',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 18,
+  },
+
+  closeButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
