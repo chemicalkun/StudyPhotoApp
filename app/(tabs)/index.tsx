@@ -124,7 +124,7 @@ export default function HomeScreen() {
         onPress={() => router.push('/camera')}
       >
         <Text style={styles.buttonText}>
-          📷 写真を撮る
+          写真を撮る
         </Text>
       </Pressable>
 
@@ -134,7 +134,7 @@ export default function HomeScreen() {
         onPress={() => router.push('/library')}
       >
         <Text style={styles.buttonText}>
-          🖼 写真ライブラリから選ぶ
+          ライブラリから選択
         </Text>
       </Pressable>
 
@@ -144,7 +144,7 @@ export default function HomeScreen() {
         onPress={() => router.push('/timetable')}
       >
         <Text style={styles.buttonText}>
-          🗓 時間割
+          時間割
         </Text>
       </Pressable>
 
