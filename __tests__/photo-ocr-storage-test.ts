@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   deletePhotoOcrRecord,
   loadPhotoOcrRecord,
+  loadPhotoOcrRecords,
   savePhotoOcrRecord,
 } from '@/services/photo-ocr-storage';
 import { parsePhotoOcrRecords } from '@/types/photo-ocr';
@@ -47,6 +48,18 @@ describe('photo OCR storage', () => {
 
     expect(await loadPhotoOcrRecord('photo-1')).toBeNull();
     expect(await loadPhotoOcrRecord('photo-2')).not.toBeNull();
+  });
+
+  test('保存済みの全写真のOCR結果を読み込む', async () => {
+    await savePhotoOcrRecord('photo-1', blocks);
+    await savePhotoOcrRecord('photo-2', blocks);
+
+    const records = await loadPhotoOcrRecords();
+
+    expect(Object.keys(records)).toEqual([
+      'photo-1',
+      'photo-2',
+    ]);
   });
 });
 

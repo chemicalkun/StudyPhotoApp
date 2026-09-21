@@ -11,7 +11,7 @@ import {
 const photoOcrStorageKey = 'photoOcrRecords';
 
 
-const loadPhotoOcrRecords = async () => {
+export const loadPhotoOcrRecords = async () => {
   const savedRecords =
     await AsyncStorage.getItem(photoOcrStorageKey);
 
