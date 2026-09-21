@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -53,6 +54,7 @@ export default function ReviewScreen() {
     useState<ReviewMode>('subject');
   const [selectedLectureSubject, setSelectedLectureSubject] =
     useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [examPreparationRecords, setExamPreparationRecords] =
     useState<ExamPreparationRecords>({});
 
@@ -76,13 +78,46 @@ export default function ReviewScreen() {
   ).sort(([subjectA], [subjectB]) =>
     subjectA.localeCompare(subjectB, 'ja')
   );
-  const selectedSubjectSummaries =
+  const normalizedSearchQuery = searchQuery
+    .trim()
+    .toLocaleLowerCase('ja-JP');
+  const summaryMatchesSearch = (
+    summary: LectureSummaryRecord
+  ) => {
+    if (normalizedSearchQuery === '') {
+      return true;
+    }
+
+    return (
+      summary.subject
+        .toLocaleLowerCase('ja-JP')
+        .includes(normalizedSearchQuery) ||
+      summary.text
+        .toLocaleLowerCase('ja-JP')
+        .includes(normalizedSearchQuery) ||
+      getDateLabel(summary.dateKey)
+        .toLocaleLowerCase('ja-JP')
+        .includes(normalizedSearchQuery)
+    );
+  };
+  const filteredSubjectGroups = subjectGroups.filter(
+    ([groupSubject, subjectSummaries]) =>
+      groupSubject
+        .toLocaleLowerCase('ja-JP')
+        .includes(normalizedSearchQuery) ||
+      subjectSummaries.some(summaryMatchesSearch)
+  );
+  const selectedSubjectAllSummaries =
     selectedLectureSubject === null
       ? []
       : subjectGroups.find(
           ([groupSubject]) =>
             groupSubject === selectedLectureSubject
         )?.[1] ?? [];
+  const selectedSubjectSummaries =
+    selectedSubjectAllSummaries.filter(
+      summaryMatchesSearch
+    );
   const selectedSummaryLectureNumber =
     selectedSummary === null
       ? null
@@ -228,6 +263,20 @@ export default function ReviewScreen() {
           </View>
         ) : (
           <>
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="授業名・まとめを検索"
+                placeholderTextColor="#888"
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+                autoCorrect={false}
+                accessibilityLabel="授業名とまとめを検索"
+              />
+            </View>
+
             <View
               style={styles.modeSelector}
               accessibilityRole="tablist"
@@ -293,7 +342,7 @@ export default function ReviewScreen() {
                 </Text>
 
                 <View style={styles.examList}>
-                  {subjectGroups.map(
+                  {filteredSubjectGroups.map(
                     ([groupSubject, subjectSummaries]) => {
                       const savedExamPreparation =
                         examPreparationRecords[
@@ -352,6 +401,12 @@ export default function ReviewScreen() {
                     }
                   )}
                 </View>
+
+                {filteredSubjectGroups.length === 0 ? (
+                  <Text style={styles.noSearchResults}>
+                    検索結果がありません
+                  </Text>
+                ) : null}
               </View>
             ) : (
               <View>
@@ -366,7 +421,7 @@ export default function ReviewScreen() {
                     </Text>
 
                     <View style={styles.summaryList}>
-                      {subjectGroups.map(
+                      {filteredSubjectGroups.map(
                         ([groupSubject, subjectSummaries]) => (
                           <Pressable
                             key={groupSubject}
@@ -396,6 +451,12 @@ export default function ReviewScreen() {
                         )
                       )}
                     </View>
+
+                    {filteredSubjectGroups.length === 0 ? (
+                      <Text style={styles.noSearchResults}>
+                        検索結果がありません
+                      </Text>
+                    ) : null}
                   </>
                 ) : (
                   <Animated.View
@@ -429,40 +490,54 @@ export default function ReviewScreen() {
 
                     <View style={styles.summaryList}>
                       {selectedSubjectSummaries.map(
-                        (summary, index) => (
-                          <Pressable
-                            key={summary.id}
-                            style={styles.summaryCard}
-                            accessibilityRole="button"
-                            accessibilityLabel={`${selectedLectureSubject}第${index + 1}回のまとめを開く`}
-                            onPress={() =>
-                              setSelectedSummary(summary)
-                            }
-                          >
-                            <View style={styles.cardHeader}>
-                              <Text style={styles.subjectName}>
-                                第{index + 1}回
-                              </Text>
+                        (summary) => {
+                          const lectureNumber =
+                            selectedSubjectAllSummaries.findIndex(
+                              (candidate) =>
+                                candidate.id === summary.id
+                            ) + 1;
 
-                              <Text style={styles.dateText}>
-                                {getDateLabel(summary.dateKey)}
-                              </Text>
-                            </View>
-
-                            <Text
-                              style={styles.summaryPreview}
-                              numberOfLines={2}
+                          return (
+                            <Pressable
+                              key={summary.id}
+                              style={styles.summaryCard}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${selectedLectureSubject}第${lectureNumber}回のまとめを開く`}
+                              onPress={() =>
+                                setSelectedSummary(summary)
+                              }
                             >
-                              {summary.text}
-                            </Text>
+                              <View style={styles.cardHeader}>
+                                <Text style={styles.subjectName}>
+                                  第{lectureNumber}回
+                                </Text>
 
-                            <Text style={styles.openText}>
-                              まとめを開く ›
-                            </Text>
-                          </Pressable>
-                        )
+                                <Text style={styles.dateText}>
+                                  {getDateLabel(summary.dateKey)}
+                                </Text>
+                              </View>
+
+                              <Text
+                                style={styles.summaryPreview}
+                                numberOfLines={2}
+                              >
+                                {summary.text}
+                              </Text>
+
+                              <Text style={styles.openText}>
+                                まとめを開く ›
+                              </Text>
+                            </Pressable>
+                          );
+                        }
                       )}
                     </View>
+
+                    {selectedSubjectSummaries.length === 0 ? (
+                      <Text style={styles.noSearchResults}>
+                        この授業内に検索結果がありません
+                      </Text>
+                    ) : null}
                   </Animated.View>
                 )}
               </View>
@@ -547,6 +622,21 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
 
+  searchContainer: {
+    marginBottom: 14,
+  },
+
+  searchInput: {
+    color: '#222',
+    backgroundColor: '#f4f4f4',
+    borderWidth: 1,
+    borderColor: '#d2d2d2',
+    borderRadius: 10,
+    fontSize: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+
   modeSelector: {
     flexDirection: 'row',
     backgroundColor: '#ededed',
@@ -607,6 +697,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     marginTop: 8,
+  },
+
+  noSearchResults: {
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 24,
   },
 
   summaryList: {
