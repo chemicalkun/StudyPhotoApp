@@ -20,6 +20,7 @@ type StudyPhotoIntelligenceNativeModule = {
     text: string,
     question: string
   ): Promise<string>;
+  createExamPreparation(text: string): Promise<string>;
 };
 
 
@@ -66,4 +67,17 @@ export const answerLectureQuestion = async (
     text,
     question
   );
+};
+
+
+export const createExamPreparation = async (
+  text: string
+): Promise<string> => {
+  if (nativeModule === null) {
+    throw new Error(
+      '端末内AI試験対策は新しい開発ビルドでのみ利用できます。'
+    );
+  }
+
+  return nativeModule.createExamPreparation(text);
 };
