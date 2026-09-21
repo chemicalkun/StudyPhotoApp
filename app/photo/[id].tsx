@@ -27,10 +27,15 @@ import {
   parsePhotoRecords,
   PhotoRecord,
 } from '@/types/photo';
+import type { PhotoOcrRecord } from '@/types/photo-ocr';
+import {
+  deletePhotoOcrRecord,
+  loadPhotoOcrRecord,
+  savePhotoOcrRecord,
+} from '@/services/photo-ocr-storage';
 import {
   isStudyPhotoVisionAvailable,
   recognizeText,
-  type RecognizedTextBlock,
 } from '@/modules/study-photo-vision';
 
 
@@ -87,8 +92,8 @@ export default function PhotoScreen() {
   const [deleting, setDeleting] = useState(false);
   const [recognizingText, setRecognizingText] =
     useState(false);
-  const [recognizedTextBlocks, setRecognizedTextBlocks] =
-    useState<RecognizedTextBlock[]>([]);
+  const [photoOcrRecord, setPhotoOcrRecord] =
+    useState<PhotoOcrRecord | null>(null);
   const [textRecognitionError, setTextRecognitionError] =
     useState('');
   const [textRecognitionModalVisible, setTextRecognitionModalVisible] =
@@ -118,7 +123,7 @@ export default function PhotoScreen() {
         setErrorMessage('');
         setPhoto(null);
         setImageLoadFailed(false);
-        setRecognizedTextBlocks([]);
+        setPhotoOcrRecord(null);
         setTextRecognitionError('');
         setTextRecognitionModalVisible(false);
         zoomScale.current = 1;
@@ -162,6 +167,18 @@ export default function PhotoScreen() {
 
         setLecturePhotos(relatedPhotos);
         setPhoto(selectedPhoto);
+
+        try {
+          const savedOcrRecord =
+            await loadPhotoOcrRecord(selectedPhoto.id);
+
+          setPhotoOcrRecord(savedOcrRecord);
+        } catch (ocrError) {
+          console.log(
+            '保存済みOCR結果読み込みエラー:',
+            ocrError
+          );
+        }
       } catch (error) {
         console.log('写真読み込みエラー:', error);
         setErrorMessage('写真の読み込みに失敗しました');
@@ -246,10 +263,19 @@ export default function PhotoScreen() {
 
       setPhoto(targetPhoto);
       setImageLoadFailed(false);
-      setRecognizedTextBlocks([]);
+      setPhotoOcrRecord(null);
       setTextRecognitionError('');
       setTextRecognitionModalVisible(false);
       zoomScale.current = 1;
+
+      loadPhotoOcrRecord(targetPhoto.id)
+        .then(setPhotoOcrRecord)
+        .catch((error) => {
+          console.log(
+            '保存済みOCR結果読み込みエラー:',
+            error
+          );
+        });
 
       translateX.setValue(
         -exitDirection * screenWidth
@@ -377,6 +403,12 @@ export default function PhotoScreen() {
         throw fileError;
       }
 
+      try {
+        await deletePhotoOcrRecord(photo.id);
+      } catch (ocrError) {
+        console.log('OCR結果削除エラー:', ocrError);
+      }
+
       router.back();
     } catch (error) {
       console.log('写真削除エラー:', error);
@@ -424,20 +456,25 @@ export default function PhotoScreen() {
     }
 
     setRecognizingText(true);
-    setRecognizedTextBlocks([]);
     setTextRecognitionError('');
     setTextRecognitionModalVisible(true);
 
     try {
       const recognizedBlocks = await recognizeText(photo.uri);
 
-      setRecognizedTextBlocks(recognizedBlocks);
-
       if (recognizedBlocks.length === 0) {
         setTextRecognitionError(
           '写真から文字を見つけられませんでした。'
         );
+        return;
       }
+
+      const savedOcrRecord = await savePhotoOcrRecord(
+        photo.id,
+        recognizedBlocks
+      );
+
+      setPhotoOcrRecord(savedOcrRecord);
     } catch (error) {
       console.log('授業写真文字認識エラー:', error);
 
@@ -448,6 +485,12 @@ export default function PhotoScreen() {
       setRecognizingText(false);
     }
   };
+
+
+  const currentPhotoOcrRecord =
+    photo !== null && photoOcrRecord?.photoId === photo.id
+      ? photoOcrRecord
+      : null;
 
 
   const openClassificationModal = () => {
@@ -685,10 +728,27 @@ export default function PhotoScreen() {
                 <ActivityIndicator color="white" />
               ) : (
                 <Text style={styles.textRecognitionButtonText}>
-                  写真の文字を認識
+                  {currentPhotoOcrRecord === null
+                    ? '写真の文字を認識'
+                    : '文字認識をやり直す'}
                 </Text>
               )}
             </Pressable>
+
+            {currentPhotoOcrRecord !== null ? (
+              <Pressable
+                style={styles.showRecognitionButton}
+                disabled={recognizingText}
+                onPress={() => {
+                  setTextRecognitionError('');
+                  setTextRecognitionModalVisible(true);
+                }}
+              >
+                <Text style={styles.showRecognitionButtonText}>
+                  保存済みの認識結果を見る
+                </Text>
+              </Pressable>
+            ) : null}
 
             <Pressable
               style={styles.classificationButton}
@@ -795,7 +855,7 @@ export default function PhotoScreen() {
             </Text>
 
             <Text style={styles.recognitionPrivacyText}>
-              端末内で処理しています。認識結果はまだ保存されません。
+              端末内で処理し、この写真の認識結果として端末内に保存します。
             </Text>
 
             {recognizingText ? (
@@ -813,7 +873,7 @@ export default function PhotoScreen() {
               <Text style={styles.recognitionErrorText}>
                 {textRecognitionError}
               </Text>
-            ) : (
+            ) : currentPhotoOcrRecord !== null ? (
               <ScrollView
                 style={styles.recognitionResults}
                 contentContainerStyle={
@@ -821,10 +881,17 @@ export default function PhotoScreen() {
                 }
               >
                 <Text style={styles.recognitionCountText}>
-                  {recognizedTextBlocks.length}件の文字領域を認識しました
+                  {currentPhotoOcrRecord.blocks.length}件の文字領域を認識しました
                 </Text>
 
-                {recognizedTextBlocks.map((block, index) => (
+                <Text style={styles.recognizedAtText}>
+                  認識日時：
+                  {getTakenAtLabel(
+                    currentPhotoOcrRecord.recognizedAt
+                  )}
+                </Text>
+
+                {currentPhotoOcrRecord.blocks.map((block, index) => (
                   <View
                     style={styles.recognitionResultRow}
                     key={`${block.text}-${index}`}
@@ -843,7 +910,7 @@ export default function PhotoScreen() {
                   </View>
                 ))}
               </ScrollView>
-            )}
+            ) : null}
 
             <Pressable
               style={styles.cancelButton}
@@ -1002,6 +1069,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  showRecognitionButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#63a17b',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+
+  showRecognitionButtonText: {
+    color: '#9dd6b1',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
   classificationButtonText: {
     color: 'white',
     fontSize: 14,
@@ -1086,6 +1169,12 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: 13,
     marginBottom: 6,
+  },
+
+  recognizedAtText: {
+    color: '#777',
+    fontSize: 11,
+    marginBottom: 8,
   },
 
   recognitionResultRow: {
