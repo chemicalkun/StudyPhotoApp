@@ -33,6 +33,7 @@ import {
   loadPhotoOcrRecord,
   savePhotoOcrRecord,
 } from '@/services/photo-ocr-storage';
+import { loadPhotoRecords } from '@/services/photo-storage';
 import {
   isStudyPhotoVisionAvailable,
   recognizeText,
@@ -128,15 +129,12 @@ export default function PhotoScreen() {
         setTextRecognitionModalVisible(false);
         zoomScale.current = 1;
 
-        const savedPhotos =
-          await AsyncStorage.getItem('photos');
+        const photos = await loadPhotoRecords();
 
-        if (savedPhotos === null) {
+        if (photos.length === 0) {
           setErrorMessage('写真データがありません');
           return;
         }
-
-        const photos = parsePhotoRecords(savedPhotos);
 
         const selectedPhoto =
           photos.find((item) => {

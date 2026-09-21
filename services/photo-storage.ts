@@ -15,6 +15,19 @@ const photosStorageKey = 'photos';
 const photosDirectoryName = 'studyphoto-photos';
 
 
+const getManagedPhotoFile = (photoId: string) => {
+  const photosDirectory = new Directory(
+    Paths.document,
+    photosDirectoryName
+  );
+
+  return new File(
+    photosDirectory,
+    `${photoId}.jpg`
+  );
+};
+
+
 export const loadPhotoRecords = async () => {
   const savedPhotos =
     await AsyncStorage.getItem(photosStorageKey);
@@ -23,7 +36,32 @@ export const loadPhotoRecords = async () => {
     return [];
   }
 
-  return parsePhotoRecords(savedPhotos);
+  const photos = parsePhotoRecords(savedPhotos);
+  let repairedUri = false;
+
+  const repairedPhotos = photos.map((photo) => {
+    const managedPhotoFile = getManagedPhotoFile(photo.id);
+
+    if (
+      managedPhotoFile.exists &&
+      managedPhotoFile.uri !== photo.uri
+    ) {
+      repairedUri = true;
+
+      return {
+        ...photo,
+        uri: managedPhotoFile.uri,
+      };
+    }
+
+    return photo;
+  });
+
+  if (repairedUri) {
+    await savePhotoRecords(repairedPhotos);
+  }
+
+  return repairedPhotos;
 };
 
 
@@ -59,15 +97,9 @@ export const savePhotoFromUri = async ({
 
   const id =
     `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const photosDirectory = new Directory(
-    Paths.document,
-    photosDirectoryName
-  );
   const sourceFile = new File(sourceUri);
-  const savedFile = new File(
-    photosDirectory,
-    `${id}.jpg`
-  );
+  const savedFile = getManagedPhotoFile(id);
+  const photosDirectory = savedFile.parentDirectory;
 
   try {
     photosDirectory.create({
