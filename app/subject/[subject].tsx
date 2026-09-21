@@ -36,6 +36,17 @@ import {
 import type {
   LectureSummaryAvailability,
 } from '@/modules/study-photo-intelligence';
+import {
+  loadLectureSummaryRecords,
+  saveLectureSummaryRecord,
+} from '@/services/lecture-summary-storage';
+import {
+  createLectureSummaryId,
+  createLectureSummarySourceSignature,
+} from '@/types/lecture-summary';
+import type {
+  LectureSummaryRecords,
+} from '@/types/lecture-summary';
 
 
 type LectureGroup = {
@@ -93,6 +104,14 @@ export default function SubjectScreen() {
   const [summaryError, setSummaryError] = useState('');
   const [isGeneratingSummary, setIsGeneratingSummary] =
     useState(false);
+  const [lectureSummaryRecords, setLectureSummaryRecords] =
+    useState<LectureSummaryRecords>({});
+  const [summaryLoadError, setSummaryLoadError] =
+    useState('');
+  const [summarySaveError, setSummarySaveError] =
+    useState('');
+  const [isLectureSummarySaved, setIsLectureSummarySaved] =
+    useState(false);
 
 
   const getPhotoLabel = (photo: PhotoRecord) => {
@@ -139,6 +158,8 @@ export default function SubjectScreen() {
           setFailedPhotoIds({});
           setPhotoOcrRecords({});
           setOcrLoadError('');
+          setLectureSummaryRecords({});
+          setSummaryLoadError('');
           setSelectedLectureSection(null);
 
           const savedPhotos =
@@ -239,6 +260,24 @@ export default function SubjectScreen() {
               '保存済みの文字認識結果を読み込めませんでした。'
             );
           }
+
+          try {
+            const savedSummaryRecords =
+              await loadLectureSummaryRecords();
+
+            setLectureSummaryRecords(
+              savedSummaryRecords
+            );
+          } catch (summaryError) {
+            console.log(
+              '授業まとめ読み込みエラー:',
+              summaryError
+            );
+
+            setSummaryLoadError(
+              '保存済みの授業まとめを読み込めませんでした。'
+            );
+          }
         } catch (error) {
           console.log(
             '授業写真読み込みエラー:',
@@ -260,8 +299,26 @@ export default function SubjectScreen() {
     section: LectureSection
   ) => {
     setSelectedLectureSection(section);
-    setLectureSummary('');
+    const summaryId = createLectureSummaryId(
+      subject,
+      section.dateKey
+    );
+    const sourceOcrSignature =
+      createLectureSummarySourceSignature(
+        section.ocrItems.map((item) => item.record)
+      );
+    const savedSummary = lectureSummaryRecords[summaryId];
+    const canUseSavedSummary =
+      savedSummary !== undefined &&
+      savedSummary.sourceOcrSignature ===
+        sourceOcrSignature;
+
+    setLectureSummary(
+      canUseSavedSummary ? savedSummary.text : ''
+    );
+    setIsLectureSummarySaved(canUseSavedSummary);
     setSummaryError('');
+    setSummarySaveError('');
     setIsGeneratingSummary(false);
     setSummaryAvailability(null);
 
@@ -285,8 +342,9 @@ export default function SubjectScreen() {
       return;
     }
 
+    const section = selectedLectureSection;
     const combinedOcrText =
-      selectedLectureSection.ocrItems
+      section.ocrItems
         .map(
           (item) =>
             `写真${item.photoNumber}\n${item.record.text}`
@@ -296,12 +354,48 @@ export default function SubjectScreen() {
     try {
       setIsGeneratingSummary(true);
       setSummaryError('');
+      setSummarySaveError('');
+      setIsLectureSummarySaved(false);
 
       const summary = await summarizeLecture(
         combinedOcrText
       );
+      const trimmedSummary = summary.trim();
 
-      setLectureSummary(summary.trim());
+      if (trimmedSummary === '') {
+        throw new Error('生成されたまとめが空です');
+      }
+
+      setLectureSummary(trimmedSummary);
+
+      try {
+        const savedRecord =
+          await saveLectureSummaryRecord(
+            subject,
+            section.dateKey,
+            trimmedSummary,
+            createLectureSummarySourceSignature(
+              section.ocrItems.map(
+                (item) => item.record
+              )
+            )
+          );
+
+        setLectureSummaryRecords((records) => ({
+          ...records,
+          [savedRecord.id]: savedRecord,
+        }));
+        setIsLectureSummarySaved(true);
+      } catch (saveError) {
+        console.log(
+          '授業まとめ保存エラー:',
+          saveError
+        );
+
+        setSummarySaveError(
+          'まとめは表示できましたが、端末に保存できませんでした。'
+        );
+      }
     } catch (error) {
       console.log('授業まとめ作成エラー:', error);
 
@@ -400,6 +494,12 @@ export default function SubjectScreen() {
             {ocrLoadError !== '' ? (
               <Text style={styles.ocrLoadError}>
                 {ocrLoadError}
+              </Text>
+            ) : null}
+
+            {summaryLoadError !== '' ? (
+              <Text style={styles.ocrLoadError}>
+                {summaryLoadError}
               </Text>
             ) : null}
 
@@ -567,7 +667,7 @@ export default function SubjectScreen() {
                 </Pressable>
 
                 <Text style={styles.onDeviceNotice}>
-                  OCR文字は外部に送信せず、このiPhone内でまとめます。
+                  OCR文字は外部に送信せず、このiPhone内でまとめ、保存します。
                 </Text>
               </View>
             ) : (
@@ -582,12 +682,24 @@ export default function SubjectScreen() {
               </Text>
             ) : null}
 
+            {summarySaveError !== '' ? (
+              <Text style={styles.summaryErrorText}>
+                {summarySaveError}
+              </Text>
+            ) : null}
+
             <ScrollView style={styles.ocrScrollView}>
               {lectureSummary !== '' ? (
                 <View style={styles.summaryResult}>
                   <Text style={styles.summaryResultTitle}>
                     この回のまとめ
                   </Text>
+
+                  {isLectureSummarySaved ? (
+                    <Text style={styles.summarySavedText}>
+                      端末に保存済み
+                    </Text>
+                  ) : null}
 
                   <Text
                     style={styles.summaryResultText}
@@ -882,6 +994,13 @@ const styles = StyleSheet.create({
     color: '#28794c',
     fontSize: 15,
     fontWeight: 'bold',
+    marginBottom: 8,
+  },
+
+  summarySavedText: {
+    color: '#28794c',
+    fontSize: 11,
+    marginTop: -4,
     marginBottom: 8,
   },
 
