@@ -15,15 +15,27 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 
 import { loadExamPreparationRecords } from '@/services/exam-preparation-storage';
+import { loadFlashcardRecords } from '@/services/flashcard-storage';
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
+import { loadPracticeQuestionRecords } from '@/services/practice-question-storage';
 import {
   createExamPreparationRecordId,
   createExamPreparationSourceSignature,
   type ExamPreparationRecords,
 } from '@/types/exam-preparation';
+import {
+  createFlashcardRecordId,
+  createFlashcardSourceSignature,
+  type FlashcardRecords,
+} from '@/types/flashcard';
 import type {
   LectureSummaryRecord,
 } from '@/types/lecture-summary';
+import {
+  createPracticeQuestionRecordId,
+  createPracticeQuestionSourceSignature,
+  type PracticeQuestionRecords,
+} from '@/types/practice-question';
 
 
 type ReviewMode = 'lecture' | 'subject';
@@ -57,6 +69,10 @@ export default function ReviewScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [examPreparationRecords, setExamPreparationRecords] =
     useState<ExamPreparationRecords>({});
+  const [practiceQuestionRecords, setPracticeQuestionRecords] =
+    useState<PracticeQuestionRecords>({});
+  const [flashcardRecords, setFlashcardRecords] =
+    useState<FlashcardRecords>({});
 
   const subjectGroups = Object.entries(
     summaries.reduce<Record<string, LectureSummaryRecord[]>>(
@@ -200,20 +216,41 @@ export default function ReviewScreen() {
 
           setSummaries(sortedSummaries);
 
-          try {
-            const savedExamPreparations =
-              await loadExamPreparationRecords();
+          const learningDataResults = await Promise.allSettled([
+            loadExamPreparationRecords(),
+            loadPracticeQuestionRecords(),
+            loadFlashcardRecords(),
+          ]);
+          const [
+            examPreparationResult,
+            practiceQuestionResult,
+            flashcardResult,
+          ] = learningDataResults;
 
-            setExamPreparationRecords(
-              savedExamPreparations
-            );
-          } catch (examPreparationError) {
-            console.log(
-              '試験対策保存状態読み込みエラー:',
-              examPreparationError
-            );
-            setExamPreparationRecords({});
-          }
+          setExamPreparationRecords(
+            examPreparationResult.status === 'fulfilled'
+              ? examPreparationResult.value
+              : {}
+          );
+          setPracticeQuestionRecords(
+            practiceQuestionResult.status === 'fulfilled'
+              ? practiceQuestionResult.value
+              : {}
+          );
+          setFlashcardRecords(
+            flashcardResult.status === 'fulfilled'
+              ? flashcardResult.value
+              : {}
+          );
+
+          learningDataResults.forEach((result) => {
+            if (result.status === 'rejected') {
+              console.log(
+                '学習進捗読み込みエラー:',
+                result.reason
+              );
+            }
+          });
         } catch (error) {
           console.log('復習まとめ読み込みエラー:', error);
           setSummaries([]);
@@ -356,6 +393,48 @@ export default function ReviewScreen() {
                           createExamPreparationSourceSignature(
                             subjectSummaries
                           );
+                      const savedPracticeQuestions =
+                        practiceQuestionRecords[
+                          createPracticeQuestionRecordId(
+                            groupSubject
+                          )
+                        ];
+                      const practiceIsCurrent =
+                        savedPracticeQuestions !== undefined &&
+                        savedPracticeQuestions.sourceSummarySignature ===
+                          createPracticeQuestionSourceSignature(
+                            subjectSummaries
+                          );
+                      const practiceKnownCount = practiceIsCurrent
+                        ? Object.values(
+                            savedPracticeQuestions.assessments ?? {}
+                          ).filter(
+                            (assessment) => assessment === 'known'
+                          ).length
+                        : 0;
+                      const savedFlashcards = flashcardRecords[
+                        createFlashcardRecordId(groupSubject)
+                      ];
+                      const flashcardsAreCurrent =
+                        savedFlashcards !== undefined &&
+                        savedFlashcards.sourceSummarySignature ===
+                          createFlashcardSourceSignature(
+                            subjectSummaries
+                          );
+                      const flashcardKnownCount = flashcardsAreCurrent
+                        ? Object.values(
+                            savedFlashcards.assessments ?? {}
+                          ).filter(
+                            (assessment) => assessment === 'known'
+                          ).length
+                        : 0;
+                      const flashcardReviewCount = flashcardsAreCurrent
+                        ? Object.values(
+                            savedFlashcards.assessments ?? {}
+                          ).filter(
+                            (assessment) => assessment === 'review'
+                          ).length
+                        : 0;
 
                       return (
                         <Pressable
@@ -388,6 +467,18 @@ export default function ReviewScreen() {
                               ]}
                             >
                               {isSaved ? '保存済み' : '未作成'}
+                            </Text>
+
+                            <Text style={styles.learningProgress}>
+                              {practiceIsCurrent
+                                ? `練習問題：覚えた ${practiceKnownCount}/${savedPracticeQuestions.questions.length}問`
+                                : '練習問題：未作成'}
+                            </Text>
+
+                            <Text style={styles.learningProgress}>
+                              {flashcardsAreCurrent
+                                ? `カード：覚えた ${flashcardKnownCount}/${savedFlashcards.cards.length}枚・復習 ${flashcardReviewCount}枚`
+                                : 'カード：未作成'}
                             </Text>
                           </View>
 
@@ -774,6 +865,13 @@ const styles = StyleSheet.create({
   examStatusNotCreated: {
     color: '#725b24',
     backgroundColor: '#fff0c8',
+  },
+
+  learningProgress: {
+    color: '#5d6470',
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 5,
   },
 
   examOpenText: {
