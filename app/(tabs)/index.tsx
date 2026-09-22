@@ -158,6 +158,17 @@ export default function HomeScreen() {
         </Text>
       </Pressable>
 
+      <Pressable
+        style={styles.settingsButton}
+        accessibilityRole="button"
+        accessibilityLabel="設定を開く"
+        onPress={() => router.push('/settings')}
+      >
+        <Text style={styles.settingsButtonText}>
+          設定
+        </Text>
+      </Pressable>
+
 
       {unclassifiedPhotos.length > 0 ? (
         <>
@@ -307,11 +318,27 @@ const styles = StyleSheet.create({
     borderColor: '#9aa9c8',
     borderRadius: 12,
     backgroundColor: '#f3f6ff',
-    marginBottom: 32,
+    marginBottom: 12,
   },
 
   backupButtonText: {
     color: '#31518f',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  settingsButton: {
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#c5c8ce',
+    borderRadius: 12,
+    backgroundColor: '#f5f6f8',
+    marginBottom: 32,
+  },
+
+  settingsButtonText: {
+    color: '#444',
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',

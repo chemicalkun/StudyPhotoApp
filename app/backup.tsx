@@ -12,7 +12,7 @@ import {
 
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 
 import {
   createBackupFile,
@@ -22,6 +22,8 @@ import { parseStudyPhotoBackup } from '@/types/backup';
 
 
 export default function BackupScreen() {
+  const params = useLocalSearchParams();
+  const openedFromSettings = params.from === 'settings';
   const [exporting, setExporting] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -137,7 +139,9 @@ export default function BackupScreen() {
       <Stack.Screen
         options={{
           title: 'バックアップ',
-          headerBackTitle: 'ホーム',
+          headerBackTitle: openedFromSettings
+            ? '設定'
+            : 'ホーム',
         }}
       />
 

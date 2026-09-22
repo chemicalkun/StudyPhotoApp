@@ -85,6 +85,13 @@ export default function RootLayout() {
             headerBackTitle: 'ホーム',
           }}
         />
+        <Stack.Screen
+          name="settings"
+          options={{
+            title: '設定',
+            headerBackTitle: 'ホーム',
+          }}
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

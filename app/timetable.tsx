@@ -11,7 +11,12 @@ import {
   View,
 } from 'react-native';
 
-import { router, useFocusEffect } from 'expo-router';
+import {
+  router,
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+} from 'expo-router';
 
 import { renameSubjectLearningData } from '@/services/subject-learning-data-storage';
 import {
@@ -31,6 +36,8 @@ const days = ['月', '火', '水', '木', '金'];
 
 
 export default function TimetableScreen() {
+  const params = useLocalSearchParams();
+  const openedFromSettings = params.from === 'settings';
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingClass, setDeletingClass] =
@@ -498,6 +505,15 @@ export default function TimetableScreen() {
 
   return (
     <ScrollView style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: '時間割',
+          headerBackTitle: openedFromSettings
+            ? '設定'
+            : 'ホーム',
+        }}
+      />
+
       <Text style={styles.title}>時間割</Text>
 
       {loadError !== '' ? (

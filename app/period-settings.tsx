@@ -11,7 +11,11 @@ import {
   View,
 } from 'react-native';
 
-import { router, Stack } from 'expo-router';
+import {
+  router,
+  Stack,
+  useLocalSearchParams,
+} from 'expo-router';
 
 import {
   defaultPeriodTimes,
@@ -31,6 +35,8 @@ import { parsePhotoRecords } from '@/types/photo';
 
 
 export default function PeriodSettingsScreen() {
+  const params = useLocalSearchParams();
+  const openedFromSettings = params.from === 'settings';
   const [periodTimes, setPeriodTimes] =
     useState<PeriodTimes>(defaultPeriodTimes);
   const [loading, setLoading] = useState(true);
@@ -247,7 +253,9 @@ export default function PeriodSettingsScreen() {
       <Stack.Screen
         options={{
           title: '時限設定',
-          headerBackTitle: '時間割',
+          headerBackTitle: openedFromSettings
+            ? '設定'
+            : '時間割',
         }}
       />
 
