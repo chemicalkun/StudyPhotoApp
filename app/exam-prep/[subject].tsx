@@ -92,6 +92,10 @@ export default function ExamPreparationScreen() {
   const [subjectAnswer, setSubjectAnswer] = useState('');
   const [questionHistory, setQuestionHistory] =
     useState<SubjectQuestionRecord[]>([]);
+  const [isQuestionHistoryExpanded, setIsQuestionHistoryExpanded] =
+    useState(false);
+  const [expandedQuestionId, setExpandedQuestionId] =
+    useState<string | null>(null);
 
 
   useFocusEffect(
@@ -107,6 +111,8 @@ export default function ExamPreparationScreen() {
           setShareError('');
           setQuestionError('');
           setQuestionSaveError('');
+          setIsQuestionHistoryExpanded(false);
+          setExpandedQuestionId(null);
 
           const [
             records,
@@ -351,6 +357,8 @@ export default function ExamPreparationScreen() {
           savedQuestion,
           ...currentHistory,
         ]);
+        setIsQuestionHistoryExpanded(true);
+        setExpandedQuestionId(savedQuestion.id);
       } catch (saveQuestionError) {
         console.log('質問履歴保存エラー:', saveQuestionError);
         setSubjectAnswer(trimmedAnswer);
@@ -618,43 +626,85 @@ export default function ExamPreparationScreen() {
 
                 {questionHistory.length > 0 ? (
                   <View style={styles.questionHistorySection}>
-                    <Text style={styles.questionHistoryTitle}>
-                      これまでの質問
-                    </Text>
-
-                    {questionHistory.map((record) => {
-                      const isCurrent =
-                        record.sourceSummarySignature ===
-                        createSubjectQuestionSourceSignature(
-                          summaries
+                    <Pressable
+                      style={styles.questionHistoryHeader}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        expanded: isQuestionHistoryExpanded,
+                      }}
+                      onPress={() => {
+                        setIsQuestionHistoryExpanded(
+                          (expanded) => !expanded
                         );
+                      }}
+                    >
+                      <Text style={styles.questionHistoryTitle}>
+                        これまでの質問（{questionHistory.length}件）
+                      </Text>
+                      <Text style={styles.expandText}>
+                        {isQuestionHistoryExpanded ? '閉じる ▲' : '開く ▼'}
+                      </Text>
+                    </Pressable>
 
-                      return (
-                        <View
-                          key={record.id}
-                          style={styles.questionHistoryCard}
-                        >
-                          <Text style={styles.questionHistoryDate}>
-                            {new Date(record.createdAt)
-                              .toLocaleString('ja-JP')}
-                          </Text>
-                          {!isCurrent ? (
-                            <Text style={styles.questionHistoryOutdated}>
-                              まとめ更新前の回答
-                            </Text>
-                          ) : null}
-                          <Text style={styles.historyQuestion}>
-                            Q. {record.question}
-                          </Text>
-                          <Text
-                            style={styles.historyAnswer}
-                            selectable
-                          >
-                            A. {record.answer}
-                          </Text>
-                        </View>
-                      );
-                    })}
+                    {isQuestionHistoryExpanded
+                      ? questionHistory.map((record) => {
+                          const isCurrent =
+                            record.sourceSummarySignature ===
+                            createSubjectQuestionSourceSignature(
+                              summaries
+                            );
+                          const isExpanded =
+                            expandedQuestionId === record.id;
+
+                          return (
+                            <View
+                              key={record.id}
+                              style={styles.questionHistoryCard}
+                            >
+                              <Pressable
+                                style={styles.questionHistoryCardHeader}
+                                accessibilityRole="button"
+                                accessibilityState={{
+                                  expanded: isExpanded,
+                                }}
+                                onPress={() => {
+                                  setExpandedQuestionId(
+                                    isExpanded ? null : record.id
+                                  );
+                                }}
+                              >
+                                <View style={styles.questionHistoryCardText}>
+                                  <Text style={styles.questionHistoryDate}>
+                                    {new Date(record.createdAt)
+                                      .toLocaleString('ja-JP')}
+                                  </Text>
+                                  {!isCurrent ? (
+                                    <Text style={styles.questionHistoryOutdated}>
+                                      まとめ更新前の回答
+                                    </Text>
+                                  ) : null}
+                                  <Text style={styles.historyQuestion}>
+                                    Q. {record.question}
+                                  </Text>
+                                </View>
+
+                                <Text style={styles.questionExpandMark}>
+                                  {isExpanded ? '▲' : '▼'}
+                                </Text>
+                              </Pressable>
+
+                              {isExpanded ? (
+                                <Text
+                                  style={styles.historyAnswer}
+                                  selectable
+                                >
+                                  A. {record.answer}
+                                </Text>
+                              ) : null}
+                            </View>
+                          );
+                        })
+                      : null}
                   </View>
                 ) : null}
               </View>
@@ -992,11 +1042,27 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
 
+  questionHistoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#e5ebf9',
+    borderRadius: 9,
+    padding: 12,
+  },
+
   questionHistoryTitle: {
+    flex: 1,
     color: '#31518f',
     fontSize: 15,
     fontWeight: 'bold',
-    marginBottom: 9,
+  },
+
+  expandText: {
+    color: '#31518f',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
 
   questionHistoryCard: {
@@ -1004,8 +1070,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d5dceb',
     borderRadius: 9,
-    padding: 12,
+    overflow: 'hidden',
     marginTop: 8,
+  },
+
+  questionHistoryCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+  },
+
+  questionHistoryCardText: {
+    flex: 1,
+  },
+
+  questionExpandMark: {
+    color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
 
   questionHistoryDate: {
@@ -1038,7 +1121,9 @@ const styles = StyleSheet.create({
     color: '#333',
     fontSize: 13,
     lineHeight: 21,
-    marginTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#e1e5ef',
+    padding: 12,
   },
 
   shareButton: {
