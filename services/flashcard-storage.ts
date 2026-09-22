@@ -4,6 +4,7 @@ import {
   createFlashcardRecordId,
   parseFlashcardRecords,
   type Flashcard,
+  type FlashcardAssessment,
   type FlashcardRecord,
   type FlashcardRecords,
 } from '@/types/flashcard';
@@ -54,6 +55,7 @@ export const saveFlashcardRecord = async (
     id,
     subject,
     cards,
+    assessments: {},
     sourceSummarySignature,
     createdAt: new Date().toISOString(),
   };
@@ -64,4 +66,45 @@ export const saveFlashcardRecord = async (
   });
 
   return record;
+};
+
+
+export const saveFlashcardAssessment = async (
+  subject: string,
+  cardIndex: number,
+  assessment: FlashcardAssessment
+) => {
+  if (
+    subject === '' ||
+    !Number.isInteger(cardIndex) ||
+    cardIndex < 0
+  ) {
+    throw new Error('保存するカード記録が不正です');
+  }
+
+  const records = await loadFlashcardRecords();
+  const id = createFlashcardRecordId(subject);
+  const record = records[id];
+
+  if (
+    record === undefined ||
+    cardIndex >= record.cards.length
+  ) {
+    throw new Error('フラッシュカードが見つかりません');
+  }
+
+  const updatedRecord: FlashcardRecord = {
+    ...record,
+    assessments: {
+      ...record.assessments,
+      [String(cardIndex)]: assessment,
+    },
+  };
+
+  await saveFlashcardRecords({
+    ...records,
+    [id]: updatedRecord,
+  });
+
+  return updatedRecord;
 };

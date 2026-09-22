@@ -9,10 +9,16 @@ export type Flashcard = {
 };
 
 
+export type FlashcardAssessment =
+  | 'known'
+  | 'review';
+
+
 export type FlashcardRecord = {
   id: string;
   subject: string;
   cards: Flashcard[];
+  assessments?: Record<string, FlashcardAssessment>;
   sourceSummarySignature: string;
   createdAt: string;
 };
@@ -71,6 +77,21 @@ const isFlashcardRecord = (
   }
 
   const record = value as Partial<FlashcardRecord>;
+  const assessmentsAreValid =
+    record.assessments === undefined ||
+    (
+      typeof record.assessments === 'object' &&
+      record.assessments !== null &&
+      !Array.isArray(record.assessments) &&
+      Object.entries(record.assessments).every(
+        ([cardIndex, assessment]) =>
+          /^\d+$/.test(cardIndex) &&
+          (
+            assessment === 'known' ||
+            assessment === 'review'
+          )
+      )
+    );
 
   return (
     typeof record.id === 'string' &&
@@ -79,6 +100,7 @@ const isFlashcardRecord = (
     Array.isArray(record.cards) &&
     record.cards.length > 0 &&
     record.cards.every(isFlashcard) &&
+    assessmentsAreValid &&
     typeof record.sourceSummarySignature === 'string' &&
     record.sourceSummarySignature !== '' &&
     typeof record.createdAt === 'string' &&

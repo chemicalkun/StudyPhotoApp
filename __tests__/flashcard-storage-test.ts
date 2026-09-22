@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   loadFlashcardRecords,
+  saveFlashcardAssessment,
   saveFlashcardRecord,
 } from '@/services/flashcard-storage';
 import {
@@ -51,5 +52,31 @@ describe('flashcard storage', () => {
         },
       }))
     ).toThrow('flashcardRecordsの形式が不正です');
+  });
+
+  test('カードごとの自己評価を保存する', async () => {
+    await saveFlashcardRecord(
+      '高分子化学',
+      [{
+        term: '重合',
+        definition: '単量体が結合して高分子になる反応。',
+      }],
+      'signature'
+    );
+
+    await saveFlashcardAssessment(
+      '高分子化学',
+      0,
+      'review'
+    );
+
+    const records = await loadFlashcardRecords();
+    const record = records[
+      createFlashcardRecordId('高分子化学')
+    ];
+
+    expect(record.assessments).toEqual({
+      '0': 'review',
+    });
   });
 });

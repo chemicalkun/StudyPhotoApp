@@ -21,6 +21,7 @@ import {
 } from '@/modules/study-photo-intelligence';
 import {
   loadFlashcardRecords,
+  saveFlashcardAssessment,
   saveFlashcardRecord,
 } from '@/services/flashcard-storage';
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
@@ -29,6 +30,7 @@ import {
   createFlashcardRecordId,
   createFlashcardSourceSignature,
   type Flashcard,
+  type FlashcardAssessment,
 } from '@/types/flashcard';
 import type {
   LectureSummaryRecord,
@@ -49,6 +51,9 @@ export default function FlashcardScreen() {
     useState(0);
   const [showDefinition, setShowDefinition] =
     useState(false);
+  const [assessments, setAssessments] = useState<
+    Record<string, FlashcardAssessment>
+  >({});
   const [availability, setAvailability] =
     useState<LectureSummaryAvailability | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,6 +111,11 @@ export default function FlashcardScreen() {
           setAvailability(modelAvailability);
           setCards(
             canUseSavedRecord ? savedRecord.cards : []
+          );
+          setAssessments(
+            canUseSavedRecord
+              ? savedRecord.assessments ?? {}
+              : {}
           );
           setIsSaved(canUseSavedRecord);
           setCurrentCardIndex(0);
@@ -177,6 +187,7 @@ export default function FlashcardScreen() {
       setCards(validCards);
       setCurrentCardIndex(0);
       setShowDefinition(false);
+      setAssessments({});
 
       try {
         await saveFlashcardRecord(
@@ -202,6 +213,34 @@ export default function FlashcardScreen() {
   };
 
 
+  const saveAssessment = async (
+    assessment: FlashcardAssessment
+  ) => {
+    if (currentCard === null) {
+      return;
+    }
+
+    setAssessments((currentAssessments) => ({
+      ...currentAssessments,
+      [String(currentCardIndex)]: assessment,
+    }));
+    setSaveError('');
+
+    try {
+      await saveFlashcardAssessment(
+        subject,
+        currentCardIndex,
+        assessment
+      );
+    } catch (error) {
+      console.log('フラッシュカード自己評価保存エラー:', error);
+      setSaveError(
+        '自己評価を端末に保存できませんでした。'
+      );
+    }
+  };
+
+
   const getUnavailableMessage = () => {
     switch (availability) {
       case 'unsupportedBuild':
@@ -223,6 +262,14 @@ export default function FlashcardScreen() {
 
 
   const currentCard = cards[currentCardIndex] ?? null;
+  const currentAssessment =
+    assessments[String(currentCardIndex)];
+  const knownCount = Object.values(assessments)
+    .filter((assessment) => assessment === 'known')
+    .length;
+  const reviewCount = Object.values(assessments)
+    .filter((assessment) => assessment === 'review')
+    .length;
 
 
   return (
@@ -314,6 +361,10 @@ export default function FlashcardScreen() {
                   ) : null}
                 </View>
 
+                <Text style={styles.assessmentSummary}>
+                  覚えた {knownCount}枚・あとで復習 {reviewCount}枚
+                </Text>
+
                 <Pressable
                   style={[
                     styles.card,
@@ -341,6 +392,46 @@ export default function FlashcardScreen() {
                     タップして{showDefinition ? '語句' : '説明'}を見る
                   </Text>
                 </Pressable>
+
+                {showDefinition ? (
+                  <>
+                    <Text style={styles.assessmentPrompt}>
+                      このカードを覚えましたか？
+                    </Text>
+
+                    <View style={styles.assessmentRow}>
+                      <Pressable
+                        style={[
+                          styles.reviewButton,
+                          currentAssessment === 'review' &&
+                            styles.reviewButtonSelected,
+                        ]}
+                        onPress={() =>
+                          void saveAssessment('review')
+                        }
+                      >
+                        <Text style={styles.reviewButtonText}>
+                          あとで復習
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={[
+                          styles.knownButton,
+                          currentAssessment === 'known' &&
+                            styles.knownButtonSelected,
+                        ]}
+                        onPress={() =>
+                          void saveAssessment('known')
+                        }
+                      >
+                        <Text style={styles.knownButtonText}>
+                          覚えた
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </>
+                ) : null}
 
                 <View style={styles.navigationRow}>
                   <Pressable
@@ -405,11 +496,20 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   progressText: { color: '#333', fontSize: 14, fontWeight: 'bold' },
   savedText: { color: '#6b3ca0', fontSize: 11 },
+  assessmentSummary: { color: '#666', fontSize: 12, marginTop: 6 },
   card: { minHeight: 280, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5effb', borderWidth: 2, borderColor: '#b798d5', borderRadius: 18, padding: 24, marginTop: 12 },
   cardBack: { backgroundColor: '#eee4f7' },
   cardSideLabel: { color: '#6b3ca0', fontSize: 13, fontWeight: 'bold' },
   cardText: { color: '#251832', fontSize: 22, fontWeight: 'bold', lineHeight: 32, textAlign: 'center', marginTop: 14 },
   flipHint: { color: '#755f88', fontSize: 12, marginTop: 24 },
+  assessmentPrompt: { color: '#444', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginTop: 16 },
+  assessmentRow: { flexDirection: 'row', gap: 10, marginTop: 9 },
+  reviewButton: { flex: 1, backgroundColor: '#fff3d6', borderWidth: 1, borderColor: '#dfbd6d', borderRadius: 9, padding: 11 },
+  reviewButtonSelected: { backgroundColor: '#f3cf78', borderColor: '#a77916' },
+  reviewButtonText: { color: '#725b24', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
+  knownButton: { flex: 1, backgroundColor: '#e3f4e9', borderWidth: 1, borderColor: '#94c5a5', borderRadius: 9, padding: 11 },
+  knownButtonSelected: { backgroundColor: '#a9ddb9', borderColor: '#28794c' },
+  knownButtonText: { color: '#28794c', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   navigationRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   navigationButton: { flex: 1, backgroundColor: '#4b315f', borderRadius: 9, padding: 12 },
   navigationButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
