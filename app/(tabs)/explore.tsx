@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Alert,
   Image,
@@ -105,6 +106,7 @@ export default function ReviewScreen() {
     useState('');
   const [isSavingSummary, setIsSavingSummary] =
     useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [reviewMode, setReviewMode] =
     useState<ReviewMode>('subject');
@@ -251,24 +253,16 @@ export default function ReviewScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      let active = true;
+
       const loadSummaries = async () => {
         try {
+          setLoading(true);
           setLoadError('');
           setSelectedLectureSubject(null);
 
-          const records =
-            await loadLectureSummaryRecords();
-          const sortedSummaries = Object.values(records)
-            .sort((a, b) => {
-              return (
-                new Date(b.createdAt).getTime() -
-                new Date(a.createdAt).getTime()
-              );
-            });
-
-          setSummaries(sortedSummaries);
-
           const learningDataResults = await Promise.allSettled([
+            loadLectureSummaryRecords(),
             loadExamPreparationRecords(),
             loadPracticeQuestionRecords(),
             loadFlashcardRecords(),
@@ -276,12 +270,39 @@ export default function ReviewScreen() {
             loadPhotoOcrRecords(),
           ]);
           const [
+            lectureSummaryResult,
             examPreparationResult,
             practiceQuestionResult,
             flashcardResult,
             photoResult,
             photoOcrResult,
           ] = learningDataResults;
+
+          if (!active) {
+            return;
+          }
+
+          if (lectureSummaryResult.status === 'fulfilled') {
+            const sortedSummaries = Object.values(
+              lectureSummaryResult.value
+            ).sort((a, b) => {
+              return (
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime()
+              );
+            });
+
+            setSummaries(sortedSummaries);
+          } else {
+            console.log(
+              '復習まとめ読み込みエラー:',
+              lectureSummaryResult.reason
+            );
+            setSummaries([]);
+            setLoadError(
+              '保存済みの授業まとめを読み込めませんでした。'
+            );
+          }
 
           setExamPreparationRecords(
             examPreparationResult.status === 'fulfilled'
@@ -309,24 +330,37 @@ export default function ReviewScreen() {
               : {}
           );
 
-          learningDataResults.forEach((result) => {
-            if (result.status === 'rejected') {
-              console.log(
-                '学習進捗読み込みエラー:',
-                result.reason
-              );
-            }
-          });
+          learningDataResults
+            .slice(1)
+            .forEach((result) => {
+              if (result.status === 'rejected') {
+                console.log(
+                  '学習進捗読み込みエラー:',
+                  result.reason
+                );
+              }
+            });
         } catch (error) {
           console.log('復習まとめ読み込みエラー:', error);
-          setSummaries([]);
-          setLoadError(
-            '保存済みの授業まとめを読み込めませんでした。'
-          );
+
+          if (active) {
+            setSummaries([]);
+            setLoadError(
+              '保存済みの授業まとめを読み込めませんでした。'
+            );
+          }
+        } finally {
+          if (active) {
+            setLoading(false);
+          }
         }
       };
 
       void loadSummaries();
+
+      return () => {
+        active = false;
+      };
     }, [])
   );
 
@@ -455,7 +489,17 @@ export default function ReviewScreen() {
           </View>
         ) : null}
 
-        {summaries.length === 0 && loadError === '' ? (
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator
+              size="large"
+              color="#31518f"
+            />
+            <Text style={styles.loadingText}>
+              復習データを読み込み中...
+            </Text>
+          </View>
+        ) : loadError !== '' ? null : summaries.length === 0 ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyTitle}>
               まだ授業まとめがありません
@@ -1180,6 +1224,19 @@ const styles = StyleSheet.create({
     color: '#8a2020',
     fontSize: 14,
     lineHeight: 20,
+  },
+
+  loadingContainer: {
+    alignItems: 'center',
+    backgroundColor: '#f5f6f8',
+    borderRadius: 12,
+    padding: 28,
+  },
+
+  loadingText: {
+    color: '#555',
+    fontSize: 14,
+    marginTop: 12,
   },
 
   emptyBox: {
