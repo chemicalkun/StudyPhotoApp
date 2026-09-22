@@ -47,10 +47,13 @@ export default function FlashcardScreen() {
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
-  const [currentCardIndex, setCurrentCardIndex] =
+  const [cardOrder, setCardOrder] = useState<number[]>([]);
+  const [currentCardPosition, setCurrentCardPosition] =
     useState(0);
   const [showDefinition, setShowDefinition] =
     useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [isReviewRound, setIsReviewRound] = useState(false);
   const [assessments, setAssessments] = useState<
     Record<string, FlashcardAssessment>
   >({});
@@ -109,8 +112,13 @@ export default function FlashcardScreen() {
 
           setSummaries(subjectSummaries);
           setAvailability(modelAvailability);
-          setCards(
-            canUseSavedRecord ? savedRecord.cards : []
+          const loadedCards = canUseSavedRecord
+            ? savedRecord.cards
+            : [];
+
+          setCards(loadedCards);
+          setCardOrder(
+            loadedCards.map((_, index) => index)
           );
           setAssessments(
             canUseSavedRecord
@@ -118,8 +126,10 @@ export default function FlashcardScreen() {
               : {}
           );
           setIsSaved(canUseSavedRecord);
-          setCurrentCardIndex(0);
+          setCurrentCardPosition(0);
           setShowDefinition(false);
+          setIsFinished(false);
+          setIsReviewRound(false);
         } catch (error) {
           console.log('フラッシュカード読み込みエラー:', error);
 
@@ -185,8 +195,11 @@ export default function FlashcardScreen() {
       }
 
       setCards(validCards);
-      setCurrentCardIndex(0);
+      setCardOrder(validCards.map((_, index) => index));
+      setCurrentCardPosition(0);
       setShowDefinition(false);
+      setIsFinished(false);
+      setIsReviewRound(false);
       setAssessments({});
 
       try {
@@ -216,20 +229,22 @@ export default function FlashcardScreen() {
   const saveAssessment = async (
     assessment: FlashcardAssessment
   ) => {
-    if (currentCard === null) {
+    const cardIndex = cardOrder[currentCardPosition];
+
+    if (currentCard === null || cardIndex === undefined) {
       return;
     }
 
     setAssessments((currentAssessments) => ({
       ...currentAssessments,
-      [String(currentCardIndex)]: assessment,
+      [String(cardIndex)]: assessment,
     }));
     setSaveError('');
 
     try {
       await saveFlashcardAssessment(
         subject,
-        currentCardIndex,
+        cardIndex,
         assessment
       );
     } catch (error) {
@@ -261,15 +276,29 @@ export default function FlashcardScreen() {
   };
 
 
-  const currentCard = cards[currentCardIndex] ?? null;
-  const currentAssessment =
-    assessments[String(currentCardIndex)];
+  const currentCardIndex = cardOrder[currentCardPosition];
+  const currentCard = currentCardIndex === undefined
+    ? null
+    : cards[currentCardIndex] ?? null;
+  const currentAssessment = currentCardIndex === undefined
+    ? undefined
+    : assessments[String(currentCardIndex)];
   const knownCount = Object.values(assessments)
     .filter((assessment) => assessment === 'known')
     .length;
   const reviewCount = Object.values(assessments)
     .filter((assessment) => assessment === 'review')
     .length;
+  const unansweredCount = Math.max(
+    0,
+    cards.length - knownCount - reviewCount
+  );
+  const reviewCardIndexes = cards.flatMap(
+    (_, cardIndex) =>
+      assessments[String(cardIndex)] === 'review'
+        ? [cardIndex]
+        : []
+  );
 
 
   return (
@@ -350,11 +379,57 @@ export default function FlashcardScreen() {
               <Text style={styles.errorText}>{saveError}</Text>
             ) : null}
 
-            {currentCard !== null ? (
+            {isFinished && cards.length > 0 ? (
+              <View style={styles.completionCard}>
+                <Text style={styles.completionTitle}>
+                  学習を終了しました
+                </Text>
+                <Text style={styles.completionText}>
+                  覚えた {knownCount}枚
+                  {'\n'}あとで復習 {reviewCount}枚
+                  {'\n'}未評価 {unansweredCount}枚
+                </Text>
+
+                {reviewCardIndexes.length > 0 ? (
+                  <Pressable
+                    style={styles.retryReviewButton}
+                    onPress={() => {
+                      setCardOrder(reviewCardIndexes);
+                      setCurrentCardPosition(0);
+                      setShowDefinition(false);
+                      setIsFinished(false);
+                      setIsReviewRound(true);
+                    }}
+                  >
+                    <Text style={styles.retryReviewButtonText}>
+                      あとで復習だけ見返す
+                    </Text>
+                  </Pressable>
+                ) : null}
+
+                <Pressable
+                  style={styles.retryButton}
+                  onPress={() => {
+                    setCardOrder(
+                      cards.map((_, index) => index)
+                    );
+                    setCurrentCardPosition(0);
+                    setShowDefinition(false);
+                    setIsFinished(false);
+                    setIsReviewRound(false);
+                  }}
+                >
+                  <Text style={styles.retryButtonText}>
+                    すべてのカードを見直す
+                  </Text>
+                </Pressable>
+              </View>
+            ) : currentCard !== null ? (
               <View style={styles.cardSection}>
                 <View style={styles.progressRow}>
                   <Text style={styles.progressText}>
-                    カード {currentCardIndex + 1} / {cards.length}
+                    {isReviewRound ? '復習 ' : 'カード '}
+                    {currentCardPosition + 1} / {cardOrder.length}
                   </Text>
                   {isSaved ? (
                     <Text style={styles.savedText}>端末に保存済み</Text>
@@ -437,12 +512,14 @@ export default function FlashcardScreen() {
                   <Pressable
                     style={[
                       styles.navigationButton,
-                      currentCardIndex === 0 &&
+                      currentCardPosition === 0 &&
                         styles.disabledButton,
                     ]}
-                    disabled={currentCardIndex === 0}
+                    disabled={currentCardPosition === 0}
                     onPress={() => {
-                      setCurrentCardIndex((index) => index - 1);
+                      setCurrentCardPosition(
+                        (position) => position - 1
+                      );
                       setShowDefinition(false);
                     }}
                   >
@@ -452,19 +529,26 @@ export default function FlashcardScreen() {
                   </Pressable>
 
                   <Pressable
-                    style={[
-                      styles.navigationButton,
-                      currentCardIndex === cards.length - 1 &&
-                        styles.disabledButton,
-                    ]}
-                    disabled={currentCardIndex === cards.length - 1}
+                    style={styles.navigationButton}
                     onPress={() => {
-                      setCurrentCardIndex((index) => index + 1);
+                      if (
+                        currentCardPosition === cardOrder.length - 1
+                      ) {
+                        setIsFinished(true);
+                        setShowDefinition(false);
+                        return;
+                      }
+
+                      setCurrentCardPosition(
+                        (position) => position + 1
+                      );
                       setShowDefinition(false);
                     }}
                   >
                     <Text style={styles.navigationButtonText}>
-                      次のカード
+                      {currentCardPosition === cardOrder.length - 1
+                        ? '終了する'
+                        : '次のカード'}
                     </Text>
                   </Pressable>
                 </View>
@@ -492,6 +576,13 @@ const styles = StyleSheet.create({
   disabledButton: { opacity: 0.45 },
   unavailableText: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 13, lineHeight: 20, padding: 12, marginTop: 14 },
   errorText: { color: '#9b2c2c', fontSize: 13, lineHeight: 20, marginTop: 12 },
+  completionCard: { backgroundColor: '#f5effb', borderWidth: 1, borderColor: '#b798d5', borderRadius: 14, padding: 20, marginTop: 22 },
+  completionTitle: { color: '#6b3ca0', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 14 },
+  completionText: { color: '#333', fontSize: 15, lineHeight: 25, textAlign: 'center' },
+  retryReviewButton: { backgroundColor: '#b57c13', borderRadius: 9, padding: 13, marginTop: 18 },
+  retryReviewButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
+  retryButton: { backgroundColor: '#6b3ca0', borderRadius: 9, padding: 13, marginTop: 10 },
+  retryButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   cardSection: { marginTop: 22 },
   progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   progressText: { color: '#333', fontSize: 14, fontWeight: 'bold' },
