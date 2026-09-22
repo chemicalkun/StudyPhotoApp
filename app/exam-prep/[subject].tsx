@@ -310,7 +310,9 @@ export default function ExamPreparationScreen() {
   };
 
 
-  const askSubjectQuestion = async () => {
+  const askSubjectQuestion = async (
+    questionOverride?: string
+  ) => {
     if (
       summaries.length === 0 ||
       availability !== 'available' ||
@@ -319,7 +321,9 @@ export default function ExamPreparationScreen() {
       return;
     }
 
-    const question = questionTextRef.current.trim();
+    const question = (
+      questionOverride ?? questionTextRef.current
+    ).trim();
 
     if (question === '') {
       setQuestionError('質問を入力してください。');
@@ -770,6 +774,29 @@ export default function ExamPreparationScreen() {
                                     A. {record.answer}
                                   </Text>
                                   <View style={styles.historyActions}>
+                                    {!isCurrent ? (
+                                      <Pressable
+                                        style={[
+                                          styles.refreshHistoryButton,
+                                          isAnsweringQuestion &&
+                                            styles.disabledHistoryAction,
+                                        ]}
+                                        disabled={isAnsweringQuestion}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="現在のまとめで同じ質問を聞き直す"
+                                        onPress={() =>
+                                          void askSubjectQuestion(
+                                            record.question
+                                          )
+                                        }
+                                      >
+                                        <Text style={styles.refreshHistoryButtonText}>
+                                          {isAnsweringQuestion
+                                            ? '回答を作成中...'
+                                            : '現在のまとめで聞き直す'}
+                                        </Text>
+                                      </Pressable>
+                                    ) : null}
                                     <Pressable
                                       style={styles.shareHistoryButton}
                                       accessibilityRole="button"
@@ -1271,6 +1298,24 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
+  },
+
+  refreshHistoryButton: {
+    borderWidth: 1,
+    borderColor: '#8a6a20',
+    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+
+  refreshHistoryButtonText: {
+    color: '#725b24',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  disabledHistoryAction: {
+    opacity: 0.5,
   },
 
   shareHistoryButton: {
