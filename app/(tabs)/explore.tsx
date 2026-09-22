@@ -1,10 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   Animated,
+  Alert,
   Modal,
   PanResponder,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -263,6 +265,37 @@ export default function ReviewScreen() {
       void loadSummaries();
     }, [])
   );
+
+
+  const shareSelectedSummary = async () => {
+    if (selectedSummary === null) {
+      return;
+    }
+
+    const lectureLabel =
+      selectedSummaryLectureNumber !== null &&
+      selectedSummaryLectureNumber >= 0
+        ? `第${selectedSummaryLectureNumber + 1}回`
+        : '授業まとめ';
+
+    try {
+      await Share.share({
+        title: `${selectedSummary.subject} ${lectureLabel}`,
+        message: [
+          `${selectedSummary.subject} ${lectureLabel}`,
+          getDateLabel(selectedSummary.dateKey),
+          '',
+          selectedSummary.text,
+        ].join('\n'),
+      });
+    } catch (error) {
+      console.log('授業まとめ共有エラー:', error);
+      Alert.alert(
+        '共有できませんでした',
+        '授業まとめを共有できませんでした。もう一度お試しください。'
+      );
+    }
+  };
 
 
   return (
@@ -676,6 +709,17 @@ export default function ReviewScreen() {
             </ScrollView>
 
             <Pressable
+              style={styles.shareSummaryButton}
+              accessibilityRole="button"
+              accessibilityLabel="この授業まとめを共有"
+              onPress={() => void shareSelectedSummary()}
+            >
+              <Text style={styles.shareSummaryButtonText}>
+                このまとめを共有
+              </Text>
+            </Pressable>
+
+            <Pressable
               style={styles.closeButton}
               onPress={() => setSelectedSummary(null)}
             >
@@ -1006,11 +1050,25 @@ const styles = StyleSheet.create({
     lineHeight: 23,
   },
 
+  shareSummaryButton: {
+    backgroundColor: '#31518f',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 18,
+  },
+
+  shareSummaryButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
   closeButton: {
     backgroundColor: '#333',
     borderRadius: 8,
     padding: 12,
-    marginTop: 18,
+    marginTop: 10,
   },
 
   closeButtonText: {
