@@ -70,6 +70,8 @@ export default function ExamPreparationScreen() {
   const [shareError, setShareError] = useState('');
   const [isExamPreparationSaved, setIsExamPreparationSaved] =
     useState(false);
+  const [isExamPreparationOutdated, setIsExamPreparationOutdated] =
+    useState(false);
 
 
   useFocusEffect(
@@ -116,18 +118,24 @@ export default function ExamPreparationScreen() {
             savedExamPreparations[
               createExamPreparationRecordId(subject)
             ];
-          const canUseSavedExamPreparation =
+          const hasSavedExamPreparation =
+            savedExamPreparation !== undefined;
+          const savedExamPreparationIsCurrent =
             savedExamPreparation !== undefined &&
             savedExamPreparation.sourceSummarySignature ===
               sourceSummarySignature;
 
           setExamPreparation(
-            canUseSavedExamPreparation
+            hasSavedExamPreparation
               ? savedExamPreparation.text
               : ''
           );
           setIsExamPreparationSaved(
-            canUseSavedExamPreparation
+            hasSavedExamPreparation
+          );
+          setIsExamPreparationOutdated(
+            hasSavedExamPreparation &&
+              !savedExamPreparationIsCurrent
           );
         } catch (error) {
           console.log('試験対策読み込みエラー:', error);
@@ -178,6 +186,7 @@ export default function ExamPreparationScreen() {
       setSaveError('');
       setShareError('');
       setIsExamPreparationSaved(false);
+      setIsExamPreparationOutdated(false);
 
       const result = await createExamPreparation(source);
       const trimmedResult = result.trim();
@@ -197,6 +206,7 @@ export default function ExamPreparationScreen() {
           )
         );
         setIsExamPreparationSaved(true);
+        setIsExamPreparationOutdated(false);
       } catch (saveExamPreparationError) {
         console.log(
           '試験対策保存エラー:',
@@ -428,6 +438,12 @@ export default function ExamPreparationScreen() {
                   </Text>
                 ) : null}
 
+                {isExamPreparationOutdated ? (
+                  <Text style={styles.outdatedNotice}>
+                    授業まとめが更新されています。この試験対策は更新前のまとめから作成されたものです。必要に応じて「試験対策を作り直す」を押してください。
+                  </Text>
+                ) : null}
+
                 <Text
                   style={styles.resultText}
                   selectable
@@ -648,6 +664,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: -6,
     marginBottom: 9,
+  },
+
+  outdatedNotice: {
+    color: '#725b24',
+    backgroundColor: '#fff3d6',
+    borderRadius: 8,
+    fontSize: 12,
+    lineHeight: 19,
+    padding: 10,
+    marginBottom: 12,
   },
 
   resultText: {

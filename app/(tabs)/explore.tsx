@@ -62,6 +62,8 @@ export default function ReviewScreen() {
   const lectureSwipeX = useRef(
     new Animated.Value(0)
   ).current;
+  const reviewPagerRef = useRef<ScrollView>(null);
+  const reviewPageWidth = Math.max(0, screenWidth - 48);
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
   const [selectedSummary, setSelectedSummary] =
@@ -365,6 +367,19 @@ export default function ReviewScreen() {
   };
 
 
+  const selectReviewMode = (mode: ReviewMode) => {
+    if (mode === 'subject') {
+      setSelectedLectureSubject(null);
+    }
+
+    setReviewMode(mode);
+    reviewPagerRef.current?.scrollTo({
+      x: mode === 'subject' ? 0 : reviewPageWidth,
+      animated: true,
+    });
+  };
+
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -428,7 +443,7 @@ export default function ReviewScreen() {
                 accessibilityState={{
                   selected: reviewMode === 'subject',
                 }}
-                onPress={() => setReviewMode('subject')}
+                onPress={() => selectReviewMode('subject')}
               >
                 <Text
                   style={[
@@ -452,8 +467,8 @@ export default function ReviewScreen() {
                   selected: reviewMode === 'lecture',
                 }}
                 onPress={() => {
-                  setReviewMode('lecture');
                   setSelectedLectureSubject(null);
+                  selectReviewMode('lecture');
                 }}
               >
                 <Text
@@ -468,8 +483,27 @@ export default function ReviewScreen() {
               </Pressable>
             </View>
 
-            {reviewMode === 'subject' ? (
-              <View>
+            <ScrollView
+              ref={reviewPagerRef}
+              horizontal
+              pagingEnabled
+              nestedScrollEnabled
+              directionalLockEnabled
+              scrollEnabled={selectedLectureSubject === null}
+              showsHorizontalScrollIndicator={false}
+              decelerationRate="fast"
+              onMomentumScrollEnd={(event) => {
+                const pageIndex = Math.round(
+                  event.nativeEvent.contentOffset.x /
+                    reviewPageWidth
+                );
+
+                setReviewMode(
+                  pageIndex === 0 ? 'subject' : 'lecture'
+                );
+              }}
+            >
+              <View style={{ width: reviewPageWidth }}>
                 <Text style={styles.sectionTitle}>
                   授業全体のまとめ
                 </Text>
@@ -487,7 +521,9 @@ export default function ReviewScreen() {
                             groupSubject
                           )
                         ];
-                      const isSaved =
+                      const hasSavedExamPreparation =
+                        savedExamPreparation !== undefined;
+                      const examPreparationIsCurrent =
                         savedExamPreparation !== undefined &&
                         savedExamPreparation.sourceSummarySignature ===
                           createExamPreparationSourceSignature(
@@ -548,7 +584,7 @@ export default function ReviewScreen() {
                           key={groupSubject}
                           style={styles.examCard}
                           accessibilityRole="button"
-                          accessibilityLabel={`${groupSubject}の授業全体まとめを開く、${isSaved ? '保存済み' : '未作成'}`}
+                          accessibilityLabel={`${groupSubject}の授業全体まとめを開く、${examPreparationIsCurrent ? '保存済み' : hasSavedExamPreparation ? 'まとめ更新あり' : '未作成'}`}
                           onPress={() => {
                             router.push({
                               pathname: '/exam-prep/[subject]',
@@ -568,12 +604,18 @@ export default function ReviewScreen() {
                             <Text
                               style={[
                                 styles.examStatus,
-                                isSaved
+                                examPreparationIsCurrent
                                   ? styles.examStatusSaved
-                                  : styles.examStatusNotCreated,
+                                  : hasSavedExamPreparation
+                                    ? styles.examStatusOutdated
+                                    : styles.examStatusNotCreated,
                               ]}
                             >
-                              {isSaved ? '保存済み' : '未作成'}
+                              {examPreparationIsCurrent
+                                ? '保存済み'
+                                : hasSavedExamPreparation
+                                  ? 'まとめ更新あり'
+                                  : '未作成'}
                             </Text>
 
                             <Text style={styles.learningProgress}>
@@ -590,7 +632,7 @@ export default function ReviewScreen() {
                           </View>
 
                           <Text style={styles.examOpenText}>
-                            {isSaved
+                            {hasSavedExamPreparation
                               ? '保存済みを見る ›'
                               : '作成する ›'}
                           </Text>
@@ -606,8 +648,8 @@ export default function ReviewScreen() {
                   </Text>
                 ) : null}
               </View>
-            ) : (
-              <View>
+
+              <View style={{ width: reviewPageWidth }}>
                 {selectedLectureSubject === null ? (
                   <>
                     <Text style={styles.sectionTitle}>
@@ -737,7 +779,7 @@ export default function ReviewScreen() {
                   </Animated.View>
                 )}
               </View>
-            )}
+            </ScrollView>
           </>
         )}
       </ScrollView>
@@ -1049,6 +1091,11 @@ const styles = StyleSheet.create({
   examStatusNotCreated: {
     color: '#725b24',
     backgroundColor: '#fff0c8',
+  },
+
+  examStatusOutdated: {
+    color: '#7a4d00',
+    backgroundColor: '#ffe0a3',
   },
 
   learningProgress: {
