@@ -18,6 +18,7 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+import { LoadErrorCard } from '@/components/load-error-card';
 import { renameSubjectLearningData } from '@/services/subject-learning-data-storage';
 import {
   defaultPeriodTimes,
@@ -45,8 +46,12 @@ export default function TimetableScreen() {
   const [deletingClass, setDeletingClass] =
     useState(false);
   const [loadError, setLoadError] = useState('');
+  const [timetableLoadRevision, setTimetableLoadRevision] =
+    useState(0);
   const [periodTimesError, setPeriodTimesError] =
     useState('');
+  const [periodTimesLoadRevision, setPeriodTimesLoadRevision] =
+    useState(0);
 
   const [selectedDay, setSelectedDay] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
@@ -60,6 +65,8 @@ export default function TimetableScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Incrementing this value retries the focus-time load.
+      void timetableLoadRevision;
       let active = true;
 
       const loadTimetable = async () => {
@@ -94,23 +101,25 @@ export default function TimetableScreen() {
           if (active) {
             setTimetable({});
             setLoadError(
-              '時間割データを読み込めませんでした。データは削除されていません。画面を開き直してください。'
+              '時間割データを読み込めませんでした。データは削除されていません。'
             );
           }
         }
       };
 
-      loadTimetable();
+      void loadTimetable();
 
       return () => {
         active = false;
       };
-    }, [])
+    }, [timetableLoadRevision])
   );
 
 
   useFocusEffect(
     useCallback(() => {
+      // Incrementing this value retries the focus-time load.
+      void periodTimesLoadRevision;
       let active = true;
 
       const loadSettings = async () => {
@@ -134,12 +143,12 @@ export default function TimetableScreen() {
         }
       };
 
-      loadSettings();
+      void loadSettings();
 
       return () => {
         active = false;
       };
-    }, [])
+    }, [periodTimesLoadRevision])
   );
 
 
@@ -521,19 +530,25 @@ export default function TimetableScreen() {
       <Text style={styles.title}>時間割</Text>
 
       {loadError !== '' ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>
-            {loadError}
-          </Text>
-        </View>
+        <LoadErrorCard
+          message={loadError}
+          onRetry={() => {
+            setTimetableLoadRevision(
+              (revision) => revision + 1
+            );
+          }}
+        />
       ) : null}
 
       {periodTimesError !== '' ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>
-            {periodTimesError}
-          </Text>
-        </View>
+        <LoadErrorCard
+          message={periodTimesError}
+          onRetry={() => {
+            setPeriodTimesLoadRevision(
+              (revision) => revision + 1
+            );
+          }}
+        />
       ) : null}
 
       <Pressable
@@ -692,21 +707,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'black',
     marginBottom: 24,
-  },
-
-  errorBox: {
-    backgroundColor: '#ffe8e8',
-    borderWidth: 1,
-    borderColor: '#e39a9a',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 20,
-  },
-
-  errorText: {
-    color: '#8a2020',
-    fontSize: 14,
-    lineHeight: 20,
   },
 
   periodTime: {

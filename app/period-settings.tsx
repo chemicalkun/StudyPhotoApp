@@ -17,6 +17,7 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+import { LoadErrorCard } from '@/components/load-error-card';
 import {
   defaultPeriodTimes,
   getPeriodTimesValidationError,
@@ -42,29 +43,47 @@ export default function PeriodSettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [loadRevision, setLoadRevision] = useState(0);
 
 
   useEffect(() => {
+    // Incrementing this value retries the load.
+    void loadRevision;
+    let active = true;
+
     const loadSettings = async () => {
       try {
+        setLoading(true);
+        setLoadError('');
+
         const savedPeriodTimes =
           await loadPeriodTimes();
 
-        setPeriodTimes(savedPeriodTimes);
+        if (active) {
+          setPeriodTimes(savedPeriodTimes);
+        }
       } catch (error) {
         console.log('時限設定読み込みエラー:', error);
 
-        setLoadError(
-          '保存済みの時限設定を読み込めませんでした。デフォルト値を表示しています。'
-        );
-        setPeriodTimes(defaultPeriodTimes);
+        if (active) {
+          setLoadError(
+            '保存済みの時限設定を読み込めませんでした。デフォルト値を表示しています。'
+          );
+          setPeriodTimes(defaultPeriodTimes);
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
-    loadSettings();
-  }, []);
+    void loadSettings();
+
+    return () => {
+      active = false;
+    };
+  }, [loadRevision]);
 
 
   const updateTime = (
@@ -268,11 +287,12 @@ export default function PeriodSettingsScreen() {
       </Text>
 
       {loadError !== '' ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>
-            {loadError}
-          </Text>
-        </View>
+        <LoadErrorCard
+          message={loadError}
+          onRetry={() => {
+            setLoadRevision((revision) => revision + 1);
+          }}
+        />
       ) : null}
 
       {loading ? (
@@ -373,21 +393,6 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginTop: 10,
     marginBottom: 24,
-  },
-
-  errorBox: {
-    backgroundColor: '#ffe8e8',
-    borderWidth: 1,
-    borderColor: '#e39a9a',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 20,
-  },
-
-  errorText: {
-    color: '#8a2020',
-    fontSize: 14,
-    lineHeight: 20,
   },
 
   periodRow: {
