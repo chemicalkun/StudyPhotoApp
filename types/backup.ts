@@ -7,6 +7,7 @@ export const backupStorageKeys = [
   'examPreparationRecords',
   'practiceQuestionRecords',
   'flashcardRecords',
+  'subjectQuestionRecords',
 ] as const;
 
 
@@ -30,6 +31,7 @@ export const restorableBackupStorageKeys = [
   'examPreparationRecords',
   'practiceQuestionRecords',
   'flashcardRecords',
+  'subjectQuestionRecords',
 ] as const satisfies readonly BackupStorageKey[];
 
 
@@ -90,17 +92,36 @@ export const parseStudyPhotoBackup = (
     unknown
   >;
   const hasValidStorageValues = backupStorageKeys.every(
-    (key) =>
-      Object.hasOwn(storage, key) &&
-      (
-        typeof storage[key] === 'string' ||
-        storage[key] === null
-      )
+    (key) => {
+      if (
+        key === 'subjectQuestionRecords' &&
+        !Object.hasOwn(storage, key)
+      ) {
+        return true;
+      }
+
+      return (
+        Object.hasOwn(storage, key) &&
+        (
+          typeof storage[key] === 'string' ||
+          storage[key] === null
+        )
+      );
+    }
   );
 
   if (!hasValidStorageValues) {
     throw new Error('バックアップ内のデータが不正です');
   }
 
-  return backup as StudyPhotoBackup;
+  return {
+    ...backup,
+    storage: {
+      ...storage,
+      subjectQuestionRecords:
+        typeof storage.subjectQuestionRecords === 'string'
+          ? storage.subjectQuestionRecords
+          : null,
+    },
+  } as StudyPhotoBackup;
 };

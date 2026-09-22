@@ -29,6 +29,10 @@ import {
 } from '@/services/exam-preparation-storage';
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
 import {
+  loadSubjectQuestionRecords,
+  saveSubjectQuestionRecord,
+} from '@/services/subject-question-storage';
+import {
   buildExamPreparationSource,
   createExamPreparationRecordId,
   createExamPreparationSourceSignature,
@@ -36,6 +40,10 @@ import {
 import type {
   LectureSummaryRecord,
 } from '@/types/lecture-summary';
+import {
+  createSubjectQuestionSourceSignature,
+  type SubjectQuestionRecord,
+} from '@/types/subject-question';
 
 
 const getDateLabel = (dateKey: string) => {
@@ -79,7 +87,11 @@ export default function ExamPreparationScreen() {
   const [isAnsweringQuestion, setIsAnsweringQuestion] =
     useState(false);
   const [questionError, setQuestionError] = useState('');
+  const [questionSaveError, setQuestionSaveError] =
+    useState('');
   const [subjectAnswer, setSubjectAnswer] = useState('');
+  const [questionHistory, setQuestionHistory] =
+    useState<SubjectQuestionRecord[]>([]);
 
 
   useFocusEffect(
@@ -94,6 +106,7 @@ export default function ExamPreparationScreen() {
           setSaveError('');
           setShareError('');
           setQuestionError('');
+          setQuestionSaveError('');
 
           const [
             records,
@@ -146,6 +159,34 @@ export default function ExamPreparationScreen() {
             hasSavedExamPreparation &&
               !savedExamPreparationIsCurrent
           );
+
+          try {
+            const savedQuestionRecords =
+              await loadSubjectQuestionRecords();
+
+            if (active) {
+              setQuestionHistory(
+                Object.values(savedQuestionRecords)
+                  .filter(
+                    (record) => record.subject === subject
+                  )
+                  .sort(
+                    (a, b) =>
+                      new Date(b.createdAt).getTime() -
+                      new Date(a.createdAt).getTime()
+                  )
+              );
+            }
+          } catch (questionHistoryError) {
+            console.log(
+              '質問履歴読み込みエラー:',
+              questionHistoryError
+            );
+
+            if (active) {
+              setQuestionHistory([]);
+            }
+          }
         } catch (error) {
           console.log('試験対策読み込みエラー:', error);
 
@@ -285,6 +326,7 @@ export default function ExamPreparationScreen() {
     try {
       setIsAnsweringQuestion(true);
       setQuestionError('');
+      setQuestionSaveError('');
       setSubjectAnswer('');
 
       const answer = await answerLectureQuestion(
@@ -297,7 +339,25 @@ export default function ExamPreparationScreen() {
         throw new Error('生成された回答が空です');
       }
 
-      setSubjectAnswer(trimmedAnswer);
+      try {
+        const savedQuestion = await saveSubjectQuestionRecord(
+          subject,
+          question,
+          trimmedAnswer,
+          createSubjectQuestionSourceSignature(summaries)
+        );
+
+        setQuestionHistory((currentHistory) => [
+          savedQuestion,
+          ...currentHistory,
+        ]);
+      } catch (saveQuestionError) {
+        console.log('質問履歴保存エラー:', saveQuestionError);
+        setSubjectAnswer(trimmedAnswer);
+        setQuestionSaveError(
+          '回答は表示できますが、質問履歴を保存できませんでした。'
+        );
+      }
     } catch (error) {
       console.log('授業全体質問エラー:', error);
       setQuestionError(
@@ -539,6 +599,12 @@ export default function ExamPreparationScreen() {
                   </Text>
                 ) : null}
 
+                {questionSaveError !== '' ? (
+                  <Text style={styles.errorText}>
+                    {questionSaveError}
+                  </Text>
+                ) : null}
+
                 {subjectAnswer !== '' ? (
                   <View style={styles.answerCard}>
                     <Text style={styles.answerTitle}>
@@ -547,6 +613,48 @@ export default function ExamPreparationScreen() {
                     <Text style={styles.answerText} selectable>
                       {subjectAnswer}
                     </Text>
+                  </View>
+                ) : null}
+
+                {questionHistory.length > 0 ? (
+                  <View style={styles.questionHistorySection}>
+                    <Text style={styles.questionHistoryTitle}>
+                      これまでの質問
+                    </Text>
+
+                    {questionHistory.map((record) => {
+                      const isCurrent =
+                        record.sourceSummarySignature ===
+                        createSubjectQuestionSourceSignature(
+                          summaries
+                        );
+
+                      return (
+                        <View
+                          key={record.id}
+                          style={styles.questionHistoryCard}
+                        >
+                          <Text style={styles.questionHistoryDate}>
+                            {new Date(record.createdAt)
+                              .toLocaleString('ja-JP')}
+                          </Text>
+                          {!isCurrent ? (
+                            <Text style={styles.questionHistoryOutdated}>
+                              まとめ更新前の回答
+                            </Text>
+                          ) : null}
+                          <Text style={styles.historyQuestion}>
+                            Q. {record.question}
+                          </Text>
+                          <Text
+                            style={styles.historyAnswer}
+                            selectable
+                          >
+                            A. {record.answer}
+                          </Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 ) : null}
               </View>
@@ -877,6 +985,59 @@ const styles = StyleSheet.create({
     color: '#222',
     fontSize: 14,
     lineHeight: 22,
+    marginTop: 6,
+  },
+
+  questionHistorySection: {
+    marginTop: 18,
+  },
+
+  questionHistoryTitle: {
+    color: '#31518f',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 9,
+  },
+
+  questionHistoryCard: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#d5dceb',
+    borderRadius: 9,
+    padding: 12,
+    marginTop: 8,
+  },
+
+  questionHistoryDate: {
+    color: '#777',
+    fontSize: 10,
+  },
+
+  questionHistoryOutdated: {
+    alignSelf: 'flex-start',
+    color: '#725b24',
+    backgroundColor: '#fff3d6',
+    borderRadius: 5,
+    fontSize: 10,
+    fontWeight: 'bold',
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    marginTop: 6,
+  },
+
+  historyQuestion: {
+    color: '#222',
+    fontSize: 14,
+    fontWeight: 'bold',
+    lineHeight: 21,
+    marginTop: 8,
+  },
+
+  historyAnswer: {
+    color: '#333',
+    fontSize: 13,
+    lineHeight: 21,
     marginTop: 6,
   },
 

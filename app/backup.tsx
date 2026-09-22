@@ -154,14 +154,14 @@ export default function BackupScreen() {
         <View style={styles.includedCard}>
           <Text style={styles.cardTitle}>保存されるデータ</Text>
           <Text style={styles.cardText}>
-            時間割・時限設定・写真情報・文字認識結果・授業まとめ・試験対策・練習問題・フラッシュカード
+            時間割・時限設定・写真情報・文字認識結果・授業まとめ・試験対策・練習問題・フラッシュカード・質問履歴
           </Text>
         </View>
 
         <View style={styles.warningCard}>
           <Text style={styles.warningTitle}>現在の制限</Text>
           <Text style={styles.warningText}>
-            写真画像そのものは、このバックアップファイルに含まれません。復元機能と写真を含む完全バックアップは今後追加します。
+            写真画像そのものは、このバックアップファイルに含まれません。復元しても現在の写真は変更されません。
           </Text>
         </View>
 

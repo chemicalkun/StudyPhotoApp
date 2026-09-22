@@ -11,6 +11,7 @@ import { parseExamPreparationRecords } from '@/types/exam-preparation';
 import { parseFlashcardRecords } from '@/types/flashcard';
 import { parseLectureSummaryRecords } from '@/types/lecture-summary';
 import { parsePracticeQuestionRecords } from '@/types/practice-question';
+import { parseSubjectQuestionRecords } from '@/types/subject-question';
 import {
   getPeriodTimesValidationError,
   periodNumbers,
@@ -117,6 +118,12 @@ const validateRestorableData = (
 
   if (storage.flashcardRecords !== null) {
     parseFlashcardRecords(storage.flashcardRecords);
+  }
+
+  if (storage.subjectQuestionRecords !== null) {
+    parseSubjectQuestionRecords(
+      storage.subjectQuestionRecords
+    );
   }
 };
 

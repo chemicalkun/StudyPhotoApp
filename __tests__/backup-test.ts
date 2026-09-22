@@ -35,6 +35,23 @@ describe('StudyPhoto backup', () => {
       '{"月-1":"高分子化学"}'
     );
     expect(backup.storage.flashcardRecords).toBeNull();
+    expect(backup.storage.subjectQuestionRecords).toBeNull();
+  });
+
+  test('質問履歴がない旧バックアップも読み込める', () => {
+    const backup = createStudyPhotoBackup([]);
+    const storageWithoutQuestionHistory = {
+      ...backup.storage,
+    } as Record<string, string | null>;
+
+    delete storageWithoutQuestionHistory.subjectQuestionRecords;
+
+    const parsed = parseStudyPhotoBackup(JSON.stringify({
+      ...backup,
+      storage: storageWithoutQuestionHistory,
+    }));
+
+    expect(parsed.storage.subjectQuestionRecords).toBeNull();
   });
 
   test('対応していないバックアップを拒否する', () => {
