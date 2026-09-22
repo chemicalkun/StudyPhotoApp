@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import {
   Animated,
   Alert,
+  Image,
   Modal,
   PanResponder,
   Pressable,
@@ -22,6 +23,8 @@ import {
   loadLectureSummaryRecords,
   updateLectureSummaryText,
 } from '@/services/lecture-summary-storage';
+import { loadPhotoOcrRecords } from '@/services/photo-ocr-storage';
+import { loadPhotoRecords } from '@/services/photo-storage';
 import { loadPracticeQuestionRecords } from '@/services/practice-question-storage';
 import {
   createExamPreparationRecordId,
@@ -36,6 +39,9 @@ import {
 import type {
   LectureSummaryRecord,
 } from '@/types/lecture-summary';
+import type { PhotoOcrRecords } from '@/types/photo-ocr';
+import { searchRecognizedPhotos } from '@/types/photo-search';
+import type { PhotoRecord } from '@/types/photo';
 import {
   createPracticeQuestionRecordId,
   createPracticeQuestionSourceSignature,
@@ -54,6 +60,30 @@ const getDateLabel = (dateKey: string) => {
   }
 
   return `${Number(month)}月${Number(day)}日`;
+};
+
+
+const getPhotoLabel = (photo: PhotoRecord) => {
+  if (photo.subject !== null && photo.subject !== '') {
+    return photo.subject;
+  }
+
+  if (photo.day !== '' && photo.period !== null) {
+    return `${photo.day}曜${photo.period}限`;
+  }
+
+  return '未分類';
+};
+
+
+const getPhotoDateLabel = (takenAt: string) => {
+  const date = new Date(takenAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return takenAt;
+  }
+
+  return date.toLocaleDateString('ja-JP');
 };
 
 
@@ -87,6 +117,9 @@ export default function ReviewScreen() {
     useState<PracticeQuestionRecords>({});
   const [flashcardRecords, setFlashcardRecords] =
     useState<FlashcardRecords>({});
+  const [photos, setPhotos] = useState<PhotoRecord[]>([]);
+  const [photoOcrRecords, setPhotoOcrRecords] =
+    useState<PhotoOcrRecords>({});
 
   const subjectGroups = Object.entries(
     summaries.reduce<Record<string, LectureSummaryRecord[]>>(
@@ -111,6 +144,11 @@ export default function ReviewScreen() {
   const normalizedSearchQuery = searchQuery
     .trim()
     .toLocaleLowerCase('ja-JP');
+  const photoSearchResults = searchRecognizedPhotos(
+    photos,
+    photoOcrRecords,
+    searchQuery
+  );
   const summaryMatchesSearch = (
     summary: LectureSummaryRecord
   ) => {
@@ -234,11 +272,15 @@ export default function ReviewScreen() {
             loadExamPreparationRecords(),
             loadPracticeQuestionRecords(),
             loadFlashcardRecords(),
+            loadPhotoRecords(),
+            loadPhotoOcrRecords(),
           ]);
           const [
             examPreparationResult,
             practiceQuestionResult,
             flashcardResult,
+            photoResult,
+            photoOcrResult,
           ] = learningDataResults;
 
           setExamPreparationRecords(
@@ -254,6 +296,16 @@ export default function ReviewScreen() {
           setFlashcardRecords(
             flashcardResult.status === 'fulfilled'
               ? flashcardResult.value
+              : {}
+          );
+          setPhotos(
+            photoResult.status === 'fulfilled'
+              ? photoResult.value
+              : []
+          );
+          setPhotoOcrRecords(
+            photoOcrResult.status === 'fulfilled'
+              ? photoOcrResult.value
               : {}
           );
 
@@ -420,14 +472,71 @@ export default function ReviewScreen() {
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="授業名・まとめを検索"
+                placeholder="授業名・まとめ・写真内文字を検索"
                 placeholderTextColor="#888"
                 returnKeyType="search"
                 clearButtonMode="while-editing"
                 autoCorrect={false}
-                accessibilityLabel="授業名とまとめを検索"
+                accessibilityLabel="授業名、まとめ、写真内の文字を検索"
               />
             </View>
+
+            {normalizedSearchQuery !== '' ? (
+              <View style={styles.photoSearchSection}>
+                <Text style={styles.photoSearchTitle}>
+                  写真内の文字
+                </Text>
+
+                {photoSearchResults.length > 0 ? (
+                  <View style={styles.photoSearchList}>
+                    {photoSearchResults.map((result) => (
+                      <Pressable
+                        key={result.photo.id}
+                        style={styles.photoSearchCard}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${getPhotoLabel(result.photo)}の写真を開く`}
+                        onPress={() => {
+                          router.push({
+                            pathname: '/photo/[id]',
+                            params: { id: result.photo.id },
+                          });
+                        }}
+                      >
+                        <Image
+                          style={styles.photoSearchThumbnail}
+                          source={{ uri: result.photo.uri }}
+                        />
+
+                        <View style={styles.photoSearchText}>
+                          <Text style={styles.photoSearchSubject}>
+                            {getPhotoLabel(result.photo)}
+                          </Text>
+                          <Text style={styles.photoSearchDate}>
+                            {getPhotoDateLabel(
+                              result.photo.takenAt
+                            )}
+                          </Text>
+                          <Text
+                            style={styles.photoSearchPreview}
+                            numberOfLines={3}
+                          >
+                            {result.preview}
+                          </Text>
+                        </View>
+
+                        <Text style={styles.photoSearchOpenText}>
+                          ›
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.photoSearchEmptyText}>
+                    一致する写真はありません
+                  </Text>
+                )}
+              </View>
+            ) : null}
 
             <View
               style={styles.modeSelector}
@@ -960,6 +1069,74 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingHorizontal: 14,
     paddingVertical: 11,
+  },
+
+  photoSearchSection: {
+    marginBottom: 18,
+  },
+
+  photoSearchTitle: {
+    color: '#222',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  photoSearchList: {
+    gap: 9,
+    marginTop: 9,
+  },
+
+  photoSearchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f7f3fb',
+    borderWidth: 1,
+    borderColor: '#cbb8dd',
+    borderRadius: 11,
+    padding: 10,
+  },
+
+  photoSearchThumbnail: {
+    width: 68,
+    height: 68,
+    backgroundColor: '#e5e5e5',
+    borderRadius: 7,
+  },
+
+  photoSearchText: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  photoSearchSubject: {
+    color: '#563475',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  photoSearchDate: {
+    color: '#666',
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  photoSearchPreview: {
+    color: '#333',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 5,
+  },
+
+  photoSearchOpenText: {
+    color: '#6b3ca0',
+    fontSize: 24,
+    marginLeft: 8,
+  },
+
+  photoSearchEmptyText: {
+    color: '#777',
+    fontSize: 13,
+    marginTop: 8,
   },
 
   modeSelector: {
