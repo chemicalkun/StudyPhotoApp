@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -66,6 +67,7 @@ export default function ExamPreparationScreen() {
   const [isGenerating, setIsGenerating] =
     useState(false);
   const [saveError, setSaveError] = useState('');
+  const [shareError, setShareError] = useState('');
   const [isExamPreparationSaved, setIsExamPreparationSaved] =
     useState(false);
 
@@ -80,6 +82,7 @@ export default function ExamPreparationScreen() {
           setLoadError('');
           setGenerationError('');
           setSaveError('');
+          setShareError('');
 
           const [
             records,
@@ -173,6 +176,7 @@ export default function ExamPreparationScreen() {
       setIsGenerating(true);
       setGenerationError('');
       setSaveError('');
+      setShareError('');
       setIsExamPreparationSaved(false);
 
       const result = await createExamPreparation(source);
@@ -209,6 +213,27 @@ export default function ExamPreparationScreen() {
       );
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+
+  const shareExamPreparation = async () => {
+    if (examPreparation === '') {
+      return;
+    }
+
+    try {
+      setShareError('');
+
+      await Share.share({
+        title: `${subject}の試験対策`,
+        message: `${subject}の試験対策\n\n${examPreparation}`,
+      });
+    } catch (error) {
+      console.log('試験対策共有エラー:', error);
+      setShareError(
+        '試験対策を共有できませんでした。もう一度お試しください。'
+      );
     }
   };
 
@@ -385,6 +410,12 @@ export default function ExamPreparationScreen() {
               </Text>
             ) : null}
 
+            {shareError !== '' ? (
+              <Text style={styles.errorText}>
+                {shareError}
+              </Text>
+            ) : null}
+
             {examPreparation !== '' ? (
               <View style={styles.resultCard}>
                 <Text style={styles.resultTitle}>
@@ -403,6 +434,17 @@ export default function ExamPreparationScreen() {
                 >
                   {examPreparation}
                 </Text>
+
+                <Pressable
+                  style={styles.shareButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${subject}の試験対策を共有`}
+                  onPress={() => void shareExamPreparation()}
+                >
+                  <Text style={styles.shareButtonText}>
+                    試験対策を共有
+                  </Text>
+                </Pressable>
               </View>
             ) : null}
 
@@ -612,5 +654,20 @@ const styles = StyleSheet.create({
     color: '#222',
     fontSize: 14,
     lineHeight: 23,
+  },
+
+  shareButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#31518f',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 16,
+  },
+
+  shareButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 });
