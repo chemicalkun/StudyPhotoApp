@@ -535,6 +535,8 @@ export default function ReviewScreen() {
                             groupSubject
                           )
                         ];
+                      const hasSavedPracticeQuestions =
+                        savedPracticeQuestions !== undefined;
                       const practiceIsCurrent =
                         savedPracticeQuestions !== undefined &&
                         savedPracticeQuestions.sourceSummarySignature ===
@@ -558,6 +560,8 @@ export default function ReviewScreen() {
                       const savedFlashcards = flashcardRecords[
                         createFlashcardRecordId(groupSubject)
                       ];
+                      const hasSavedFlashcards =
+                        savedFlashcards !== undefined;
                       const flashcardsAreCurrent =
                         savedFlashcards !== undefined &&
                         savedFlashcards.sourceSummarySignature ===
@@ -621,13 +625,17 @@ export default function ReviewScreen() {
                             <Text style={styles.learningProgress}>
                               {practiceIsCurrent
                                 ? `練習問題：覚えた ${practiceKnownCount}/${savedPracticeQuestions.questions.length}問・あとで復習 ${practiceReviewCount}問`
-                                : '練習問題：未作成'}
+                                : hasSavedPracticeQuestions
+                                  ? '練習問題：まとめ更新あり'
+                                  : '練習問題：未作成'}
                             </Text>
 
                             <Text style={styles.learningProgress}>
                               {flashcardsAreCurrent
                                 ? `カード：覚えた ${flashcardKnownCount}/${savedFlashcards.cards.length}枚・あとで復習 ${flashcardReviewCount}枚`
-                                : 'カード：未作成'}
+                                : hasSavedFlashcards
+                                  ? 'カード：まとめ更新あり'
+                                  : 'カード：未作成'}
                             </Text>
                           </View>
 

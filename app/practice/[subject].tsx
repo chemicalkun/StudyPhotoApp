@@ -69,6 +69,7 @@ export default function PracticeQuestionScreen() {
     useState('');
   const [saveError, setSaveError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
+  const [isOutdated, setIsOutdated] = useState(false);
 
 
   useFocusEffect(
@@ -110,14 +111,15 @@ export default function PracticeQuestionScreen() {
             createPracticeQuestionSourceSignature(
               subjectSummaries
             );
-          const canUseSavedRecord =
+          const hasSavedRecord = savedRecord !== undefined;
+          const savedRecordIsCurrent =
             savedRecord !== undefined &&
             savedRecord.sourceSummarySignature ===
               sourceSignature;
 
           setSummaries(subjectSummaries);
           setAvailability(modelAvailability);
-          const loadedQuestions = canUseSavedRecord
+          const loadedQuestions = hasSavedRecord
             ? savedRecord.questions
             : [];
 
@@ -125,9 +127,12 @@ export default function PracticeQuestionScreen() {
           setQuestionOrder(
             loadedQuestions.map((_, index) => index)
           );
-          setIsSaved(canUseSavedRecord);
+          setIsSaved(hasSavedRecord);
+          setIsOutdated(
+            hasSavedRecord && !savedRecordIsCurrent
+          );
           setAssessments(
-            canUseSavedRecord
+            hasSavedRecord
               ? savedRecord.assessments ?? {}
               : {}
           );
@@ -183,6 +188,7 @@ export default function PracticeQuestionScreen() {
       setGenerationError('');
       setSaveError('');
       setIsSaved(false);
+      setIsOutdated(false);
 
       const generatedQuestions =
         await createPracticeQuestions(source);
@@ -218,6 +224,7 @@ export default function PracticeQuestionScreen() {
           createPracticeQuestionSourceSignature(summaries)
         );
         setIsSaved(true);
+        setIsOutdated(false);
       } catch (storageError) {
         console.log('練習問題保存エラー:', storageError);
         setSaveError(
@@ -389,6 +396,12 @@ export default function PracticeQuestionScreen() {
             ) : null}
             {saveError !== '' ? (
               <Text style={styles.errorText}>{saveError}</Text>
+            ) : null}
+
+            {isOutdated ? (
+              <Text style={styles.outdatedNotice}>
+                授業まとめが更新されています。この練習問題は更新前のまとめから作成されたものです。必要に応じて「練習問題を作り直す」を押してください。
+              </Text>
             ) : null}
 
             {isFinished && questions.length > 0 ? (
@@ -591,6 +604,7 @@ const styles = StyleSheet.create({
   disabledButton: { opacity: 0.45 },
   unavailableText: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 13, lineHeight: 20, padding: 12, marginTop: 14 },
   errorText: { color: '#9b2c2c', fontSize: 13, lineHeight: 20, marginTop: 12 },
+  outdatedNotice: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 12, lineHeight: 19, padding: 10, marginTop: 12 },
   completionCard: { backgroundColor: '#f3f6ff', borderWidth: 1, borderColor: '#aebee6', borderRadius: 14, padding: 20, marginTop: 22 },
   completionTitle: { color: '#31518f', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 14 },
   completionText: { color: '#333', fontSize: 15, lineHeight: 25, textAlign: 'center' },

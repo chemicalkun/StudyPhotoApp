@@ -66,6 +66,7 @@ export default function FlashcardScreen() {
     useState('');
   const [saveError, setSaveError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
+  const [isOutdated, setIsOutdated] = useState(false);
 
 
   useFocusEffect(
@@ -103,7 +104,8 @@ export default function FlashcardScreen() {
           const savedRecord = flashcardRecords[
             createFlashcardRecordId(subject)
           ];
-          const canUseSavedRecord =
+          const hasSavedRecord = savedRecord !== undefined;
+          const savedRecordIsCurrent =
             savedRecord !== undefined &&
             savedRecord.sourceSummarySignature ===
               createFlashcardSourceSignature(
@@ -112,7 +114,7 @@ export default function FlashcardScreen() {
 
           setSummaries(subjectSummaries);
           setAvailability(modelAvailability);
-          const loadedCards = canUseSavedRecord
+          const loadedCards = hasSavedRecord
             ? savedRecord.cards
             : [];
 
@@ -121,11 +123,14 @@ export default function FlashcardScreen() {
             loadedCards.map((_, index) => index)
           );
           setAssessments(
-            canUseSavedRecord
+            hasSavedRecord
               ? savedRecord.assessments ?? {}
               : {}
           );
-          setIsSaved(canUseSavedRecord);
+          setIsSaved(hasSavedRecord);
+          setIsOutdated(
+            hasSavedRecord && !savedRecordIsCurrent
+          );
           setCurrentCardPosition(0);
           setShowDefinition(false);
           setIsFinished(false);
@@ -178,6 +183,7 @@ export default function FlashcardScreen() {
       setGenerationError('');
       setSaveError('');
       setIsSaved(false);
+      setIsOutdated(false);
 
       const generatedCards = await createFlashcards(source);
       const validCards = generatedCards
@@ -209,6 +215,7 @@ export default function FlashcardScreen() {
           createFlashcardSourceSignature(summaries)
         );
         setIsSaved(true);
+        setIsOutdated(false);
       } catch (storageError) {
         console.log('フラッシュカード保存エラー:', storageError);
         setSaveError(
@@ -377,6 +384,12 @@ export default function FlashcardScreen() {
             ) : null}
             {saveError !== '' ? (
               <Text style={styles.errorText}>{saveError}</Text>
+            ) : null}
+
+            {isOutdated ? (
+              <Text style={styles.outdatedNotice}>
+                授業まとめが更新されています。このフラッシュカードは更新前のまとめから作成されたものです。必要に応じて「フラッシュカードを作り直す」を押してください。
+              </Text>
             ) : null}
 
             {isFinished && cards.length > 0 ? (
@@ -576,6 +589,7 @@ const styles = StyleSheet.create({
   disabledButton: { opacity: 0.45 },
   unavailableText: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 13, lineHeight: 20, padding: 12, marginTop: 14 },
   errorText: { color: '#9b2c2c', fontSize: 13, lineHeight: 20, marginTop: 12 },
+  outdatedNotice: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 12, lineHeight: 19, padding: 10, marginTop: 12 },
   completionCard: { backgroundColor: '#f5effb', borderWidth: 1, borderColor: '#b798d5', borderRadius: 14, padding: 20, marginTop: 22 },
   completionTitle: { color: '#6b3ca0', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 14 },
   completionText: { color: '#333', fontSize: 15, lineHeight: 25, textAlign: 'center' },
