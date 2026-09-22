@@ -82,6 +82,8 @@ export default function ExamPreparationScreen() {
     useState(false);
   const [isExamPreparationOutdated, setIsExamPreparationOutdated] =
     useState(false);
+  const [isExamPreparationExpanded, setIsExamPreparationExpanded] =
+    useState(false);
   const questionTextRef = useRef('');
   const [hasQuestionText, setHasQuestionText] = useState(false);
   const [isAnsweringQuestion, setIsAnsweringQuestion] =
@@ -113,6 +115,7 @@ export default function ExamPreparationScreen() {
           setQuestionSaveError('');
           setIsQuestionHistoryExpanded(false);
           setExpandedQuestionId(null);
+          setIsExamPreparationExpanded(false);
 
           const [
             records,
@@ -252,6 +255,7 @@ export default function ExamPreparationScreen() {
       }
 
       setExamPreparation(trimmedResult);
+      setIsExamPreparationExpanded(true);
 
       try {
         await saveExamPreparationRecord(
@@ -728,12 +732,33 @@ export default function ExamPreparationScreen() {
                   </Text>
                 ) : null}
 
-                <Text
-                  style={styles.resultText}
-                  selectable
+                <Pressable
+                  style={styles.examPreparationToggle}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    expanded: isExamPreparationExpanded,
+                  }}
+                  onPress={() => {
+                    setIsExamPreparationExpanded(
+                      (expanded) => !expanded
+                    );
+                  }}
                 >
-                  {examPreparation}
-                </Text>
+                  <Text style={styles.examPreparationToggleText}>
+                    {isExamPreparationExpanded
+                      ? '閉じる ▲'
+                      : '開く ▼'}
+                  </Text>
+                </Pressable>
+
+                {isExamPreparationExpanded ? (
+                  <Text
+                    style={styles.resultText}
+                    selectable
+                  >
+                    {examPreparation}
+                  </Text>
+                ) : null}
 
                 <Pressable
                   style={styles.shareButton}
@@ -964,6 +989,22 @@ const styles = StyleSheet.create({
     color: '#222',
     fontSize: 14,
     lineHeight: 23,
+    marginTop: 12,
+  },
+
+  examPreparationToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#dff2e6',
+    borderRadius: 8,
+    padding: 11,
+  },
+
+  examPreparationToggleText: {
+    color: '#28794c',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 
   questionSection: {
