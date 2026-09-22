@@ -13,6 +13,7 @@ import {
 
 import { router, useFocusEffect } from 'expo-router';
 
+import { renameSubjectLearningData } from '@/services/subject-learning-data-storage';
 import {
   defaultPeriodTimes,
   loadPeriodTimes,
@@ -20,6 +21,10 @@ import {
   PeriodTimes,
 } from '@/utils/period-times';
 import { isTimetable } from '@/utils/classification';
+import {
+  areSameSubjectNames,
+  renameTimetableSubject,
+} from '@/utils/timetable-subject';
 import { parsePhotoRecords } from '@/types/photo';
 
 const days = ['月', '火', '水', '木', '金'];
@@ -167,16 +172,28 @@ export default function TimetableScreen() {
       return;
     }
 
-    const newTimetable = {
-      ...timetable,
-      [key]: normalizedSubject,
-    };
+    const isSubjectRename =
+      previousSubject !== '' &&
+      previousSubject !== normalizedSubject;
+    const newTimetable = isSubjectRename
+      ? renameTimetableSubject(
+          timetable,
+          previousSubject,
+          normalizedSubject
+        )
+      : { ...timetable };
+
+    newTimetable[key] = normalizedSubject;
 
     setSaving(true);
 
     let originalPhotos: string | null = null;
     let photosWereUpdated = false;
     let updatedPhotoCount = 0;
+    let updatedLearningRecordCount = 0;
+    let updatedLectureSummaryCount = 0;
+    let rollbackLearningData:
+      (() => Promise<void>) | null = null;
 
     try {
       originalPhotos =
@@ -201,12 +218,18 @@ export default function TimetableScreen() {
 
             const hasPreviousSubject =
               previousSubject !== '' &&
-              photo.subject === previousSubject;
+              photo.subject !== null &&
+              areSameSubjectNames(
+                photo.subject,
+                previousSubject
+              );
 
             const shouldClassify =
-              isSameClassTime &&
               photo.subject !== normalizedSubject &&
-              (isUnclassified || hasPreviousSubject);
+              (
+                hasPreviousSubject ||
+                (isSameClassTime && isUnclassified)
+              );
 
             if (!shouldClassify) {
               return photo;
@@ -231,6 +254,21 @@ export default function TimetableScreen() {
         }
       }
 
+      if (isSubjectRename) {
+        const learningDataUpdate =
+          await renameSubjectLearningData(
+            previousSubject,
+            normalizedSubject
+          );
+
+        updatedLearningRecordCount =
+          learningDataUpdate.updatedRecordCount;
+        updatedLectureSummaryCount =
+          learningDataUpdate.updatedLectureSummaryCount;
+        rollbackLearningData =
+          learningDataUpdate.rollback;
+      }
+
       await AsyncStorage.setItem(
         'timetable',
         JSON.stringify(newTimetable)
@@ -240,14 +278,51 @@ export default function TimetableScreen() {
       setLoadError('');
       setModalVisible(false);
 
-      if (updatedPhotoCount > 0) {
+      if (
+        updatedPhotoCount > 0 ||
+        updatedLearningRecordCount > 0 ||
+        isSubjectRename
+      ) {
+        const updateMessages = [];
+
+        if (updatedPhotoCount > 0) {
+          updateMessages.push(
+            `既存の写真${updatedPhotoCount}枚を「${normalizedSubject}」に更新しました。`
+          );
+        }
+
+        if (updatedLearningRecordCount > 0) {
+          updateMessages.push(
+            `関連する学習データ${updatedLearningRecordCount}件の授業名も更新しました。`
+          );
+        }
+
+        if (isSubjectRename) {
+          updateMessages.push(
+            updatedLectureSummaryCount > 0
+              ? `復習タブの授業まとめ${updatedLectureSummaryCount}件を更新しました。`
+              : '変更前の授業名に一致する復習データは見つかりませんでした。'
+          );
+        }
+
         Alert.alert(
           '時間割を保存しました',
-          `既存の写真${updatedPhotoCount}枚を「${normalizedSubject}」に更新しました。`
+          updateMessages.join('\n')
         );
       }
     } catch (error) {
       console.log('時間割保存エラー:', error);
+
+      if (rollbackLearningData !== null) {
+        try {
+          await rollbackLearningData();
+        } catch (rollbackError) {
+          console.log(
+            '学習データの授業名復元エラー:',
+            rollbackError
+          );
+        }
+      }
 
       if (photosWereUpdated && originalPhotos !== null) {
         try {
