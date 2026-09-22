@@ -20,6 +20,7 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+import { LoadErrorCard } from '@/components/load-error-card';
 import { PhotoRecord } from '@/types/photo';
 import type {
   PhotoOcrRecord,
@@ -112,6 +113,8 @@ export default function SubjectScreen() {
 
   const [status, setStatus] =
     useState('読み込み中...');
+  const [loadError, setLoadError] = useState('');
+  const [loadRevision, setLoadRevision] = useState(0);
 
   const [failedPhotoIds, setFailedPhotoIds] =
     useState<Record<string, boolean>>({});
@@ -186,8 +189,14 @@ export default function SubjectScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Incrementing this value retries the focus-time load.
+      void loadRevision;
+      let active = true;
+
       const loadPhotos = async () => {
         try {
+          setStatus('読み込み中...');
+          setLoadError('');
           setFailedPhotoIds({});
           setPhotoOcrRecords({});
           setOcrLoadError('');
@@ -195,7 +204,60 @@ export default function SubjectScreen() {
           setSummaryLoadError('');
           setSelectedLectureSection(null);
 
-          const allPhotos = await loadPhotoRecords();
+          const [
+            photoResult,
+            ocrResult,
+            summaryResult,
+          ] = await Promise.allSettled([
+            loadPhotoRecords(),
+            loadPhotoOcrRecords(),
+            loadLectureSummaryRecords(),
+          ]);
+
+          if (!active) {
+            return;
+          }
+
+          if (ocrResult.status === 'fulfilled') {
+            setPhotoOcrRecords(ocrResult.value);
+          } else {
+            console.log(
+              '授業回OCR結果読み込みエラー:',
+              ocrResult.reason
+            );
+            setOcrLoadError(
+              '保存済みの文字認識結果を読み込めませんでした。'
+            );
+          }
+
+          if (summaryResult.status === 'fulfilled') {
+            setLectureSummaryRecords(
+              summaryResult.value
+            );
+          } else {
+            console.log(
+              '授業まとめ読み込みエラー:',
+              summaryResult.reason
+            );
+            setSummaryLoadError(
+              '保存済みの授業まとめを読み込めませんでした。'
+            );
+          }
+
+          if (photoResult.status === 'rejected') {
+            console.log(
+              '授業写真読み込みエラー:',
+              photoResult.reason
+            );
+            setLectureGroups([]);
+            setStatus('');
+            setLoadError(
+              '授業写真を読み込めませんでした。データは削除されていません。'
+            );
+            return;
+          }
+
+          const allPhotos = photoResult.value;
 
           if (allPhotos.length === 0) {
             setLectureGroups([]);
@@ -273,54 +335,28 @@ export default function SubjectScreen() {
           setStatus(
             `${subjectPhotos.length}枚の写真`
           );
-
-          try {
-            const savedOcrRecords =
-              await loadPhotoOcrRecords();
-
-            setPhotoOcrRecords(savedOcrRecords);
-          } catch (ocrError) {
-            console.log(
-              '授業回OCR結果読み込みエラー:',
-              ocrError
-            );
-
-            setOcrLoadError(
-              '保存済みの文字認識結果を読み込めませんでした。'
-            );
-          }
-
-          try {
-            const savedSummaryRecords =
-              await loadLectureSummaryRecords();
-
-            setLectureSummaryRecords(
-              savedSummaryRecords
-            );
-          } catch (summaryError) {
-            console.log(
-              '授業まとめ読み込みエラー:',
-              summaryError
-            );
-
-            setSummaryLoadError(
-              '保存済みの授業まとめを読み込めませんでした。'
-            );
-          }
         } catch (error) {
           console.log(
             '授業写真読み込みエラー:',
             error
           );
 
-          setStatus(
-            '写真の読み込みでエラーが発生しました'
-          );
+          if (active) {
+            setLectureGroups([]);
+            setStatus('');
+            setLoadError(
+              '授業写真を読み込めませんでした。データは削除されていません。'
+            );
+          }
         }
       };
 
-      loadPhotos();
-    }, [isUnclassified, subject])
+      void loadPhotos();
+
+      return () => {
+        active = false;
+      };
+    }, [isUnclassified, loadRevision, subject])
   );
 
 
@@ -724,16 +760,37 @@ export default function SubjectScreen() {
               {status}
             </Text>
 
+            {loadError !== '' ? (
+              <LoadErrorCard
+                message={loadError}
+                onRetry={() => {
+                  setLoadRevision(
+                    (revision) => revision + 1
+                  );
+                }}
+              />
+            ) : null}
+
             {ocrLoadError !== '' ? (
-              <Text style={styles.ocrLoadError}>
-                {ocrLoadError}
-              </Text>
+              <LoadErrorCard
+                message={ocrLoadError}
+                onRetry={() => {
+                  setLoadRevision(
+                    (revision) => revision + 1
+                  );
+                }}
+              />
             ) : null}
 
             {summaryLoadError !== '' ? (
-              <Text style={styles.ocrLoadError}>
-                {summaryLoadError}
-              </Text>
+              <LoadErrorCard
+                message={summaryLoadError}
+                onRetry={() => {
+                  setLoadRevision(
+                    (revision) => revision + 1
+                  );
+                }}
+              />
             ) : null}
 
             {isUnclassified ? (
@@ -744,11 +801,13 @@ export default function SubjectScreen() {
           </View>
         }
         ListEmptyComponent={
-          <Text style={styles.emptyText}>
-            {isUnclassified
-              ? '未分類の写真はありません'
-              : 'この授業の写真はありません'}
-          </Text>
+          loadError !== '' ? null : (
+            <Text style={styles.emptyText}>
+              {isUnclassified
+                ? '未分類の写真はありません'
+                : 'この授業の写真はありません'}
+            </Text>
+          )
         }
         renderSectionHeader={({ section }) => (
           <View style={styles.lectureHeader}>
@@ -1135,13 +1194,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 6,
-    marginBottom: 12,
-  },
-
-  ocrLoadError: {
-    color: '#9b2c2c',
-    fontSize: 13,
-    lineHeight: 19,
     marginBottom: 12,
   },
 
