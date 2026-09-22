@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -10,6 +10,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { hasSeenGettingStartedGuide } from '@/services/getting-started-storage';
 import {
   parsePhotoRecords,
   PhotoRecord,
@@ -19,6 +20,33 @@ import {
 export default function HomeScreen() {
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
   const [loadError, setLoadError] = useState('');
+
+
+  useEffect(() => {
+    let active = true;
+
+    const openGettingStartedGuide = async () => {
+      try {
+        const hasSeenGuide =
+          await hasSeenGettingStartedGuide();
+
+        if (active && !hasSeenGuide) {
+          router.push({
+            pathname: '/getting-started',
+            params: { from: 'onboarding' },
+          });
+        }
+      } catch (error) {
+        console.log('初回ガイド確認エラー:', error);
+      }
+    };
+
+    void openGettingStartedGuide();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
 
   useFocusEffect(

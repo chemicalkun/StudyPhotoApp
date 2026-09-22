@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -6,7 +7,13 @@ import {
   View,
 } from 'react-native';
 
-import { router, Stack } from 'expo-router';
+import {
+  router,
+  Stack,
+  useLocalSearchParams,
+} from 'expo-router';
+
+import { markGettingStartedGuideAsSeen } from '@/services/getting-started-storage';
 
 
 const guideSteps = [
@@ -38,12 +45,32 @@ const guideSteps = [
 
 
 export default function GettingStartedScreen() {
+  const params = useLocalSearchParams();
+  const openedForOnboarding =
+    params.from === 'onboarding';
+
+
+  useEffect(() => {
+    const markAsSeen = async () => {
+      try {
+        await markGettingStartedGuideAsSeen();
+      } catch (error) {
+        console.log('初回ガイド保存エラー:', error);
+      }
+    };
+
+    void markAsSeen();
+  }, []);
+
+
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
           title: '使い方',
-          headerBackTitle: '設定',
+          headerBackTitle: openedForOnboarding
+            ? 'ホーム'
+            : '設定',
         }}
       />
 
@@ -108,7 +135,9 @@ export default function GettingStartedScreen() {
           onPress={() => router.back()}
         >
           <Text style={styles.closeButtonText}>
-            設定に戻る
+            {openedForOnboarding
+              ? 'ホームへ進む'
+              : '設定に戻る'}
           </Text>
         </Pressable>
       </ScrollView>
