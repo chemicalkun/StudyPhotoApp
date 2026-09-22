@@ -412,6 +412,13 @@ export default function ReviewScreen() {
                             (assessment) => assessment === 'known'
                           ).length
                         : 0;
+                      const practiceReviewCount = practiceIsCurrent
+                        ? Object.values(
+                            savedPracticeQuestions.assessments ?? {}
+                          ).filter(
+                            (assessment) => assessment === 'review'
+                          ).length
+                        : 0;
                       const savedFlashcards = flashcardRecords[
                         createFlashcardRecordId(groupSubject)
                       ];
@@ -471,13 +478,13 @@ export default function ReviewScreen() {
 
                             <Text style={styles.learningProgress}>
                               {practiceIsCurrent
-                                ? `練習問題：覚えた ${practiceKnownCount}/${savedPracticeQuestions.questions.length}問`
+                                ? `練習問題：覚えた ${practiceKnownCount}/${savedPracticeQuestions.questions.length}問・あとで復習 ${practiceReviewCount}問`
                                 : '練習問題：未作成'}
                             </Text>
 
                             <Text style={styles.learningProgress}>
                               {flashcardsAreCurrent
-                                ? `カード：覚えた ${flashcardKnownCount}/${savedFlashcards.cards.length}枚・復習 ${flashcardReviewCount}枚`
+                                ? `カード：覚えた ${flashcardKnownCount}/${savedFlashcards.cards.length}枚・あとで復習 ${flashcardReviewCount}枚`
                                 : 'カード：未作成'}
                             </Text>
                           </View>

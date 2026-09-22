@@ -401,7 +401,7 @@ export default function PracticeQuestionScreen() {
                   覚えた {knownCount}問
                 </Text>
                 <Text style={styles.completionText}>
-                  もう一度 {reviewCount}問
+                  あとで復習 {reviewCount}問
                 </Text>
                 <Text style={styles.completionText}>
                   未評価 {unansweredCount}問
@@ -419,7 +419,7 @@ export default function PracticeQuestionScreen() {
                     }}
                   >
                     <Text style={styles.retryReviewButtonText}>
-                      「もう一度」の問題を復習
+                      あとで復習だけ解き直す
                     </Text>
                   </Pressable>
                 ) : null}
@@ -455,7 +455,7 @@ export default function PracticeQuestionScreen() {
                 </View>
 
                 <Text style={styles.assessmentSummary}>
-                  覚えた {knownCount}問・もう一度 {reviewCount}問
+                  覚えた {knownCount}問・あとで復習 {reviewCount}問
                 </Text>
 
                 <View style={styles.questionCard}>
@@ -489,7 +489,7 @@ export default function PracticeQuestionScreen() {
                           }
                         >
                           <Text style={styles.reviewButtonText}>
-                            もう一度
+                            あとで復習
                           </Text>
                         </Pressable>
 
