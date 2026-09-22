@@ -406,6 +406,25 @@ export default function ExamPreparationScreen() {
   };
 
 
+  const shareQuestionHistory = async (
+    record: SubjectQuestionRecord
+  ) => {
+    try {
+      setQuestionSaveError('');
+
+      await Share.share({
+        title: `${subject}の質問と回答`,
+        message: `${subject}\n\nQ. ${record.question}\n\nA. ${record.answer}`,
+      });
+    } catch (error) {
+      console.log('質問履歴共有エラー:', error);
+      setQuestionSaveError(
+        '質問と回答を共有できませんでした。もう一度お試しください。'
+      );
+    }
+  };
+
+
   const confirmDeleteQuestionHistory = (
     record: SubjectQuestionRecord
   ) => {
@@ -750,20 +769,36 @@ export default function ExamPreparationScreen() {
                                   >
                                     A. {record.answer}
                                   </Text>
-                                  <Pressable
-                                    style={styles.deleteHistoryButton}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="この質問履歴を削除"
-                                    onPress={() =>
-                                      confirmDeleteQuestionHistory(
-                                        record
-                                      )
-                                    }
-                                  >
-                                    <Text style={styles.deleteHistoryButtonText}>
-                                      この質問履歴を削除
-                                    </Text>
-                                  </Pressable>
+                                  <View style={styles.historyActions}>
+                                    <Pressable
+                                      style={styles.shareHistoryButton}
+                                      accessibilityRole="button"
+                                      accessibilityLabel="この質問と回答を共有"
+                                      onPress={() =>
+                                        void shareQuestionHistory(
+                                          record
+                                        )
+                                      }
+                                    >
+                                      <Text style={styles.shareHistoryButtonText}>
+                                        質問と回答を共有
+                                      </Text>
+                                    </Pressable>
+                                    <Pressable
+                                      style={styles.deleteHistoryButton}
+                                      accessibilityRole="button"
+                                      accessibilityLabel="この質問履歴を削除"
+                                      onPress={() =>
+                                        confirmDeleteQuestionHistory(
+                                          record
+                                        )
+                                      }
+                                    >
+                                      <Text style={styles.deleteHistoryButtonText}>
+                                        この質問履歴を削除
+                                      </Text>
+                                    </Pressable>
+                                  </View>
                                 </View>
                               ) : null}
                             </View>
@@ -1231,14 +1266,33 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
 
+  historyActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+
+  shareHistoryButton: {
+    borderWidth: 1,
+    borderColor: '#31518f',
+    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+
+  shareHistoryButtonText: {
+    color: '#31518f',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
   deleteHistoryButton: {
-    alignSelf: 'flex-start',
     borderWidth: 1,
     borderColor: '#c95b5b',
     borderRadius: 7,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    marginTop: 12,
   },
 
   deleteHistoryButtonText: {
