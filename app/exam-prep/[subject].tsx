@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -6,6 +6,7 @@ import {
   Share,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -17,6 +18,7 @@ import {
 } from 'expo-router';
 
 import {
+  answerLectureQuestion,
   createExamPreparation,
   getLectureSummaryAvailability,
   type LectureSummaryAvailability,
@@ -72,6 +74,12 @@ export default function ExamPreparationScreen() {
     useState(false);
   const [isExamPreparationOutdated, setIsExamPreparationOutdated] =
     useState(false);
+  const questionTextRef = useRef('');
+  const [hasQuestionText, setHasQuestionText] = useState(false);
+  const [isAnsweringQuestion, setIsAnsweringQuestion] =
+    useState(false);
+  const [questionError, setQuestionError] = useState('');
+  const [subjectAnswer, setSubjectAnswer] = useState('');
 
 
   useFocusEffect(
@@ -85,6 +93,7 @@ export default function ExamPreparationScreen() {
           setGenerationError('');
           setSaveError('');
           setShareError('');
+          setQuestionError('');
 
           const [
             records,
@@ -244,6 +253,58 @@ export default function ExamPreparationScreen() {
       setShareError(
         '試験対策を共有できませんでした。もう一度お試しください。'
       );
+    }
+  };
+
+
+  const askSubjectQuestion = async () => {
+    if (
+      summaries.length === 0 ||
+      availability !== 'available' ||
+      isAnsweringQuestion
+    ) {
+      return;
+    }
+
+    const question = questionTextRef.current.trim();
+
+    if (question === '') {
+      setQuestionError('質問を入力してください。');
+      return;
+    }
+
+    const source = buildExamPreparationSource(summaries);
+
+    if (source === '') {
+      setQuestionError(
+        '質問に使える授業まとめがありません。'
+      );
+      return;
+    }
+
+    try {
+      setIsAnsweringQuestion(true);
+      setQuestionError('');
+      setSubjectAnswer('');
+
+      const answer = await answerLectureQuestion(
+        source,
+        question
+      );
+      const trimmedAnswer = answer.trim();
+
+      if (trimmedAnswer === '') {
+        throw new Error('生成された回答が空です');
+      }
+
+      setSubjectAnswer(trimmedAnswer);
+    } catch (error) {
+      console.log('授業全体質問エラー:', error);
+      setQuestionError(
+        '回答を作成できませんでした。少し待ってから再試行してください。'
+      );
+    } finally {
+      setIsAnsweringQuestion(false);
     }
   };
 
@@ -424,6 +485,71 @@ export default function ExamPreparationScreen() {
               <Text style={styles.errorText}>
                 {shareError}
               </Text>
+            ) : null}
+
+            {availability === 'available' ? (
+              <View style={styles.questionSection}>
+                <Text style={styles.questionTitle}>
+                  この授業全体について質問
+                </Text>
+
+                <Text style={styles.questionDescription}>
+                  保存済みの各回まとめを根拠に、端末内AIが回答します。
+                </Text>
+
+                <TextInput
+                  style={styles.questionInput}
+                  defaultValue={questionTextRef.current}
+                  onChangeText={(text) => {
+                    questionTextRef.current = text;
+                    setHasQuestionText(text.trim() !== '');
+                    setQuestionError('');
+                  }}
+                  placeholder="例：試験前に優先して覚える内容は？"
+                  multiline
+                  maxLength={500}
+                  editable={!isAnsweringQuestion}
+                  accessibilityLabel="授業全体への質問"
+                />
+
+                <Pressable
+                  style={[
+                    styles.questionButton,
+                    (isAnsweringQuestion || !hasQuestionText) &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={
+                    isAnsweringQuestion || !hasQuestionText
+                  }
+                  onPress={() => void askSubjectQuestion()}
+                >
+                  {isAnsweringQuestion ? (
+                    <ActivityIndicator color="white" />
+                  ) : null}
+                  <Text style={styles.questionButtonText}>
+                    {isAnsweringQuestion
+                      ? '回答を作成中...'
+                      : '質問する'}
+                  </Text>
+                </Pressable>
+
+                {questionError !== '' ? (
+                  <Text style={styles.errorText}>
+                    {questionError}
+                  </Text>
+                ) : null}
+
+                {subjectAnswer !== '' ? (
+                  <View style={styles.answerCard}>
+                    <Text style={styles.answerTitle}>
+                      回答
+                    </Text>
+                    <Text style={styles.answerText} selectable>
+                      {subjectAnswer}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             ) : null}
 
             {examPreparation !== '' ? (
@@ -680,6 +806,78 @@ const styles = StyleSheet.create({
     color: '#222',
     fontSize: 14,
     lineHeight: 23,
+  },
+
+  questionSection: {
+    backgroundColor: '#f3f6ff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 18,
+  },
+
+  questionTitle: {
+    color: '#31518f',
+    fontSize: 17,
+    fontWeight: 'bold',
+  },
+
+  questionDescription: {
+    color: '#555',
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 5,
+  },
+
+  questionInput: {
+    minHeight: 88,
+    color: '#222',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#b8c4df',
+    borderRadius: 8,
+    fontSize: 15,
+    lineHeight: 22,
+    padding: 11,
+    marginTop: 12,
+  },
+
+  questionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#31518f',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 10,
+  },
+
+  questionButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  answerCard: {
+    backgroundColor: 'white',
+    borderRadius: 9,
+    padding: 13,
+    marginTop: 12,
+  },
+
+  answerTitle: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  answerText: {
+    color: '#222',
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: 6,
   },
 
   shareButton: {
