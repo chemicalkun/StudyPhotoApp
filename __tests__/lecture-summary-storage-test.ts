@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   loadLectureSummaryRecords,
   saveLectureSummaryRecord,
+  updateLectureSummaryText,
 } from '@/services/lecture-summary-storage';
 import {
   createLectureSummaryId,
@@ -78,6 +79,25 @@ describe('lecture summary storage', () => {
       ]);
 
     expect(updatedSignature).not.toBe(firstSignature);
+  });
+
+  test('保存済みのまとめ本文を編集する', async () => {
+    const saved = await saveLectureSummaryRecord(
+      '高分子化学',
+      '2026-9-21',
+      '編集前のまとめ',
+      'source-1'
+    );
+
+    const updated = await updateLectureSummaryText(
+      saved.id,
+      ' 編集後のまとめ '
+    );
+    const records = await loadLectureSummaryRecords();
+
+    expect(updated.text).toBe('編集後のまとめ');
+    expect(updated.sourceOcrSignature).toBe('source-1');
+    expect(records[saved.id]).toEqual(updated);
   });
 });
 

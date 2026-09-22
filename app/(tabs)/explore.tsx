@@ -18,7 +18,10 @@ import { router, useFocusEffect } from 'expo-router';
 
 import { loadExamPreparationRecords } from '@/services/exam-preparation-storage';
 import { loadFlashcardRecords } from '@/services/flashcard-storage';
-import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
+import {
+  loadLectureSummaryRecords,
+  updateLectureSummaryText,
+} from '@/services/lecture-summary-storage';
 import { loadPracticeQuestionRecords } from '@/services/practice-question-storage';
 import {
   createExamPreparationRecordId,
@@ -63,6 +66,13 @@ export default function ReviewScreen() {
     useState<LectureSummaryRecord[]>([]);
   const [selectedSummary, setSelectedSummary] =
     useState<LectureSummaryRecord | null>(null);
+  const [isEditingSummary, setIsEditingSummary] =
+    useState(false);
+  const editedSummaryTextRef = useRef('');
+  const [summaryEditError, setSummaryEditError] =
+    useState('');
+  const [isSavingSummary, setIsSavingSummary] =
+    useState(false);
   const [loadError, setLoadError] = useState('');
   const [reviewMode, setReviewMode] =
     useState<ReviewMode>('subject');
@@ -294,6 +304,63 @@ export default function ReviewScreen() {
         '共有できませんでした',
         '授業まとめを共有できませんでした。もう一度お試しください。'
       );
+    }
+  };
+
+
+  const openSummary = (summary: LectureSummaryRecord) => {
+    setSelectedSummary(summary);
+    editedSummaryTextRef.current = summary.text;
+    setIsEditingSummary(false);
+    setSummaryEditError('');
+  };
+
+
+  const closeSummary = () => {
+    setSelectedSummary(null);
+    setIsEditingSummary(false);
+    setSummaryEditError('');
+  };
+
+
+  const saveEditedSummary = async () => {
+    if (selectedSummary === null || isSavingSummary) {
+      return;
+    }
+
+    const trimmedText = editedSummaryTextRef.current.trim();
+
+    if (trimmedText === '') {
+      setSummaryEditError('まとめ本文を入力してください。');
+      return;
+    }
+
+    try {
+      setIsSavingSummary(true);
+      setSummaryEditError('');
+
+      const updatedSummary = await updateLectureSummaryText(
+        selectedSummary.id,
+        trimmedText
+      );
+
+      setSummaries((currentSummaries) =>
+        currentSummaries.map((summary) =>
+          summary.id === updatedSummary.id
+            ? updatedSummary
+            : summary
+        )
+      );
+      setSelectedSummary(updatedSummary);
+      editedSummaryTextRef.current = updatedSummary.text;
+      setIsEditingSummary(false);
+    } catch (error) {
+      console.log('授業まとめ編集エラー:', error);
+      setSummaryEditError(
+        'まとめを保存できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setIsSavingSummary(false);
     }
   };
 
@@ -634,9 +701,7 @@ export default function ReviewScreen() {
                               style={styles.summaryCard}
                               accessibilityRole="button"
                               accessibilityLabel={`${selectedLectureSubject}第${lectureNumber}回のまとめを開く`}
-                              onPress={() =>
-                                setSelectedSummary(summary)
-                              }
+                              onPress={() => openSummary(summary)}
                             >
                               <View style={styles.cardHeader}>
                                 <Text style={styles.subjectName}>
@@ -681,7 +746,7 @@ export default function ReviewScreen() {
         visible={selectedSummary !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setSelectedSummary(null)}
+        onRequestClose={closeSummary}
       >
         <View style={styles.modalBackground}>
           <View style={styles.modalContent}>
@@ -699,34 +764,102 @@ export default function ReviewScreen() {
                 : getDateLabel(selectedSummary.dateKey)}
             </Text>
 
-            <ScrollView style={styles.modalScrollView}>
-              <Text
-                style={styles.modalSummaryText}
-                selectable
-              >
-                {selectedSummary?.text}
-              </Text>
-            </ScrollView>
+            {isEditingSummary ? (
+              <>
+                <TextInput
+                  style={styles.summaryEditInput}
+                  defaultValue={editedSummaryTextRef.current}
+                  onChangeText={(text) => {
+                    editedSummaryTextRef.current = text;
+                  }}
+                  multiline
+                  textAlignVertical="top"
+                  autoFocus
+                  accessibilityLabel="授業まとめ本文"
+                />
 
-            <Pressable
-              style={styles.shareSummaryButton}
-              accessibilityRole="button"
-              accessibilityLabel="この授業まとめを共有"
-              onPress={() => void shareSelectedSummary()}
-            >
-              <Text style={styles.shareSummaryButtonText}>
-                このまとめを共有
-              </Text>
-            </Pressable>
+                {summaryEditError !== '' ? (
+                  <Text style={styles.summaryEditError}>
+                    {summaryEditError}
+                  </Text>
+                ) : null}
 
-            <Pressable
-              style={styles.closeButton}
-              onPress={() => setSelectedSummary(null)}
-            >
-              <Text style={styles.closeButtonText}>
-                閉じる
-              </Text>
-            </Pressable>
+                <Pressable
+                  style={[
+                    styles.saveSummaryButton,
+                    isSavingSummary && styles.disabledButton,
+                  ]}
+                  disabled={isSavingSummary}
+                  onPress={() => void saveEditedSummary()}
+                >
+                  <Text style={styles.saveSummaryButtonText}>
+                    {isSavingSummary ? '保存中...' : '変更を保存'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.cancelEditButton}
+                  disabled={isSavingSummary}
+                  onPress={() => {
+                    editedSummaryTextRef.current =
+                      selectedSummary?.text ?? '';
+                    setIsEditingSummary(false);
+                    setSummaryEditError('');
+                  }}
+                >
+                  <Text style={styles.cancelEditButtonText}>
+                    キャンセル
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <ScrollView style={styles.modalScrollView}>
+                  <Text
+                    style={styles.modalSummaryText}
+                    selectable
+                  >
+                    {selectedSummary?.text}
+                  </Text>
+                </ScrollView>
+
+                <Pressable
+                  style={styles.editSummaryButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="この授業まとめを編集"
+                  onPress={() => {
+                    editedSummaryTextRef.current =
+                      selectedSummary?.text ?? '';
+                    setIsEditingSummary(true);
+                    setSummaryEditError('');
+                  }}
+                >
+                  <Text style={styles.editSummaryButtonText}>
+                    このまとめを編集
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.shareSummaryButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="この授業まとめを共有"
+                  onPress={() => void shareSelectedSummary()}
+                >
+                  <Text style={styles.shareSummaryButtonText}>
+                    このまとめを共有
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.closeButton}
+                  onPress={closeSummary}
+                >
+                  <Text style={styles.closeButtonText}>
+                    閉じる
+                  </Text>
+                </Pressable>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -1050,11 +1183,78 @@ const styles = StyleSheet.create({
     lineHeight: 23,
   },
 
+  summaryEditInput: {
+    minHeight: 250,
+    maxHeight: 430,
+    color: '#222',
+    backgroundColor: '#f7f7f7',
+    borderWidth: 1,
+    borderColor: '#bdbdbd',
+    borderRadius: 9,
+    fontSize: 15,
+    lineHeight: 23,
+    padding: 12,
+    marginTop: 16,
+  },
+
+  summaryEditError: {
+    color: '#9b2c2c',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 9,
+  },
+
+  saveSummaryButton: {
+    backgroundColor: '#28794c',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 14,
+  },
+
+  saveSummaryButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  cancelEditButton: {
+    backgroundColor: '#e8e8e8',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 10,
+  },
+
+  cancelEditButtonText: {
+    color: '#333',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  editSummaryButton: {
+    backgroundColor: '#28794c',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 18,
+  },
+
+  editSummaryButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  disabledButton: {
+    opacity: 0.55,
+  },
+
   shareSummaryButton: {
     backgroundColor: '#31518f',
     borderRadius: 8,
     padding: 12,
-    marginTop: 18,
+    marginTop: 10,
   },
 
   shareSummaryButtonText: {

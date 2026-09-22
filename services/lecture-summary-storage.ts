@@ -70,3 +70,35 @@ export const saveLectureSummaryRecord = async (
 
   return record;
 };
+
+
+export const updateLectureSummaryText = async (
+  summaryId: string,
+  text: string
+): Promise<LectureSummaryRecord> => {
+  const trimmedText = text.trim();
+
+  if (summaryId === '' || trimmedText === '') {
+    throw new Error('保存する授業まとめがありません');
+  }
+
+  const records = await loadLectureSummaryRecords();
+  const record = records[summaryId];
+
+  if (record === undefined) {
+    throw new Error('授業まとめが見つかりません');
+  }
+
+  const updatedRecord: LectureSummaryRecord = {
+    ...record,
+    text: trimmedText,
+    createdAt: new Date().toISOString(),
+  };
+
+  await saveLectureSummaryRecords({
+    ...records,
+    [summaryId]: updatedRecord,
+  });
+
+  return updatedRecord;
+};
