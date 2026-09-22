@@ -18,6 +18,7 @@ import {
 
 import { router, useFocusEffect } from 'expo-router';
 
+import { LoadErrorCard } from '@/components/load-error-card';
 import { loadExamPreparationRecords } from '@/services/exam-preparation-storage';
 import { loadFlashcardRecords } from '@/services/flashcard-storage';
 import {
@@ -108,6 +109,7 @@ export default function ReviewScreen() {
     useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [loadRevision, setLoadRevision] = useState(0);
   const [reviewMode, setReviewMode] =
     useState<ReviewMode>('subject');
   const [selectedLectureSubject, setSelectedLectureSubject] =
@@ -253,6 +255,8 @@ export default function ReviewScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Incrementing this value retries the focus-time load.
+      void loadRevision;
       let active = true;
 
       const loadSummaries = async () => {
@@ -361,7 +365,7 @@ export default function ReviewScreen() {
       return () => {
         active = false;
       };
-    }, [])
+    }, [loadRevision])
   );
 
 
@@ -482,11 +486,12 @@ export default function ReviewScreen() {
         </Text>
 
         {loadError !== '' ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>
-              {loadError}
-            </Text>
-          </View>
+          <LoadErrorCard
+            message={loadError}
+            onRetry={() => {
+              setLoadRevision((revision) => revision + 1);
+            }}
+          />
         ) : null}
 
         {loading ? (
@@ -1210,20 +1215,6 @@ const styles = StyleSheet.create({
 
   modeButtonTextActive: {
     color: '#31518f',
-  },
-
-  errorBox: {
-    backgroundColor: '#ffe8e8',
-    borderWidth: 1,
-    borderColor: '#e39a9a',
-    borderRadius: 10,
-    padding: 14,
-  },
-
-  errorText: {
-    color: '#8a2020',
-    fontSize: 14,
-    lineHeight: 20,
   },
 
   loadingContainer: {

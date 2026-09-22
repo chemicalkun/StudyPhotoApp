@@ -10,6 +10,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { LoadErrorCard } from '@/components/load-error-card';
 import { hasSeenGettingStartedGuide } from '@/services/getting-started-storage';
 import {
   parsePhotoRecords,
@@ -20,6 +21,7 @@ import {
 export default function HomeScreen() {
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
   const [loadError, setLoadError] = useState('');
+  const [loadRevision, setLoadRevision] = useState(0);
 
 
   useEffect(() => {
@@ -51,12 +53,20 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Incrementing this value retries the focus-time load.
+      void loadRevision;
+      let active = true;
+
       const loadPhotos = async () => {
         try {
           setLoadError('');
 
           const savedPhotos =
             await AsyncStorage.getItem('photos');
+
+          if (!active) {
+            return;
+          }
 
           if (savedPhotos === null) {
             setPhotos([]);
@@ -70,15 +80,21 @@ export default function HomeScreen() {
             error
           );
 
-          setPhotos([]);
-          setLoadError(
-            '写真データを読み込めませんでした。データは削除されていません。'
-          );
+          if (active) {
+            setPhotos([]);
+            setLoadError(
+              '写真データを読み込めませんでした。データは削除されていません。'
+            );
+          }
         }
       };
 
-      loadPhotos();
-    }, [])
+      void loadPhotos();
+
+      return () => {
+        active = false;
+      };
+    }, [loadRevision])
   );
 
 
@@ -139,11 +155,12 @@ export default function HomeScreen() {
 
 
       {loadError !== '' ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>
-            {loadError}
-          </Text>
-        </View>
+        <LoadErrorCard
+          message={loadError}
+          onRetry={() => {
+            setLoadRevision((revision) => revision + 1);
+          }}
+        />
       ) : null}
 
 
@@ -309,21 +326,6 @@ const styles = StyleSheet.create({
     color: '#555',
     marginTop: 8,
     marginBottom: 32,
-  },
-
-  errorBox: {
-    backgroundColor: '#ffe8e8',
-    borderWidth: 1,
-    borderColor: '#e39a9a',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 20,
-  },
-
-  errorText: {
-    color: '#8a2020',
-    fontSize: 14,
-    lineHeight: 20,
   },
 
   mainButton: {
