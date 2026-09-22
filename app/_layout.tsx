@@ -92,6 +92,13 @@ export default function RootLayout() {
             headerBackTitle: 'ホーム',
           }}
         />
+        <Stack.Screen
+          name="getting-started"
+          options={{
+            title: '使い方',
+            headerBackTitle: '設定',
+          }}
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

@@ -38,6 +38,8 @@ const days = ['月', '火', '水', '木', '金'];
 export default function TimetableScreen() {
   const params = useLocalSearchParams();
   const openedFromSettings = params.from === 'settings';
+  const openedFromGuide =
+    params.from === 'getting-started';
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingClass, setDeletingClass] =
@@ -508,9 +510,11 @@ export default function TimetableScreen() {
       <Stack.Screen
         options={{
           title: '時間割',
-          headerBackTitle: openedFromSettings
-            ? '設定'
-            : 'ホーム',
+          headerBackTitle: openedFromGuide
+            ? '使い方'
+            : openedFromSettings
+              ? '設定'
+              : 'ホーム',
         }}
       />
 

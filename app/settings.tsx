@@ -62,6 +62,15 @@ export default function SettingsScreen() {
       >
         <Text style={styles.title}>設定</Text>
 
+        <Text style={styles.sectionTitle}>はじめに</Text>
+        <View style={styles.sectionCard}>
+          <SettingsLink
+            title="StudyPhotoの使い方"
+            description="時間割登録から復習までの流れを確認"
+            onPress={() => router.push('/getting-started')}
+          />
+        </View>
+
         <Text style={styles.sectionTitle}>授業設定</Text>
         <View style={styles.sectionCard}>
           <SettingsLink
