@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
+  deleteSubjectQuestionRecord,
   loadSubjectQuestionRecords,
   saveSubjectQuestionRecord,
 } from '@/services/subject-question-storage';
@@ -35,5 +36,27 @@ describe('subject question storage', () => {
       answer: '重合反応です。',
       sourceSummarySignature: signature,
     });
+  });
+
+  test('指定した質問履歴だけを削除する', async () => {
+    const first = await saveSubjectQuestionRecord(
+      '高分子化学',
+      '質問1',
+      '回答1',
+      'signature'
+    );
+    const second = await saveSubjectQuestionRecord(
+      '高分子化学',
+      '質問2',
+      '回答2',
+      'signature'
+    );
+
+    await deleteSubjectQuestionRecord(first.id);
+
+    const records = await loadSubjectQuestionRecords();
+
+    expect(records[first.id]).toBeUndefined();
+    expect(records[second.id]).toEqual(second);
   });
 });

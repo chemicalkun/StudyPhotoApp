@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   Share,
@@ -29,6 +30,7 @@ import {
 } from '@/services/exam-preparation-storage';
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
 import {
+  deleteSubjectQuestionRecord,
   loadSubjectQuestionRecords,
   saveSubjectQuestionRecord,
 } from '@/services/subject-question-storage';
@@ -381,6 +383,49 @@ export default function ExamPreparationScreen() {
   };
 
 
+  const deleteQuestionHistory = async (
+    record: SubjectQuestionRecord
+  ) => {
+    try {
+      setQuestionSaveError('');
+      await deleteSubjectQuestionRecord(record.id);
+      setQuestionHistory((currentHistory) =>
+        currentHistory.filter(
+          (candidate) => candidate.id !== record.id
+        )
+      );
+      setExpandedQuestionId((currentId) =>
+        currentId === record.id ? null : currentId
+      );
+    } catch (error) {
+      console.log('質問履歴削除エラー:', error);
+      setQuestionSaveError(
+        '質問履歴を削除できませんでした。もう一度お試しください。'
+      );
+    }
+  };
+
+
+  const confirmDeleteQuestionHistory = (
+    record: SubjectQuestionRecord
+  ) => {
+    Alert.alert(
+      'この質問履歴を削除しますか？',
+      '質問と回答の両方が削除されます。',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: () => {
+            void deleteQuestionHistory(record);
+          },
+        },
+      ]
+    );
+  };
+
+
   const getUnavailableMessage = () => {
     switch (availability) {
       case 'unsupportedBuild':
@@ -698,12 +743,28 @@ export default function ExamPreparationScreen() {
                               </Pressable>
 
                               {isExpanded ? (
-                                <Text
-                                  style={styles.historyAnswer}
-                                  selectable
-                                >
-                                  A. {record.answer}
-                                </Text>
+                                <View style={styles.historyAnswerSection}>
+                                  <Text
+                                    style={styles.historyAnswer}
+                                    selectable
+                                  >
+                                    A. {record.answer}
+                                  </Text>
+                                  <Pressable
+                                    style={styles.deleteHistoryButton}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="この質問履歴を削除"
+                                    onPress={() =>
+                                      confirmDeleteQuestionHistory(
+                                        record
+                                      )
+                                    }
+                                  >
+                                    <Text style={styles.deleteHistoryButtonText}>
+                                      この質問履歴を削除
+                                    </Text>
+                                  </Pressable>
+                                </View>
                               ) : null}
                             </View>
                           );
@@ -1158,13 +1219,32 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
+  historyAnswerSection: {
+    borderTopWidth: 1,
+    borderTopColor: '#e1e5ef',
+    padding: 12,
+  },
+
   historyAnswer: {
     color: '#333',
     fontSize: 13,
     lineHeight: 21,
-    borderTopWidth: 1,
-    borderTopColor: '#e1e5ef',
-    padding: 12,
+  },
+
+  deleteHistoryButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#c95b5b',
+    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 12,
+  },
+
+  deleteHistoryButtonText: {
+    color: '#a22d2d',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   shareButton: {

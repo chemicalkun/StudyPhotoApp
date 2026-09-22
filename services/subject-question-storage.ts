@@ -74,3 +74,23 @@ export const saveSubjectQuestionRecord = async (
 
   return record;
 };
+
+
+export const deleteSubjectQuestionRecord = async (
+  recordId: string
+) => {
+  if (recordId === '') {
+    throw new Error('削除する質問履歴が不正です');
+  }
+
+  const records = await loadSubjectQuestionRecords();
+
+  if (records[recordId] === undefined) {
+    return;
+  }
+
+  const updatedRecords = { ...records };
+  delete updatedRecords[recordId];
+
+  await saveSubjectQuestionRecords(updatedRecords);
+};
