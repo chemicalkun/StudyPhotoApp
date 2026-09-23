@@ -87,6 +87,47 @@ describe('academic term', () => {
     ).toEqual({ '月-1': '有機化学' });
   });
 
+  test('学期ごとに写真と学習データを切り替える', async () => {
+    const firstTerm = {
+      academicYear: 2026,
+      term: '前期' as const,
+    };
+    const secondTerm = {
+      academicYear: 2026,
+      term: '後期' as const,
+    };
+
+    await saveAcademicTerm(firstTerm);
+    await AsyncStorage.multiSet([
+      ['photos', '[{"id":"first-photo"}]'],
+      ['lectureSummaryRecords', '{"first":{}}'],
+      ['flashcardRecords', '{"first":{}}'],
+    ]);
+
+    await switchAcademicTerm(secondTerm);
+
+    expect(await AsyncStorage.getItem('photos')).toBeNull();
+    expect(
+      await AsyncStorage.getItem('lectureSummaryRecords')
+    ).toBeNull();
+
+    await AsyncStorage.multiSet([
+      ['photos', '[{"id":"second-photo"}]'],
+      ['lectureSummaryRecords', '{"second":{}}'],
+    ]);
+    await switchAcademicTerm(firstTerm);
+
+    expect(await AsyncStorage.getItem('photos')).toBe(
+      '[{"id":"first-photo"}]'
+    );
+    expect(
+      await AsyncStorage.getItem('lectureSummaryRecords')
+    ).toBe('{"first":{}}');
+    expect(await AsyncStorage.getItem('flashcardRecords')).toBe(
+      '{"first":{}}'
+    );
+  });
+
   test('不正な学年・学期設定を拒否する', () => {
     expect(() =>
       parseAcademicTerm(

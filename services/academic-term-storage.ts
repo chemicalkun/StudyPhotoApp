@@ -10,12 +10,20 @@ import {
   parseAcademicTimetables,
   type AcademicTimetables,
 } from '@/types/academic-timetable';
+import {
+  academicTermDataStorageKeys,
+  parseAcademicTermData,
+  type AcademicTermData,
+  type AcademicTermDataSnapshot,
+} from '@/types/academic-term-data';
 import { parseTimetable } from '@/utils/classification';
 
 
 export const academicTermStorageKey = 'academicTerm';
 export const academicTimetablesStorageKey =
   'academicTimetables';
+export const academicTermDataStorageKey =
+  'academicTermData';
 
 
 export const loadAcademicTerm = async (
@@ -56,6 +64,8 @@ export const switchAcademicTerm = async (
     academicTermStorageKey,
     'timetable',
     academicTimetablesStorageKey,
+    academicTermDataStorageKey,
+    ...academicTermDataStorageKeys,
   ] as const;
   const currentEntries = await AsyncStorage.multiGet([
     ...storageKeys,
@@ -73,6 +83,12 @@ export const switchAcademicTerm = async (
       : parseAcademicTimetables(
           currentValues.academicTimetables
         );
+  const academicTermData: AcademicTermData =
+    currentValues.academicTermData === null
+      ? {}
+      : parseAcademicTermData(
+          currentValues.academicTermData
+        );
   const currentTermId = createAcademicTermId(
     currentAcademicTerm
   );
@@ -86,6 +102,32 @@ export const switchAcademicTerm = async (
   const nextTimetable = currentTermId === nextTermId
     ? currentTimetable
     : updatedAcademicTimetables[nextTermId] ?? {};
+  const currentTermData = Object.fromEntries(
+    academicTermDataStorageKeys.flatMap((key) => {
+      const value = currentValues[key];
+
+      return value === null
+        ? []
+        : [[key, value] as const];
+    })
+  ) as AcademicTermDataSnapshot;
+  const updatedAcademicTermData: AcademicTermData = {
+    ...academicTermData,
+    [currentTermId]: currentTermData,
+  };
+  const nextTermData = currentTermId === nextTermId
+    ? currentTermData
+    : updatedAcademicTermData[nextTermId] ?? {};
+  const nextTermEntries = academicTermDataStorageKeys
+    .flatMap((key) => {
+      const value = nextTermData[key];
+
+      return value === undefined
+        ? []
+        : [[key, value] as const];
+    });
+  const nextTermKeysToRemove = academicTermDataStorageKeys
+    .filter((key) => nextTermData[key] === undefined);
 
   try {
     await AsyncStorage.multiSet([
@@ -97,8 +139,19 @@ export const switchAcademicTerm = async (
         academicTimetablesStorageKey,
         JSON.stringify(updatedAcademicTimetables),
       ],
+      [
+        academicTermDataStorageKey,
+        JSON.stringify(updatedAcademicTermData),
+      ],
       ['timetable', JSON.stringify(nextTimetable)],
+      ...nextTermEntries,
     ]);
+
+    if (nextTermKeysToRemove.length > 0) {
+      await AsyncStorage.multiRemove(
+        nextTermKeysToRemove
+      );
+    }
   } catch (error) {
     const entriesToRestore = currentEntries.flatMap(
       ([key, value]) =>

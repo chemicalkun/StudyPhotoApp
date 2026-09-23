@@ -142,7 +142,7 @@ export default function AcademicTermScreen() {
 
     Alert.alert(
       '時間割を切り替えますか？',
-      `${formatAcademicTerm(savedAcademicTerm)}の時間割を保存し、${formatAcademicTerm(nextAcademicTerm)}の時間割を開きます。`,
+      `${formatAcademicTerm(savedAcademicTerm)}の時間割と学習データを保存し、${formatAcademicTerm(nextAcademicTerm)}のデータを開きます。`,
       [
         { text: 'キャンセル', style: 'cancel' },
         {
@@ -267,7 +267,7 @@ export default function AcademicTermScreen() {
 
             <View style={styles.noticeCard}>
               <Text style={styles.noticeText}>
-                学期を切り替えると、現在の時間割は自動で保存されます。以前の学期に戻すと、その学期の時間割が復元されます。
+                学期を切り替えると、現在の時間割・写真・まとめ・学習記録は自動で保存されます。以前の学期に戻すと、その学期のデータが復元されます。
               </Text>
             </View>
 

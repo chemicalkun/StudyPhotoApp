@@ -11,6 +11,7 @@ import { parseAcademicTerm } from '@/types/academic-term';
 import {
   parseAcademicTimetables,
 } from '@/types/academic-timetable';
+import { parseAcademicTermData } from '@/types/academic-term-data';
 import { parseExamPreparationRecords } from '@/types/exam-preparation';
 import { parseFlashcardRecords } from '@/types/flashcard';
 import { parseLectureSummaryRecords } from '@/types/lecture-summary';
@@ -100,6 +101,10 @@ const validateRestorableData = (
 
   if (storage.academicTimetables !== null) {
     parseAcademicTimetables(storage.academicTimetables);
+  }
+
+  if (storage.academicTermData !== null) {
+    parseAcademicTermData(storage.academicTermData);
   }
 
   if (storage.timetable !== null) {
