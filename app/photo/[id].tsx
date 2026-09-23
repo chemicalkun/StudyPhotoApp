@@ -23,6 +23,7 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+import { LoadErrorCard } from '@/components/load-error-card';
 import {
   parsePhotoRecords,
   PhotoRecord,
@@ -110,6 +111,10 @@ export default function PhotoScreen() {
   ] = useState(false);
   const [errorMessage, setErrorMessage] =
     useState('');
+  const [loadFailed, setLoadFailed] =
+    useState(false);
+  const [loadRevision, setLoadRevision] =
+    useState(0);
 
   const zoomScale = useRef(1);
   const translateX = useRef(
@@ -122,7 +127,9 @@ export default function PhotoScreen() {
       try {
         setLoading(true);
         setErrorMessage('');
+        setLoadFailed(false);
         setPhoto(null);
+        setLecturePhotos([]);
         setImageLoadFailed(false);
         setPhotoOcrRecord(null);
         setTextRecognitionError('');
@@ -179,14 +186,17 @@ export default function PhotoScreen() {
         }
       } catch (error) {
         console.log('写真読み込みエラー:', error);
-        setErrorMessage('写真の読み込みに失敗しました');
+        setLoadFailed(true);
+        setErrorMessage(
+          '写真の読み込みに失敗しました。データは削除されていません。'
+        );
       } finally {
         setLoading(false);
       }
     };
 
     loadPhoto();
-  }, [photoId]);
+  }, [loadRevision, photoId]);
 
 
   const getTakenAtLabel = (takenAt: string) => {
@@ -578,9 +588,20 @@ export default function PhotoScreen() {
         </View>
       ) : errorMessage !== '' ? (
         <View style={styles.centerContent}>
-          <Text style={styles.errorText}>
-            {errorMessage}
-          </Text>
+          {loadFailed ? (
+            <LoadErrorCard
+              message={errorMessage}
+              onRetry={() => {
+                setLoadRevision(
+                  (revision) => revision + 1
+                );
+              }}
+            />
+          ) : (
+            <Text style={styles.errorText}>
+              {errorMessage}
+            </Text>
+          )}
         </View>
       ) : photo ? (
         <>

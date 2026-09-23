@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,10 +14,10 @@ import {
 import {
   router,
   Stack,
-  useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
 
+import { LoadErrorCard } from '@/components/load-error-card';
 import {
   answerLectureQuestion,
   createExamPreparation,
@@ -100,127 +100,127 @@ export default function ExamPreparationScreen() {
     useState(false);
   const [expandedQuestionId, setExpandedQuestionId] =
     useState<string | null>(null);
+  const [loadRevision, setLoadRevision] = useState(0);
 
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
+  useEffect(() => {
+    void loadRevision;
+    let active = true;
 
-      const loadData = async () => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setLoadError('');
+        setGenerationError('');
+        setSaveError('');
+        setShareError('');
+        setQuestionError('');
+        setQuestionSaveError('');
+        setIsQuestionHistoryExpanded(false);
+        setExpandedQuestionId(null);
+        setIsExamPreparationExpanded(false);
+
+        const [
+          records,
+          modelAvailability,
+          savedExamPreparations,
+        ] =
+          await Promise.all([
+            loadLectureSummaryRecords(),
+            getLectureSummaryAvailability(),
+            loadExamPreparationRecords(),
+          ]);
+
+        if (!active) {
+          return;
+        }
+
+        const subjectSummaries = Object.values(records)
+          .filter((record) => record.subject === subject)
+          .sort((a, b) =>
+            a.dateKey.localeCompare(b.dateKey)
+          );
+
+        setSummaries(subjectSummaries);
+        setAvailability(modelAvailability);
+
+        const sourceSummarySignature =
+          createExamPreparationSourceSignature(
+            subjectSummaries
+          );
+        const savedExamPreparation =
+          savedExamPreparations[
+            createExamPreparationRecordId(subject)
+          ];
+        const hasSavedExamPreparation =
+          savedExamPreparation !== undefined;
+        const savedExamPreparationIsCurrent =
+          savedExamPreparation !== undefined &&
+          savedExamPreparation.sourceSummarySignature ===
+            sourceSummarySignature;
+
+        setExamPreparation(
+          hasSavedExamPreparation
+            ? savedExamPreparation.text
+            : ''
+        );
+        setIsExamPreparationSaved(
+          hasSavedExamPreparation
+        );
+        setIsExamPreparationOutdated(
+          hasSavedExamPreparation &&
+            !savedExamPreparationIsCurrent
+        );
+
         try {
-          setLoading(true);
-          setLoadError('');
-          setGenerationError('');
-          setSaveError('');
-          setShareError('');
-          setQuestionError('');
-          setQuestionSaveError('');
-          setIsQuestionHistoryExpanded(false);
-          setExpandedQuestionId(null);
-          setIsExamPreparationExpanded(false);
-
-          const [
-            records,
-            modelAvailability,
-            savedExamPreparations,
-          ] =
-            await Promise.all([
-              loadLectureSummaryRecords(),
-              getLectureSummaryAvailability(),
-              loadExamPreparationRecords(),
-            ]);
-
-          if (!active) {
-            return;
-          }
-
-          const subjectSummaries = Object.values(records)
-            .filter((record) => record.subject === subject)
-            .sort((a, b) =>
-              a.dateKey.localeCompare(b.dateKey)
-            );
-
-          setSummaries(subjectSummaries);
-          setAvailability(modelAvailability);
-
-          const sourceSummarySignature =
-            createExamPreparationSourceSignature(
-              subjectSummaries
-            );
-          const savedExamPreparation =
-            savedExamPreparations[
-              createExamPreparationRecordId(subject)
-            ];
-          const hasSavedExamPreparation =
-            savedExamPreparation !== undefined;
-          const savedExamPreparationIsCurrent =
-            savedExamPreparation !== undefined &&
-            savedExamPreparation.sourceSummarySignature ===
-              sourceSummarySignature;
-
-          setExamPreparation(
-            hasSavedExamPreparation
-              ? savedExamPreparation.text
-              : ''
-          );
-          setIsExamPreparationSaved(
-            hasSavedExamPreparation
-          );
-          setIsExamPreparationOutdated(
-            hasSavedExamPreparation &&
-              !savedExamPreparationIsCurrent
-          );
-
-          try {
-            const savedQuestionRecords =
-              await loadSubjectQuestionRecords();
-
-            if (active) {
-              setQuestionHistory(
-                Object.values(savedQuestionRecords)
-                  .filter(
-                    (record) => record.subject === subject
-                  )
-                  .sort(
-                    (a, b) =>
-                      new Date(b.createdAt).getTime() -
-                      new Date(a.createdAt).getTime()
-                  )
-              );
-            }
-          } catch (questionHistoryError) {
-            console.log(
-              '質問履歴読み込みエラー:',
-              questionHistoryError
-            );
-
-            if (active) {
-              setQuestionHistory([]);
-            }
-          }
-        } catch (error) {
-          console.log('試験対策読み込みエラー:', error);
+          const savedQuestionRecords =
+            await loadSubjectQuestionRecords();
 
           if (active) {
-            setLoadError(
-              '授業まとめを読み込めませんでした。'
+            setQuestionHistory(
+              Object.values(savedQuestionRecords)
+                .filter(
+                  (record) => record.subject === subject
+                )
+                .sort(
+                  (a, b) =>
+                    new Date(b.createdAt).getTime() -
+                    new Date(a.createdAt).getTime()
+                )
             );
-            setAvailability('unknown');
           }
-        } finally {
+        } catch (questionHistoryError) {
+          console.log(
+            '質問履歴読み込みエラー:',
+            questionHistoryError
+          );
+
           if (active) {
-            setLoading(false);
+            setQuestionHistory([]);
           }
         }
-      };
+      } catch (error) {
+        console.log('試験対策読み込みエラー:', error);
 
-      void loadData();
+        if (active) {
+          setLoadError(
+            '授業まとめを読み込めませんでした。'
+          );
+          setAvailability('unknown');
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
 
-      return () => {
-        active = false;
-      };
-    }, [subject])
-  );
+    void loadData();
+
+    return () => {
+      active = false;
+    };
+  }, [loadRevision, subject]);
 
 
   const generateExamPreparation = async () => {
@@ -500,9 +500,14 @@ export default function ExamPreparationScreen() {
         ) : null}
 
         {loadError !== '' ? (
-          <Text style={styles.errorText}>
-            {loadError}
-          </Text>
+          <LoadErrorCard
+            message={loadError}
+            onRetry={() => {
+              setLoadRevision(
+                (revision) => revision + 1
+              );
+            }}
+          />
         ) : null}
 
         {!loading && loadError === '' ? (

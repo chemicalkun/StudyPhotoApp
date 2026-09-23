@@ -14,6 +14,7 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+import { LoadErrorCard } from '@/components/load-error-card';
 import {
   createPracticeQuestions,
   getLectureSummaryAvailability,
@@ -70,10 +71,12 @@ export default function PracticeQuestionScreen() {
   const [saveError, setSaveError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [isOutdated, setIsOutdated] = useState(false);
+  const [loadRevision, setLoadRevision] = useState(0);
 
 
   useFocusEffect(
     useCallback(() => {
+      void loadRevision;
       let active = true;
 
       const loadData = async () => {
@@ -161,7 +164,7 @@ export default function PracticeQuestionScreen() {
       return () => {
         active = false;
       };
-    }, [subject])
+    }, [loadRevision, subject])
   );
 
 
@@ -344,7 +347,14 @@ export default function PracticeQuestionScreen() {
         ) : null}
 
         {loadError !== '' ? (
-          <Text style={styles.errorText}>{loadError}</Text>
+          <LoadErrorCard
+            message={loadError}
+            onRetry={() => {
+              setLoadRevision(
+                (revision) => revision + 1
+              );
+            }}
+          />
         ) : null}
 
         {!loading && loadError === '' ? (
