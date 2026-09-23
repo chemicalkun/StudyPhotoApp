@@ -76,7 +76,10 @@ export default function SettingsScreen() {
           <SettingsLink
             title="学年・学期"
             description="現在の時間割の年度と学期を設定"
-            onPress={() => router.push('/academic-term')}
+            onPress={() => router.push({
+              pathname: '/academic-term',
+              params: { from: 'settings' },
+            })}
           />
           <View style={styles.divider} />
           <SettingsLink

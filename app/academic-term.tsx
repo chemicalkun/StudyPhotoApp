@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 
 import {
   loadAcademicTerm,
@@ -27,6 +27,14 @@ import {
 
 
 export default function AcademicTermScreen() {
+  const params = useLocalSearchParams<{
+    from?: string;
+  }>();
+  const headerBackTitle = params.from === 'home'
+    ? 'ホーム'
+    : params.from === 'review'
+      ? '復習'
+      : '設定';
   const defaultAcademicTerm = getDefaultAcademicTerm();
   const [academicYear, setAcademicYear] = useState(
     String(defaultAcademicTerm.academicYear)
@@ -161,7 +169,7 @@ export default function AcademicTermScreen() {
       <Stack.Screen
         options={{
           title: '学年・学期',
-          headerBackTitle: '設定',
+          headerBackTitle,
         }}
       />
 

@@ -35,6 +35,7 @@ import {
   LectureSummaryReviewPoints,
 } from '@/components/lecture-summary-review-points';
 import { loadExamPreparationRecords } from '@/services/exam-preparation-storage';
+import { loadAcademicTerm } from '@/services/academic-term-storage';
 import { loadFlashcardRecords } from '@/services/flashcard-storage';
 import {
   deleteLectureSummaryRecord,
@@ -49,6 +50,11 @@ import {
   createExamPreparationSourceSignature,
   type ExamPreparationRecords,
 } from '@/types/exam-preparation';
+import {
+  formatAcademicTerm,
+  getDefaultAcademicTerm,
+  type AcademicTerm,
+} from '@/types/academic-term';
 import {
   createFlashcardRecordId,
   createFlashcardSourceSignature,
@@ -158,6 +164,8 @@ export default function ReviewScreen() {
   const reviewPageWidth = Math.max(0, screenWidth - 48);
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
+  const [academicTerm, setAcademicTerm] =
+    useState<AcademicTerm>(getDefaultAcademicTerm());
   const [selectedSummary, setSelectedSummary] =
     useState<LectureSummaryRecord | null>(null);
   const [isEditingSummary, setIsEditingSummary] =
@@ -481,6 +489,7 @@ export default function ReviewScreen() {
             loadPhotoRecords(),
             loadPhotoOcrRecords(),
             AsyncStorage.getItem('timetable'),
+            loadAcademicTerm(),
           ]);
           const [
             lectureSummaryResult,
@@ -490,6 +499,7 @@ export default function ReviewScreen() {
             photoResult,
             photoOcrResult,
             timetableResult,
+            academicTermResult,
           ] = learningDataResults;
 
           if (!active) {
@@ -568,6 +578,14 @@ export default function ReviewScreen() {
             }
           } else {
             setTimetable({});
+          }
+          if (academicTermResult.status === 'fulfilled') {
+            setAcademicTerm(academicTermResult.value);
+          } else {
+            console.log(
+              '復習学期設定読み込みエラー:',
+              academicTermResult.reason
+            );
           }
 
           learningDataResults
@@ -823,6 +841,23 @@ export default function ReviewScreen() {
         <Text style={styles.subtitle}>
           見たい単位を選んで復習
         </Text>
+
+        <Pressable
+          style={styles.academicTermButton}
+          accessibilityRole="button"
+          accessibilityLabel={`${formatAcademicTerm(academicTerm)}、学期を変更`}
+          onPress={() => router.push({
+            pathname: '/academic-term',
+            params: { from: 'review' },
+          })}
+        >
+          <Text style={styles.academicTermText}>
+            {formatAcademicTerm(academicTerm)}
+          </Text>
+          <Text style={styles.academicTermArrow}>
+            変更 ›
+          </Text>
+        </Pressable>
 
         {loadError !== '' ? (
           <LoadErrorCard
@@ -1630,7 +1665,31 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: 16,
     marginTop: 8,
+    marginBottom: 8,
+  },
+
+  academicTermButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#eef2fb',
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     marginBottom: 18,
+  },
+
+  academicTermText: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  academicTermArrow: {
+    color: '#5670a8',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   searchContainer: {

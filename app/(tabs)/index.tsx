@@ -131,9 +131,22 @@ export default function HomeScreen() {
         講義写真を自動で整理
       </Text>
 
-      <Text style={styles.academicTerm}>
-        {formatAcademicTerm(academicTerm)}
-      </Text>
+      <Pressable
+        style={styles.academicTermButton}
+        accessibilityRole="button"
+        accessibilityLabel={`${formatAcademicTerm(academicTerm)}、学期を変更`}
+        onPress={() => router.push({
+          pathname: '/academic-term',
+          params: { from: 'home' },
+        })}
+      >
+        <Text style={styles.academicTermText}>
+          {formatAcademicTerm(academicTerm)}
+        </Text>
+        <Text style={styles.academicTermArrow}>
+          変更 ›
+        </Text>
+      </Pressable>
 
 
       {loadError !== '' ? (
@@ -310,16 +323,28 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  academicTerm: {
+  academicTermButton: {
     alignSelf: 'flex-start',
-    color: '#31518f',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: '#eef2fb',
     borderRadius: 999,
-    fontSize: 13,
-    fontWeight: 'bold',
     paddingHorizontal: 11,
     paddingVertical: 6,
     marginBottom: 26,
+  },
+
+  academicTermText: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  academicTermArrow: {
+    color: '#5670a8',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   mainButton: {
