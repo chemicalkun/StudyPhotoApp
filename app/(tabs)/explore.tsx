@@ -94,6 +94,7 @@ export default function ReviewScreen() {
   const lectureSwipeX = useRef(
     new Animated.Value(0)
   ).current;
+  const hasLoadedDataRef = useRef(false);
   const reviewPagerRef = useRef<ScrollView>(null);
   const reviewPageWidth = Math.max(0, screenWidth - 48);
   const [summaries, setSummaries] =
@@ -261,9 +262,11 @@ export default function ReviewScreen() {
 
       const loadSummaries = async () => {
         try {
-          setLoading(true);
+          if (!hasLoadedDataRef.current) {
+            setLoading(true);
+          }
+
           setLoadError('');
-          setSelectedLectureSubject(null);
 
           const learningDataResults = await Promise.allSettled([
             loadLectureSummaryRecords(),
@@ -297,6 +300,20 @@ export default function ReviewScreen() {
             });
 
             setSummaries(sortedSummaries);
+            setSelectedLectureSubject((currentSubject) => {
+              if (
+                currentSubject !== null &&
+                !sortedSummaries.some(
+                  (summary) =>
+                    summary.subject === currentSubject
+                )
+              ) {
+                return null;
+              }
+
+              return currentSubject;
+            });
+            hasLoadedDataRef.current = true;
           } else {
             console.log(
               '復習まとめ読み込みエラー:',

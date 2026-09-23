@@ -112,7 +112,7 @@ export default function GettingStartedScreen() {
             AI学習機能について
           </Text>
           <Text style={styles.noticeText}>
-            写真の文字認識にはStudyPhotoの開発ビルドが必要です。まとめ・試験対策などの端末内AI機能には、対応するiPhone、iOSとApple Intelligenceも必要です。
+            写真の文字認識とAI学習機能は、対応するiPhone内で処理します。まとめ・試験対策などのAI学習機能には、対応するiOSとApple Intelligenceが必要です。
           </Text>
         </View>
 
