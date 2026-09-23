@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   Share,
@@ -16,6 +17,7 @@ import {
   Stack,
   useLocalSearchParams,
 } from 'expo-router';
+import { HeaderBackButton } from '@react-navigation/elements';
 
 import { LoadErrorCard } from '@/components/load-error-card';
 import {
@@ -68,6 +70,8 @@ export default function ExamPreparationScreen() {
 
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
+  const [selectedSourceSummary, setSelectedSourceSummary] =
+    useState<LectureSummaryRecord | null>(null);
   const [availability, setAvailability] =
     useState<LectureSummaryAvailability | null>(null);
   const [loading, setLoading] = useState(true);
@@ -475,6 +479,22 @@ export default function ExamPreparationScreen() {
         options={{
           title: '試験対策',
           headerBackTitle: '復習',
+          headerBackVisible: false,
+          headerLeft: (props) => (
+            <HeaderBackButton
+              {...props}
+              label="復習"
+              tintColor="#111"
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                  return;
+                }
+
+                router.replace('/explore');
+              }}
+            />
+          ),
         }}
       />
 
@@ -522,13 +542,48 @@ export default function ExamPreparationScreen() {
               </Text>
 
               {summaries.map((summary, index) => (
-                <Text
+                <Pressable
                   key={summary.id}
                   style={styles.sourceItem}
+                  accessibilityRole="button"
+                  accessibilityLabel={`第${index + 1}回の授業まとめを開く`}
+                  onPress={() => {
+                    setSelectedSourceSummary(summary);
+                  }}
                 >
-                  第{index + 1}回・{getDateLabel(summary.dateKey)}
-                </Text>
+                  <Text style={styles.sourceItemText}>
+                    第{index + 1}回・{getDateLabel(summary.dateKey)}
+                  </Text>
+                  <Text style={styles.sourceItemOpenText}>
+                    まとめを見る ›
+                  </Text>
+                </Pressable>
               ))}
+
+              {isExamPreparationOutdated &&
+              availability === 'available' ? (
+                <Pressable
+                  style={[
+                    styles.sourceRefreshButton,
+                    isGenerating && styles.disabledButton,
+                  ]}
+                  disabled={isGenerating}
+                  accessibilityRole="button"
+                  accessibilityLabel="更新された授業まとめから試験対策を作り直す"
+                  onPress={() => {
+                    void generateExamPreparation();
+                  }}
+                >
+                  {isGenerating ? (
+                    <ActivityIndicator color="white" />
+                  ) : null}
+                  <Text style={styles.sourceRefreshButtonText}>
+                    {isGenerating
+                      ? '試験対策を作成中...'
+                      : '更新されたまとめから作り直す'}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
 
             <Text style={styles.notice}>
@@ -935,6 +990,52 @@ export default function ExamPreparationScreen() {
           </>
         ) : null}
       </ScrollView>
+
+      <Modal
+        visible={selectedSourceSummary !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedSourceSummary(null)}
+      >
+        <View style={styles.summaryModalBackground}>
+          <View style={styles.summaryModalContent}>
+            {selectedSourceSummary !== null ? (
+              <>
+                <Text style={styles.summaryModalTitle}>
+                  第{summaries.findIndex(
+                    (summary) =>
+                      summary.id === selectedSourceSummary.id
+                  ) + 1}回のまとめ
+                </Text>
+
+                <Text style={styles.summaryModalDate}>
+                  {getDateLabel(selectedSourceSummary.dateKey)}
+                </Text>
+
+                <ScrollView style={styles.summaryModalScrollView}>
+                  <Text
+                    style={styles.summaryModalText}
+                    selectable
+                  >
+                    {selectedSourceSummary.text}
+                  </Text>
+                </ScrollView>
+
+                <Pressable
+                  style={styles.summaryModalCloseButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="授業まとめを閉じる"
+                  onPress={() => setSelectedSourceSummary(null)}
+                >
+                  <Text style={styles.summaryModalCloseButtonText}>
+                    閉じる
+                  </Text>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1002,9 +1103,96 @@ const styles = StyleSheet.create({
   },
 
   sourceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#d8e0f3',
+    paddingVertical: 9,
+  },
+
+  sourceItemText: {
+    flex: 1,
     color: '#333',
     fontSize: 13,
     lineHeight: 21,
+  },
+
+  sourceItemOpenText: {
+    color: '#31518f',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  sourceRefreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#31518f',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 13,
+  },
+
+  sourceRefreshButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  summaryModalBackground: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    padding: 22,
+  },
+
+  summaryModalContent: {
+    maxHeight: '82%',
+    backgroundColor: 'white',
+    borderRadius: 14,
+    padding: 20,
+  },
+
+  summaryModalTitle: {
+    color: '#222',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+
+  summaryModalDate: {
+    color: '#666',
+    fontSize: 13,
+    marginTop: 5,
+    marginBottom: 14,
+  },
+
+  summaryModalScrollView: {
+    flexShrink: 1,
+  },
+
+  summaryModalText: {
+    color: '#292929',
+    fontSize: 15,
+    lineHeight: 24,
+  },
+
+  summaryModalCloseButton: {
+    alignItems: 'center',
+    backgroundColor: '#31518f',
+    borderRadius: 9,
+    paddingVertical: 12,
+    marginTop: 18,
+  },
+
+  summaryModalCloseButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 
   notice: {

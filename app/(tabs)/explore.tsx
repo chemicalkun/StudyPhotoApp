@@ -1,4 +1,8 @@
-import { useCallback, useRef, useState } from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -16,12 +20,21 @@ import {
   View,
 } from 'react-native';
 
-import { router, useFocusEffect } from 'expo-router';
+import {
+  router,
+  useFocusEffect,
+} from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Gesture,
+  GestureDetector,
+} from 'react-native-gesture-handler';
 
 import { LoadErrorCard } from '@/components/load-error-card';
 import { loadExamPreparationRecords } from '@/services/exam-preparation-storage';
 import { loadFlashcardRecords } from '@/services/flashcard-storage';
 import {
+  deleteLectureSummaryRecord,
   loadLectureSummaryRecords,
   updateLectureSummaryText,
 } from '@/services/lecture-summary-storage';
@@ -43,15 +56,37 @@ import type {
 } from '@/types/lecture-summary';
 import type { PhotoOcrRecords } from '@/types/photo-ocr';
 import { searchRecognizedPhotos } from '@/types/photo-search';
-import type { PhotoRecord } from '@/types/photo';
+import {
+  isUnclassifiedPhoto,
+  type PhotoRecord,
+} from '@/types/photo';
 import {
   createPracticeQuestionRecordId,
   createPracticeQuestionSourceSignature,
   type PracticeQuestionRecords,
 } from '@/types/practice-question';
+import {
+  parseTimetable,
+  type Timetable,
+} from '@/utils/classification';
+import {
+  timetableDays,
+  type TimetableDay,
+} from '@/utils/timetable-recognition';
 
 
 type ReviewMode = 'lecture' | 'subject';
+type ReviewDay = TimetableDay | 'すべて';
+type SubjectClassSlot = {
+  day: TimetableDay;
+  period: number;
+};
+
+
+const reviewDays: ReviewDay[] = [
+  'すべて',
+  ...timetableDays,
+];
 
 
 const getDateLabel = (dateKey: string) => {
@@ -89,6 +124,27 @@ const getPhotoDateLabel = (takenAt: string) => {
 };
 
 
+const getPhotoDateKey = (takenAt: string) => {
+  const date = new Date(takenAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return takenAt;
+  }
+
+  return [
+    date.getFullYear(),
+    date.getMonth() + 1,
+    date.getDate(),
+  ].join('-');
+};
+
+
+const getReviewSubject = (photo: PhotoRecord) =>
+  isUnclassifiedPhoto(photo)
+    ? '未分類'
+    : photo.subject as string;
+
+
 export default function ReviewScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const lectureSwipeX = useRef(
@@ -108,11 +164,17 @@ export default function ReviewScreen() {
     useState('');
   const [isSavingSummary, setIsSavingSummary] =
     useState(false);
+  const [isDeletingSummary, setIsDeletingSummary] =
+    useState(false);
+  const [summaryDeleteError, setSummaryDeleteError] =
+    useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [loadRevision, setLoadRevision] = useState(0);
   const [reviewMode, setReviewMode] =
     useState<ReviewMode>('subject');
+  const [selectedReviewDay, setSelectedReviewDay] =
+    useState<ReviewDay>('すべて');
   const [selectedLectureSubject, setSelectedLectureSubject] =
     useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -123,29 +185,117 @@ export default function ReviewScreen() {
   const [flashcardRecords, setFlashcardRecords] =
     useState<FlashcardRecords>({});
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
+  const [timetable, setTimetable] =
+    useState<Timetable>({});
   const [photoOcrRecords, setPhotoOcrRecords] =
     useState<PhotoOcrRecords>({});
 
-  const subjectGroups = Object.entries(
-    summaries.reduce<Record<string, LectureSummaryRecord[]>>(
-      (groups, summary) => {
-        const subjectSummaries =
-          groups[summary.subject] ?? [];
+  const summaryGroups = summaries.reduce<
+    Record<string, LectureSummaryRecord[]>
+  >(
+    (groups, summary) => {
+      const subjectSummaries =
+        groups[summary.subject] ?? [];
 
-        groups[summary.subject] = [
-          ...subjectSummaries,
-          summary,
-        ].sort((a, b) =>
-          a.dateKey.localeCompare(b.dateKey)
-        );
+      groups[summary.subject] = [
+        ...subjectSummaries,
+        summary,
+      ].sort((a, b) =>
+        a.dateKey.localeCompare(b.dateKey)
+      );
 
-        return groups;
-      },
-      {}
-    )
-  ).sort(([subjectA], [subjectB]) =>
+      return groups;
+    },
+    {}
+  );
+  const reviewSubjects = [
+    ...new Set([
+      ...Object.keys(summaryGroups),
+      ...photos.map(getReviewSubject),
+    ]),
+  ].sort((subjectA, subjectB) =>
     subjectA.localeCompare(subjectB, 'ja')
   );
+  const subjectGroups = reviewSubjects.map(
+    (subject) => [
+      subject,
+      summaryGroups[subject] ?? [],
+    ] as const
+  );
+  const getSubjectClassSlots = (
+    targetSubject: string
+  ): SubjectClassSlot[] => {
+    const slotKeys = new Set<string>();
+
+    Object.entries(timetable).forEach(
+      ([key, timetableSubject]) => {
+        if (timetableSubject.trim() !== targetSubject) {
+          return;
+        }
+
+        const [day, periodText] = key.split('-');
+        const period = Number(periodText);
+
+        if (
+          !timetableDays.some(
+            (timetableDay) => timetableDay === day
+          ) ||
+          !Number.isInteger(period)
+        ) {
+          return;
+        }
+
+        slotKeys.add(`${day}-${period}`);
+      }
+    );
+
+    photos.forEach((photo) => {
+      if (
+        getReviewSubject(photo) !== targetSubject ||
+        photo.period === null ||
+        !timetableDays.some(
+          (timetableDay) => timetableDay === photo.day
+        )
+      ) {
+        return;
+      }
+
+      slotKeys.add(`${photo.day}-${photo.period}`);
+    });
+
+    return [...slotKeys]
+      .map((key) => {
+        const [day, periodText] = key.split('-');
+
+        return {
+          day: day as TimetableDay,
+          period: Number(periodText),
+        };
+      })
+      .sort((slotA, slotB) => {
+        const dayDifference =
+          timetableDays.indexOf(slotA.day) -
+          timetableDays.indexOf(slotB.day);
+
+        return dayDifference !== 0
+          ? dayDifference
+          : slotA.period - slotB.period;
+      });
+  };
+  const getSubjectScheduleLabel = (
+    targetSubject: string
+  ) => getSubjectClassSlots(targetSubject)
+    .map((slot) => `${slot.day}曜${slot.period}限`)
+    .join('・');
+  const getSubjectPhotoLectureCount = (
+    targetSubject: string
+  ) => new Set(
+    photos
+      .filter(
+        (photo) => getReviewSubject(photo) === targetSubject
+      )
+      .map((photo) => getPhotoDateKey(photo.takenAt))
+  ).size;
   const normalizedSearchQuery = searchQuery
     .trim()
     .toLocaleLowerCase('ja-JP');
@@ -173,13 +323,65 @@ export default function ReviewScreen() {
         .includes(normalizedSearchQuery)
     );
   };
-  const filteredSubjectGroups = subjectGroups.filter(
-    ([groupSubject, subjectSummaries]) =>
-      groupSubject
-        .toLocaleLowerCase('ja-JP')
-        .includes(normalizedSearchQuery) ||
-      subjectSummaries.some(summaryMatchesSearch)
-  );
+  const subjectMatchesSelectedDay = (
+    targetSubject: string
+  ) => {
+    if (selectedReviewDay === 'すべて') {
+      return true;
+    }
+
+    return getSubjectClassSlots(targetSubject).some(
+      (slot) => slot.day === selectedReviewDay
+    );
+  };
+  const filteredSubjectGroups = subjectGroups
+    .filter(
+      ([groupSubject, subjectSummaries]) =>
+        subjectMatchesSelectedDay(groupSubject) &&
+        (
+          groupSubject
+            .toLocaleLowerCase('ja-JP')
+            .includes(normalizedSearchQuery) ||
+          subjectSummaries.some(summaryMatchesSearch)
+        )
+    )
+    .sort(([subjectA], [subjectB]) => {
+      const slotsA = getSubjectClassSlots(subjectA);
+      const slotsB = getSubjectClassSlots(subjectB);
+      const selectedSlotA = slotsA.find(
+        (slot) =>
+          selectedReviewDay === 'すべて' ||
+          slot.day === selectedReviewDay
+      );
+      const selectedSlotB = slotsB.find(
+        (slot) =>
+          selectedReviewDay === 'すべて' ||
+          slot.day === selectedReviewDay
+      );
+
+      if (selectedSlotA === undefined) {
+        return selectedSlotB === undefined
+          ? subjectA.localeCompare(subjectB, 'ja')
+          : 1;
+      }
+
+      if (selectedSlotB === undefined) {
+        return -1;
+      }
+
+      const dayDifference =
+        timetableDays.indexOf(selectedSlotA.day) -
+        timetableDays.indexOf(selectedSlotB.day);
+
+      if (dayDifference !== 0) {
+        return dayDifference;
+      }
+
+      return selectedSlotA.period !== selectedSlotB.period
+        ? selectedSlotA.period - selectedSlotB.period
+        : subjectA.localeCompare(subjectB, 'ja');
+    });
+  const filteredExamSubjectGroups = filteredSubjectGroups;
   const selectedSubjectAllSummaries =
     selectedLectureSubject === null
       ? []
@@ -275,6 +477,7 @@ export default function ReviewScreen() {
             loadFlashcardRecords(),
             loadPhotoRecords(),
             loadPhotoOcrRecords(),
+            AsyncStorage.getItem('timetable'),
           ]);
           const [
             lectureSummaryResult,
@@ -283,6 +486,7 @@ export default function ReviewScreen() {
             flashcardResult,
             photoResult,
             photoOcrResult,
+            timetableResult,
           ] = learningDataResults;
 
           if (!active) {
@@ -350,6 +554,18 @@ export default function ReviewScreen() {
               ? photoOcrResult.value
               : {}
           );
+          if (timetableResult.status === 'fulfilled') {
+            try {
+              setTimetable(
+                parseTimetable(timetableResult.value) ?? {}
+              );
+            } catch (error) {
+              console.log('復習時間割解析エラー:', error);
+              setTimetable({});
+            }
+          } else {
+            setTimetable({});
+          }
 
           learningDataResults
             .slice(1)
@@ -422,13 +638,116 @@ export default function ReviewScreen() {
     editedSummaryTextRef.current = summary.text;
     setIsEditingSummary(false);
     setSummaryEditError('');
+    setSummaryDeleteError('');
   };
+
+
+  const openAdjacentSummary = (offset: -1 | 1) => {
+    if (
+      selectedSummaryLectureNumber === null ||
+      selectedSummaryLectureNumber < 0
+    ) {
+      return;
+    }
+
+    const adjacentSummary =
+      selectedSubjectAllSummaries[
+        selectedSummaryLectureNumber + offset
+      ];
+
+    if (adjacentSummary !== undefined) {
+      openSummary(adjacentSummary);
+    }
+  };
+
+
+  const summarySwipeGesture = Gesture.Pan()
+    .enabled(
+      selectedSummary !== null &&
+      !isEditingSummary &&
+      !isDeletingSummary
+    )
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-12, 12])
+    .runOnJS(true)
+    .onEnd((event) => {
+      if (event.translationX <= -35) {
+        openAdjacentSummary(1);
+      } else if (event.translationX >= 35) {
+        openAdjacentSummary(-1);
+      }
+    });
 
 
   const closeSummary = () => {
     setSelectedSummary(null);
     setIsEditingSummary(false);
     setSummaryEditError('');
+    setSummaryDeleteError('');
+  };
+
+
+  const deleteSelectedSummary = async () => {
+    if (selectedSummary === null || isDeletingSummary) {
+      return;
+    }
+
+    const summaryToDelete = selectedSummary;
+
+    try {
+      setIsDeletingSummary(true);
+      setSummaryDeleteError('');
+
+      await deleteLectureSummaryRecord(
+        summaryToDelete.id
+      );
+
+      const remainingSummaries = summaries.filter(
+        (summary) => summary.id !== summaryToDelete.id
+      );
+
+      setSummaries(remainingSummaries);
+      setSelectedSummary(null);
+      setIsEditingSummary(false);
+
+      if (
+        !remainingSummaries.some(
+          (summary) =>
+            summary.subject === summaryToDelete.subject
+        )
+      ) {
+        setSelectedLectureSubject(null);
+      }
+    } catch (error) {
+      console.log('授業まとめ削除エラー:', error);
+      setSummaryDeleteError(
+        '授業まとめを削除できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setIsDeletingSummary(false);
+    }
+  };
+
+
+  const confirmDeleteSelectedSummary = () => {
+    if (selectedSummary === null || isDeletingSummary) {
+      return;
+    }
+
+    Alert.alert(
+      'このまとめを削除しますか？',
+      '写真と文字認識結果は削除されません。この操作は取り消せません。',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: () => {
+            void deleteSelectedSummary();
+          },
+        },
+      ]
+    );
   };
 
 
@@ -521,7 +840,8 @@ export default function ReviewScreen() {
               復習データを読み込み中...
             </Text>
           </View>
-        ) : loadError !== '' ? null : summaries.length === 0 ? (
+        ) : loadError !== '' ? null :
+        summaries.length === 0 && photos.length === 0 ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyTitle}>
               まだ授業まとめがありません
@@ -603,6 +923,43 @@ export default function ReviewScreen() {
                 )}
               </View>
             ) : null}
+
+            <View style={styles.dayFilterContainer}>
+              {reviewDays.map((day) => {
+                const selected = selectedReviewDay === day;
+
+                return (
+                  <Pressable
+                    key={day}
+                    style={[
+                      styles.dayFilterButton,
+                      selected && styles.dayFilterButtonActive,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      day === 'すべて'
+                        ? 'すべての曜日を表示'
+                        : `${day}曜日の授業を表示`
+                    }
+                    accessibilityState={{ selected }}
+                    onPress={() => {
+                      setSelectedReviewDay(day);
+                      setSelectedLectureSubject(null);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dayFilterButtonText,
+                        selected &&
+                          styles.dayFilterButtonTextActive,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
             <View
               style={styles.modeSelector}
@@ -688,7 +1045,7 @@ export default function ReviewScreen() {
                 </Text>
 
                 <View style={styles.examList}>
-                  {filteredSubjectGroups.map(
+                  {filteredExamSubjectGroups.map(
                     ([groupSubject, subjectSummaries]) => {
                       const savedExamPreparation =
                         examPreparationRecords[
@@ -763,8 +1120,19 @@ export default function ReviewScreen() {
                           key={groupSubject}
                           style={styles.examCard}
                           accessibilityRole="button"
-                          accessibilityLabel={`${groupSubject}の授業全体まとめを開く、${examPreparationIsCurrent ? '保存済み' : hasSavedExamPreparation ? 'まとめ更新あり' : '未作成'}`}
+                          accessibilityLabel={`${groupSubject}の授業全体まとめを開く、${subjectSummaries.length === 0 ? '授業回まとめ未作成' : examPreparationIsCurrent ? '保存済み' : hasSavedExamPreparation ? 'まとめ更新あり' : '未作成'}`}
                           onPress={() => {
+                            if (subjectSummaries.length === 0) {
+                              router.push({
+                                pathname: '/subject/[subject]',
+                                params: {
+                                  subject: groupSubject,
+                                  from: 'review',
+                                },
+                              });
+                              return;
+                            }
+
                             router.push({
                               pathname: '/exam-prep/[subject]',
                               params: { subject: groupSubject },
@@ -776,21 +1144,37 @@ export default function ReviewScreen() {
                               {groupSubject}
                             </Text>
 
+                            {getSubjectScheduleLabel(
+                              groupSubject
+                            ) !== '' ? (
+                              <Text style={styles.subjectSchedule}>
+                                {getSubjectScheduleLabel(
+                                  groupSubject
+                                )}
+                              </Text>
+                            ) : null}
+
                             <Text style={styles.examCount}>
-                              {subjectSummaries.length}回分のまとめ
+                              {subjectSummaries.length > 0
+                                ? `${subjectSummaries.length}回分のまとめ`
+                                : `${getSubjectPhotoLectureCount(groupSubject)}回分の写真・まとめ未作成`}
                             </Text>
 
                             <Text
                               style={[
                                 styles.examStatus,
-                                examPreparationIsCurrent
+                                subjectSummaries.length === 0
+                                  ? styles.examStatusNotCreated
+                                  : examPreparationIsCurrent
                                   ? styles.examStatusSaved
                                   : hasSavedExamPreparation
                                     ? styles.examStatusOutdated
                                     : styles.examStatusNotCreated,
                               ]}
                             >
-                              {examPreparationIsCurrent
+                              {subjectSummaries.length === 0
+                                ? '授業回まとめ未作成'
+                                : examPreparationIsCurrent
                                 ? '保存済み'
                                 : hasSavedExamPreparation
                                   ? 'まとめ更新あり'
@@ -815,7 +1199,9 @@ export default function ReviewScreen() {
                           </View>
 
                           <Text style={styles.examOpenText}>
-                            {hasSavedExamPreparation
+                            {subjectSummaries.length === 0
+                              ? 'まとめを作成 ›'
+                              : hasSavedExamPreparation
                               ? '保存済みを見る ›'
                               : '作成する ›'}
                           </Text>
@@ -825,7 +1211,7 @@ export default function ReviewScreen() {
                   )}
                 </View>
 
-                {filteredSubjectGroups.length === 0 ? (
+                {filteredExamSubjectGroups.length === 0 ? (
                   <Text style={styles.noSearchResults}>
                     検索結果がありません
                   </Text>
@@ -862,13 +1248,27 @@ export default function ReviewScreen() {
                                 {groupSubject}
                               </Text>
 
+                              {getSubjectScheduleLabel(
+                                groupSubject
+                              ) !== '' ? (
+                                <Text style={styles.subjectSchedule}>
+                                  {getSubjectScheduleLabel(
+                                    groupSubject
+                                  )}
+                                </Text>
+                              ) : null}
+
                               <Text style={styles.lectureCount}>
-                                {subjectSummaries.length}回分のまとめ
+                                {subjectSummaries.length > 0
+                                  ? `${subjectSummaries.length}回分のまとめ`
+                                  : `${getSubjectPhotoLectureCount(groupSubject)}回分の写真・まとめ未作成`}
                               </Text>
                             </View>
 
                             <Text style={styles.openTextInline}>
-                              授業回を見る ›
+                              {subjectSummaries.length > 0
+                                ? '授業回を見る ›'
+                                : 'まとめを作成 ›'}
                             </Text>
                           </Pressable>
                         )
@@ -910,6 +1310,24 @@ export default function ReviewScreen() {
                     <Text style={styles.sectionDescription}>
                       見たい授業回を選択してください。
                     </Text>
+
+                    <Pressable
+                      style={styles.createSummaryButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${selectedLectureSubject}の授業回まとめを作成または更新`}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/subject/[subject]',
+                          params: {
+                            subject: selectedLectureSubject,
+                          },
+                        });
+                      }}
+                    >
+                      <Text style={styles.createSummaryButtonText}>
+                        授業回のまとめを作成・更新
+                      </Text>
+                    </Pressable>
 
                     <View style={styles.summaryList}>
                       {selectedSubjectSummaries.map(
@@ -956,7 +1374,9 @@ export default function ReviewScreen() {
 
                     {selectedSubjectSummaries.length === 0 ? (
                       <Text style={styles.noSearchResults}>
-                        この授業内に検索結果がありません
+                        {normalizedSearchQuery === ''
+                          ? 'まだまとめがありません'
+                          : 'この授業内に検索結果がありません'}
                       </Text>
                     ) : null}
                   </Animated.View>
@@ -977,11 +1397,15 @@ export default function ReviewScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
               {selectedSummary?.subject}
-              {selectedSummaryLectureNumber !== null &&
-              selectedSummaryLectureNumber >= 0
-                ? ` 第${selectedSummaryLectureNumber + 1}回`
-                : ''}
             </Text>
+
+            {selectedSummaryLectureNumber !== null &&
+            selectedSummaryLectureNumber >= 0 ? (
+              <Text style={styles.modalProgress}>
+                第{selectedSummaryLectureNumber + 1}回 / 全
+                {selectedSubjectAllSummaries.length}回
+              </Text>
+            ) : null}
 
             <Text style={styles.modalDate}>
               {selectedSummary === null
@@ -1039,17 +1463,72 @@ export default function ReviewScreen() {
               </>
             ) : (
               <>
-                <ScrollView style={styles.modalScrollView}>
-                  <Text
-                    style={styles.modalSummaryText}
-                    selectable
+                <GestureDetector gesture={summarySwipeGesture}>
+                  <ScrollView
+                    key={selectedSummary?.id}
+                    style={styles.modalScrollView}
+                    directionalLockEnabled
                   >
-                    {selectedSummary?.text}
-                  </Text>
-                </ScrollView>
+                    <Text
+                      style={styles.modalSummaryText}
+                      selectable
+                    >
+                      {selectedSummary?.text}
+                    </Text>
+                  </ScrollView>
+                </GestureDetector>
+
+                <View style={styles.summaryNavigationRow}>
+                  <Pressable
+                    style={[
+                      styles.summaryNavigationButton,
+                      (
+                        selectedSummaryLectureNumber === null ||
+                        selectedSummaryLectureNumber <= 0
+                      ) && styles.disabledButton,
+                    ]}
+                    disabled={
+                      selectedSummaryLectureNumber === null ||
+                      selectedSummaryLectureNumber <= 0 ||
+                      isDeletingSummary
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel="前の授業回のまとめを開く"
+                    onPress={() => openAdjacentSummary(-1)}
+                  >
+                    <Text style={styles.summaryNavigationButtonText}>
+                      ‹ 前の回
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.summaryNavigationButton,
+                      (
+                        selectedSummaryLectureNumber === null ||
+                        selectedSummaryLectureNumber >=
+                          selectedSubjectAllSummaries.length - 1
+                      ) && styles.disabledButton,
+                    ]}
+                    disabled={
+                      selectedSummaryLectureNumber === null ||
+                      selectedSummaryLectureNumber >=
+                        selectedSubjectAllSummaries.length - 1 ||
+                      isDeletingSummary
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel="次の授業回のまとめを開く"
+                    onPress={() => openAdjacentSummary(1)}
+                  >
+                    <Text style={styles.summaryNavigationButtonText}>
+                      次の回 ›
+                    </Text>
+                  </Pressable>
+                </View>
 
                 <Pressable
                   style={styles.editSummaryButton}
+                  disabled={isDeletingSummary}
                   accessibilityRole="button"
                   accessibilityLabel="この授業まとめを編集"
                   onPress={() => {
@@ -1066,6 +1545,7 @@ export default function ReviewScreen() {
 
                 <Pressable
                   style={styles.shareSummaryButton}
+                  disabled={isDeletingSummary}
                   accessibilityRole="button"
                   accessibilityLabel="この授業まとめを共有"
                   onPress={() => void shareSelectedSummary()}
@@ -1075,8 +1555,32 @@ export default function ReviewScreen() {
                   </Text>
                 </Pressable>
 
+                {summaryDeleteError !== '' ? (
+                  <Text style={styles.summaryDeleteError}>
+                    {summaryDeleteError}
+                  </Text>
+                ) : null}
+
+                <Pressable
+                  style={[
+                    styles.deleteSummaryButton,
+                    isDeletingSummary && styles.disabledButton,
+                  ]}
+                  disabled={isDeletingSummary}
+                  accessibilityRole="button"
+                  accessibilityLabel="この授業まとめを削除"
+                  onPress={confirmDeleteSelectedSummary}
+                >
+                  <Text style={styles.deleteSummaryButtonText}>
+                    {isDeletingSummary
+                      ? '削除中...'
+                      : 'このまとめを削除'}
+                  </Text>
+                </Pressable>
+
                 <Pressable
                   style={styles.closeButton}
+                  disabled={isDeletingSummary}
                   onPress={closeSummary}
                 >
                   <Text style={styles.closeButtonText}>
@@ -1205,6 +1709,39 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
+  dayFilterContainer: {
+    flexDirection: 'row',
+    gap: 5,
+    marginBottom: 14,
+  },
+
+  dayFilterButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 38,
+    backgroundColor: '#f2f4f8',
+    borderWidth: 1,
+    borderColor: '#d5d9e2',
+    borderRadius: 8,
+    paddingHorizontal: 2,
+  },
+
+  dayFilterButtonActive: {
+    backgroundColor: '#31518f',
+    borderColor: '#31518f',
+  },
+
+  dayFilterButtonText: {
+    color: '#555',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  dayFilterButtonTextActive: {
+    color: 'white',
+  },
+
   modeSelector: {
     flexDirection: 'row',
     backgroundColor: '#ededed',
@@ -1316,6 +1853,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  subjectSchedule: {
+    color: '#687080',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+
   examCount: {
     color: '#5d6470',
     fontSize: 12,
@@ -1409,6 +1953,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  createSummaryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#28794c',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+
+  createSummaryButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1461,6 +2020,13 @@ const styles = StyleSheet.create({
     color: '#111',
     fontSize: 21,
     fontWeight: 'bold',
+  },
+
+  modalProgress: {
+    color: '#28794c',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 5,
   },
 
   modalDate: {
@@ -1536,6 +2102,27 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
 
+  summaryNavigationRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+
+  summaryNavigationButton: {
+    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 8,
+    paddingVertical: 10,
+  },
+
+  summaryNavigationButtonText: {
+    color: '#28794c',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
   editSummaryButtonText: {
     color: 'white',
     fontSize: 15,
@@ -1557,6 +2144,28 @@ const styles = StyleSheet.create({
   shareSummaryButtonText: {
     color: 'white',
     fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  summaryDeleteError: {
+    color: '#9b2c2c',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 10,
+  },
+
+  deleteSummaryButton: {
+    borderWidth: 1,
+    borderColor: '#b33939',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 10,
+  },
+
+  deleteSummaryButtonText: {
+    color: '#b33939',
+    fontSize: 14,
     fontWeight: 'bold',
     textAlign: 'center',
   },

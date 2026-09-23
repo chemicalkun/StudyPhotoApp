@@ -19,6 +19,7 @@ import {
   useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
+import { HeaderBackButton } from '@react-navigation/elements';
 
 import { LoadErrorCard } from '@/components/load-error-card';
 import {
@@ -108,6 +109,7 @@ export default function SubjectScreen() {
     typeof params.subject === 'string'
       ? params.subject
       : '';
+  const openedFromReview = params.from === 'review';
 
   const isUnclassified = subject === '未分類';
 
@@ -735,7 +737,29 @@ export default function SubjectScreen() {
           title: isUnclassified
             ? '未分類の写真'
             : subject || '授業',
-          headerBackTitle: 'ホーム',
+          headerBackTitle: openedFromReview
+            ? '復習'
+            : 'ホーム',
+          headerBackVisible: openedFromReview
+            ? false
+            : undefined,
+          headerLeft: openedFromReview
+            ? (props) => (
+                <HeaderBackButton
+                  {...props}
+                  label="復習"
+                  tintColor="#111"
+                  onPress={() => {
+                    if (router.canGoBack()) {
+                      router.back();
+                      return;
+                    }
+
+                    router.replace('/explore');
+                  }}
+                />
+              )
+            : undefined,
         }}
       />
 
