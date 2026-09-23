@@ -102,4 +102,29 @@ describe('StudyPhoto backup', () => {
       '{"火-2":"現在の授業"}'
     );
   });
+
+  test('復元の途中で保存に失敗した場合は元のデータへ戻す', async () => {
+    await AsyncStorage.setItem(
+      'timetable',
+      '{"火-2":"現在の授業"}'
+    );
+    const backup = createStudyPhotoBackup([
+      ['timetable', '{"月-1":"復元する授業"}'],
+    ]);
+    const multiRemoveSpy = jest
+      .spyOn(AsyncStorage, 'multiRemove')
+      .mockRejectedValueOnce(
+        new Error('テスト用の保存エラー')
+      );
+
+    await expect(
+      restoreBackup(JSON.stringify(backup))
+    ).rejects.toThrow('テスト用の保存エラー');
+
+    expect(await AsyncStorage.getItem('timetable')).toBe(
+      '{"火-2":"現在の授業"}'
+    );
+
+    multiRemoveSpy.mockRestore();
+  });
 });

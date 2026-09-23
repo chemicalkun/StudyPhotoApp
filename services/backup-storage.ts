@@ -155,6 +155,10 @@ export const restoreBackup = async (
 
   validateRestorableData(backup.storage);
 
+  const currentEntries = await AsyncStorage.multiGet([
+    ...restorableBackupStorageKeys,
+  ]);
+
   const entriesToRestore = restorableBackupStorageKeys
     .flatMap((key) => {
       const value = backup.storage[key];
@@ -164,12 +168,41 @@ export const restoreBackup = async (
   const keysToRemove = restorableBackupStorageKeys
     .filter((key) => backup.storage[key] === null);
 
-  if (entriesToRestore.length > 0) {
-    await AsyncStorage.multiSet(entriesToRestore);
-  }
+  try {
+    if (entriesToRestore.length > 0) {
+      await AsyncStorage.multiSet(entriesToRestore);
+    }
 
-  if (keysToRemove.length > 0) {
-    await AsyncStorage.multiRemove(keysToRemove);
+    if (keysToRemove.length > 0) {
+      await AsyncStorage.multiRemove(keysToRemove);
+    }
+  } catch (error) {
+    const entriesToRollback = currentEntries.flatMap(
+      ([key, value]) =>
+        value === null ? [] : [[key, value] as const]
+    );
+    const rollbackKeysToRemove = currentEntries
+      .filter(([, value]) => value === null)
+      .map(([key]) => key);
+
+    try {
+      if (entriesToRollback.length > 0) {
+        await AsyncStorage.multiSet(entriesToRollback);
+      }
+
+      if (rollbackKeysToRemove.length > 0) {
+        await AsyncStorage.multiRemove(
+          rollbackKeysToRemove
+        );
+      }
+    } catch (rollbackError) {
+      console.log(
+        'バックアップ復元の巻き戻しエラー:',
+        rollbackError
+      );
+    }
+
+    throw error;
   }
 
   return backup;
