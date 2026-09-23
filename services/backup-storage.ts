@@ -8,6 +8,9 @@ import {
   restorableBackupStorageKeys,
 } from '@/types/backup';
 import { parseAcademicTerm } from '@/types/academic-term';
+import {
+  parseAcademicTimetables,
+} from '@/types/academic-timetable';
 import { parseExamPreparationRecords } from '@/types/exam-preparation';
 import { parseFlashcardRecords } from '@/types/flashcard';
 import { parseLectureSummaryRecords } from '@/types/lecture-summary';
@@ -93,6 +96,10 @@ const validateRestorableData = (
 ) => {
   if (storage.academicTerm !== null) {
     parseAcademicTerm(storage.academicTerm);
+  }
+
+  if (storage.academicTimetables !== null) {
+    parseAcademicTimetables(storage.academicTimetables);
   }
 
   if (storage.timetable !== null) {

@@ -1,5 +1,6 @@
 export const backupStorageKeys = [
   'academicTerm',
+  'academicTimetables',
   'timetable',
   'periodTimes',
   'photos',
@@ -27,6 +28,7 @@ export type StudyPhotoBackup = {
 
 export const restorableBackupStorageKeys = [
   'academicTerm',
+  'academicTimetables',
   'timetable',
   'periodTimes',
   'lectureSummaryRecords',
@@ -95,6 +97,7 @@ export const parseStudyPhotoBackup = (
   >;
   const optionalLegacyKeys = new Set<BackupStorageKey>([
     'academicTerm',
+    'academicTimetables',
     'subjectQuestionRecords',
   ]);
   const hasValidStorageValues = backupStorageKeys.every(
@@ -127,6 +130,10 @@ export const parseStudyPhotoBackup = (
       academicTerm:
         typeof storage.academicTerm === 'string'
           ? storage.academicTerm
+          : null,
+      academicTimetables:
+        typeof storage.academicTimetables === 'string'
+          ? storage.academicTimetables
           : null,
       subjectQuestionRecords:
         typeof storage.subjectQuestionRecords === 'string'

@@ -16,6 +16,14 @@ export type AcademicTerm = {
 };
 
 
+export const createAcademicTermId = (
+  academicTerm: AcademicTerm
+) => JSON.stringify([
+  academicTerm.academicYear,
+  academicTerm.term,
+]);
+
+
 export const getDefaultAcademicTerm = (
   date = new Date()
 ): AcademicTerm => {

@@ -45,6 +45,7 @@ describe('StudyPhoto backup', () => {
     } as Record<string, string | null>;
 
     delete legacyStorage.academicTerm;
+    delete legacyStorage.academicTimetables;
     delete legacyStorage.subjectQuestionRecords;
 
     const parsed = parseStudyPhotoBackup(JSON.stringify({
@@ -53,6 +54,7 @@ describe('StudyPhoto backup', () => {
     }));
 
     expect(parsed.storage.academicTerm).toBeNull();
+    expect(parsed.storage.academicTimetables).toBeNull();
     expect(parsed.storage.subjectQuestionRecords).toBeNull();
   });
 

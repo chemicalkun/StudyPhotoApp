@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,12 +14,14 @@ import { Stack } from 'expo-router';
 
 import {
   loadAcademicTerm,
-  saveAcademicTerm,
+  switchAcademicTerm,
 } from '@/services/academic-term-storage';
 import {
   academicTermNames,
+  createAcademicTermId,
   formatAcademicTerm,
   getDefaultAcademicTerm,
+  type AcademicTerm,
   type AcademicTermName,
 } from '@/types/academic-term';
 
@@ -31,6 +34,8 @@ export default function AcademicTermScreen() {
   const [term, setTerm] = useState<AcademicTermName>(
     defaultAcademicTerm.term
   );
+  const [savedAcademicTerm, setSavedAcademicTerm] =
+    useState<AcademicTerm>(defaultAcademicTerm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -52,6 +57,7 @@ export default function AcademicTermScreen() {
           String(savedAcademicTerm.academicYear)
         );
         setTerm(savedAcademicTerm.term);
+        setSavedAcademicTerm(savedAcademicTerm);
       } catch (error) {
         console.log('学年・学期設定読み込みエラー:', error);
 
@@ -75,7 +81,38 @@ export default function AcademicTermScreen() {
   }, []);
 
 
-  const save = async () => {
+  const performSave = async (
+    nextAcademicTerm: AcademicTerm
+  ) => {
+    try {
+      setSaving(true);
+      setErrorMessage('');
+      setStatusMessage('');
+
+      const result = await switchAcademicTerm(
+        nextAcademicTerm
+      );
+
+      setAcademicYear(
+        String(result.academicTerm.academicYear)
+      );
+      setTerm(result.academicTerm.term);
+      setSavedAcademicTerm(result.academicTerm);
+      setStatusMessage(
+        `${formatAcademicTerm(result.academicTerm)}の時間割に切り替えました。`
+      );
+    } catch (error) {
+      console.log('学年・学期設定保存エラー:', error);
+      setErrorMessage(
+        '学年・学期設定を保存できませんでした。'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
+  const save = () => {
     const parsedYear = Number(academicYear);
 
     if (
@@ -90,30 +127,32 @@ export default function AcademicTermScreen() {
       return;
     }
 
-    try {
-      setSaving(true);
-      setErrorMessage('');
-      setStatusMessage('');
+    const nextAcademicTerm: AcademicTerm = {
+      academicYear: parsedYear,
+      term,
+    };
 
-      const savedAcademicTerm = await saveAcademicTerm({
-        academicYear: parsedYear,
-        term,
-      });
-
-      setAcademicYear(
-        String(savedAcademicTerm.academicYear)
-      );
-      setStatusMessage(
-        `${formatAcademicTerm(savedAcademicTerm)}を保存しました。`
-      );
-    } catch (error) {
-      console.log('学年・学期設定保存エラー:', error);
-      setErrorMessage(
-        '学年・学期設定を保存できませんでした。'
-      );
-    } finally {
-      setSaving(false);
+    if (
+      createAcademicTermId(nextAcademicTerm) ===
+      createAcademicTermId(savedAcademicTerm)
+    ) {
+      void performSave(nextAcademicTerm);
+      return;
     }
+
+    Alert.alert(
+      '時間割を切り替えますか？',
+      `${formatAcademicTerm(savedAcademicTerm)}の時間割を保存し、${formatAcademicTerm(nextAcademicTerm)}の時間割を開きます。`,
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '切り替える',
+          onPress: () => {
+            void performSave(nextAcademicTerm);
+          },
+        },
+      ]
+    );
   };
 
 
@@ -228,7 +267,7 @@ export default function AcademicTermScreen() {
 
             <View style={styles.noticeCard}>
               <Text style={styles.noticeText}>
-                今回は現在の学年・学期の設定のみを保存します。過去の時間割を切り替える機能は次の段階で追加します。
+                学期を切り替えると、現在の時間割は自動で保存されます。以前の学期に戻すと、その学期の時間割が復元されます。
               </Text>
             </View>
 
@@ -238,13 +277,13 @@ export default function AcademicTermScreen() {
                 saving && styles.saveButtonDisabled,
               ]}
               disabled={saving}
-              onPress={() => void save()}
+              onPress={save}
             >
               {saving ? (
                 <ActivityIndicator color="white" />
               ) : null}
               <Text style={styles.saveButtonText}>
-                {saving ? '保存中...' : '学年・学期を保存'}
+                {saving ? '切り替え中...' : 'この学期に切り替える'}
               </Text>
             </Pressable>
 

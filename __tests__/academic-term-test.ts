@@ -3,8 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   loadAcademicTerm,
   saveAcademicTerm,
+  switchAcademicTerm,
 } from '@/services/academic-term-storage';
 import {
+  createAcademicTermId,
   formatAcademicTerm,
   getDefaultAcademicTerm,
   parseAcademicTerm,
@@ -41,6 +43,48 @@ describe('academic term', () => {
         term: '通年',
       })
     ).toBe('2026年度 通年');
+  });
+
+  test('学期ごとに時間割を保存して切り替える', async () => {
+    const firstTerm = {
+      academicYear: 2026,
+      term: '前期' as const,
+    };
+    const secondTerm = {
+      academicYear: 2026,
+      term: '後期' as const,
+    };
+
+    await saveAcademicTerm(firstTerm);
+    await AsyncStorage.setItem(
+      'timetable',
+      JSON.stringify({ '月-1': '有機化学' })
+    );
+
+    await switchAcademicTerm(secondTerm);
+
+    expect(await AsyncStorage.getItem('timetable')).toBe('{}');
+    expect(await loadAcademicTerm()).toEqual(secondTerm);
+
+    const savedTimetables = JSON.parse(
+      await AsyncStorage.getItem('academicTimetables') ?? '{}'
+    );
+
+    expect(
+      savedTimetables[createAcademicTermId(firstTerm)]
+    ).toEqual({ '月-1': '有機化学' });
+
+    await AsyncStorage.setItem(
+      'timetable',
+      JSON.stringify({ '火-2': '物理化学' })
+    );
+    await switchAcademicTerm(firstTerm);
+
+    expect(
+      JSON.parse(
+        await AsyncStorage.getItem('timetable') ?? '{}'
+      )
+    ).toEqual({ '月-1': '有機化学' });
   });
 
   test('不正な学年・学期設定を拒否する', () => {
