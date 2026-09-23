@@ -23,6 +23,9 @@ import { HeaderBackButton } from '@react-navigation/elements';
 
 import { LoadErrorCard } from '@/components/load-error-card';
 import {
+  LectureSummaryReviewPoints,
+} from '@/components/lecture-summary-review-points';
+import {
   isUnclassifiedPhoto,
   PhotoRecord,
 } from '@/types/photo';
@@ -1067,6 +1070,10 @@ export default function SubjectScreen() {
                       端末に保存済み
                     </Text>
                   ) : null}
+
+                  <LectureSummaryReviewPoints
+                    summaryText={lectureSummary}
+                  />
 
                   <Text
                     style={styles.summaryResultText}

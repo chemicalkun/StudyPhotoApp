@@ -31,6 +31,9 @@ import {
 } from 'react-native-gesture-handler';
 
 import { LoadErrorCard } from '@/components/load-error-card';
+import {
+  LectureSummaryReviewPoints,
+} from '@/components/lecture-summary-review-points';
 import { loadExamPreparationRecords } from '@/services/exam-preparation-storage';
 import { loadFlashcardRecords } from '@/services/flashcard-storage';
 import {
@@ -1469,6 +1472,10 @@ export default function ReviewScreen() {
                     style={styles.modalScrollView}
                     directionalLockEnabled
                   >
+                    <LectureSummaryReviewPoints
+                      summaryText={selectedSummary?.text ?? ''}
+                    />
+
                     <Text
                       style={styles.modalSummaryText}
                       selectable
