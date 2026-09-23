@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -56,6 +57,8 @@ export default function TimetableImportScreen() {
   const [candidateDrafts, setCandidateDrafts] =
     useState<TimetableCandidate[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [settingsRequired, setSettingsRequired] =
+    useState(false);
   const timetableRecognitionResult = useMemo(
     () => parseTimetableCandidates(recognizedTextBlocks),
     [recognizedTextBlocks]
@@ -75,11 +78,18 @@ export default function TimetableImportScreen() {
         await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permissionResult.granted) {
+        setSettingsRequired(
+          !permissionResult.canAskAgain
+        );
         setErrorMessage(
-          '時間割画像を選ぶには、写真ライブラリへのアクセスが必要です。'
+          permissionResult.canAskAgain
+            ? '時間割画像を選ぶには、写真ライブラリへのアクセスが必要です。'
+            : 'iPhoneの設定から写真ライブラリへのアクセスを許可してください。'
         );
         return;
       }
+
+      setSettingsRequired(false);
 
       const result =
         await ImagePicker.launchImageLibraryAsync({
@@ -374,6 +384,20 @@ export default function TimetableImportScreen() {
           <Text style={styles.errorText}>
             {errorMessage}
           </Text>
+
+          {settingsRequired ? (
+            <Pressable
+              style={styles.settingsButton}
+              accessibilityRole="button"
+              onPress={() => {
+                void Linking.openSettings();
+              }}
+            >
+              <Text style={styles.settingsButtonText}>
+                iPhoneの設定を開く
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
 
@@ -697,6 +721,21 @@ const styles = StyleSheet.create({
     color: '#8a2020',
     fontSize: 14,
     lineHeight: 20,
+  },
+
+  settingsButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#8a2020',
+    borderRadius: 7,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    marginTop: 11,
+  },
+
+  settingsButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 
   previewContainer: {

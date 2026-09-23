@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  AppState,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -25,7 +27,11 @@ import { savePhotoFromUri } from '@/services/photo-storage';
 
 
 export default function CameraScreen() {
-  const [permission, requestPermission] = useCameraPermissions();
+  const [
+    permission,
+    requestPermission,
+    getPermission,
+  ] = useCameraPermissions();
 
   const cameraRef = useRef<CameraView>(null);
 
@@ -33,7 +39,21 @@ export default function CameraScreen() {
   const [saving, setSaving] = useState(false);
 
 
-  const takePicture = async (testMode = false) => {
+  useEffect(() => {
+    const subscription = AppState.addEventListener(
+      'change',
+      (state) => {
+        if (state === 'active') {
+          void getPermission();
+        }
+      }
+    );
+
+    return () => subscription.remove();
+  }, [getPermission]);
+
+
+  const takePicture = async () => {
     if (!cameraRef.current || saving) {
       return;
     }
@@ -51,21 +71,10 @@ export default function CameraScreen() {
         throw new Error('撮影データがありません');
       }
 
-      let day: string;
-      let hour: number;
-      let minute: number;
-
-      if (testMode) {
-        day = '月';
-        hour = 9;
-        minute = 30;
-      } else {
-        const now = new Date();
-
-        day = getDayName(now);
-        hour = now.getHours();
-        minute = now.getMinutes();
-      }
+      const now = new Date();
+      const day = getDayName(now);
+      const hour = now.getHours();
+      const minute = now.getMinutes();
 
       const [configuredPeriodTimes, savedTimetable] =
         await Promise.all([
@@ -116,15 +125,26 @@ export default function CameraScreen() {
     return (
       <View style={styles.permissionContainer}>
         <Text style={styles.permissionText}>
-          写真を撮影するためにカメラへのアクセスが必要です。
+          {permission.canAskAgain
+            ? '写真を撮影するためにカメラへのアクセスが必要です。'
+            : 'iPhoneの設定からStudyPhotoのカメラアクセスを許可してください。'}
         </Text>
 
         <Pressable
           style={styles.permissionButton}
-          onPress={requestPermission}
+          onPress={() => {
+            if (permission.canAskAgain) {
+              void requestPermission();
+              return;
+            }
+
+            void Linking.openSettings();
+          }}
         >
           <Text style={styles.buttonText}>
-            カメラを許可する
+            {permission.canAskAgain
+              ? 'カメラを許可する'
+              : 'iPhoneの設定を開く'}
           </Text>
         </Pressable>
       </View>
@@ -151,25 +171,9 @@ export default function CameraScreen() {
             saving && styles.disabledButton,
           ]}
           disabled={saving}
-          onPress={() => takePicture(false)}
+          onPress={() => void takePicture()}
         >
           <View style={styles.shutterInner} />
-        </Pressable>
-
-
-        <Pressable
-          style={[
-            styles.testButton,
-            saving && styles.disabledButton,
-          ]}
-          disabled={saving}
-          onPress={() => takePicture(true)}
-        >
-          <Text style={styles.testButtonText}>
-            {saving
-              ? '保存中...'
-              : 'テスト：月曜 9:30として撮影'}
-          </Text>
         </Pressable>
       </View>
     </View>
@@ -178,23 +182,10 @@ export default function CameraScreen() {
 
 
 const styles = StyleSheet.create({
-
-    libraryButton: {
-    marginTop: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    },
-
-    libraryButtonText: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: 'bold',
-    },
-
-    container: {
-        flex: 1,
-        backgroundColor: 'black',
-    },
+  container: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
 
   camera: {
     flex: 1,
@@ -233,16 +224,6 @@ const styles = StyleSheet.create({
     color: 'white',
     marginBottom: 12,
     textAlign: 'center',
-  },
-
-  testButton: {
-    marginTop: 12,
-    padding: 10,
-  },
-
-  testButtonText: {
-    color: 'white',
-    fontSize: 13,
   },
 
   permissionContainer: {

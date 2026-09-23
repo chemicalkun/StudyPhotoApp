@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -24,6 +25,8 @@ import { savePhotoFromUri } from '@/services/photo-storage';
 export default function LibraryScreen() {
   const [message, setMessage] = useState('');
   const [importing, setImporting] = useState(false);
+  const [settingsRequired, setSettingsRequired] =
+    useState(false);
 
   const pickImage = async () => {
     if (importing) {
@@ -37,11 +40,18 @@ export default function LibraryScreen() {
         await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permissionResult.granted) {
+        setSettingsRequired(
+          !permissionResult.canAskAgain
+        );
         setMessage(
-          '写真ライブラリへのアクセスが必要です'
+          permissionResult.canAskAgain
+            ? '写真ライブラリへのアクセスが必要です'
+            : 'iPhoneの設定から写真ライブラリへのアクセスを許可してください'
         );
         return;
       }
+
+      setSettingsRequired(false);
 
       const result =
         await ImagePicker.launchImageLibraryAsync({
@@ -188,6 +198,20 @@ export default function LibraryScreen() {
       <Text style={styles.message}>
         {message}
       </Text>
+
+      {settingsRequired ? (
+        <Pressable
+          style={styles.settingsButton}
+          accessibilityRole="button"
+          onPress={() => {
+            void Linking.openSettings();
+          }}
+        >
+          <Text style={styles.settingsButtonText}>
+            iPhoneの設定を開く
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -235,5 +259,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 20,
+  },
+
+  settingsButton: {
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: '#555',
+    borderRadius: 9,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    marginTop: 14,
+  },
+
+  settingsButtonText: {
+    color: '#333',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
