@@ -1,13 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
+  deleteLectureSummaryRecord,
   loadLectureSummaryRecords,
+  moveLectureSummaryRecord,
   saveLectureSummaryRecord,
   updateLectureSummaryText,
 } from '@/services/lecture-summary-storage';
 import {
   createLectureSummaryId,
   createLectureSummarySourceSignature,
+  getLectureSummarySourcePhotoIds,
   parseLectureSummaryRecords,
 } from '@/types/lecture-summary';
 
@@ -81,6 +84,26 @@ describe('lecture summary storage', () => {
     expect(updatedSignature).not.toBe(firstSignature);
   });
 
+  test('元データ署名からまとめに使った写真IDを取得する', () => {
+    const signature = createLectureSummarySourceSignature([
+      {
+        photoId: 'photo-1',
+        recognizedAt: '2026-09-21T01:00:00.000Z',
+      },
+      {
+        photoId: 'photo-2',
+        recognizedAt: '2026-09-21T01:01:00.000Z',
+      },
+    ]);
+
+    expect(
+      getLectureSummarySourcePhotoIds(signature)
+    ).toEqual(['photo-1', 'photo-2']);
+    expect(
+      getLectureSummarySourcePhotoIds('legacy-signature')
+    ).toBeNull();
+  });
+
   test('保存済みのまとめ本文を編集する', async () => {
     const saved = await saveLectureSummaryRecord(
       '高分子化学',
@@ -98,6 +121,80 @@ describe('lecture summary storage', () => {
     expect(updated.text).toBe('編集後のまとめ');
     expect(updated.sourceOcrSignature).toBe('source-1');
     expect(records[saved.id]).toEqual(updated);
+  });
+
+  test('授業まとめを同じ日の別授業へ移動する', async () => {
+    const saved = await saveLectureSummaryRecord(
+      '未分類',
+      '2026-9-21',
+      '授業まとめ',
+      'source-1'
+    );
+
+    const moved = await moveLectureSummaryRecord(
+      saved.id,
+      '高分子化学'
+    );
+    const records = await loadLectureSummaryRecords();
+
+    expect(records[saved.id]).toBeUndefined();
+    expect(records[moved.id]).toMatchObject({
+      subject: '高分子化学',
+      dateKey: '2026-9-21',
+      text: '授業まとめ',
+    });
+  });
+
+  test('移動先に同じ日のまとめがある場合は上書きしない', async () => {
+    const saved = await saveLectureSummaryRecord(
+      '未分類',
+      '2026-9-21',
+      '未分類のまとめ',
+      'source-1'
+    );
+    await saveLectureSummaryRecord(
+      '高分子化学',
+      '2026-9-21',
+      '既存のまとめ',
+      'source-2'
+    );
+
+    await expect(
+      moveLectureSummaryRecord(
+        saved.id,
+        '高分子化学'
+      )
+    ).rejects.toThrow(
+      '移動先に同じ日の授業まとめがあります'
+    );
+
+    const records = await loadLectureSummaryRecords();
+
+    expect(records[saved.id]?.text).toBe(
+      '未分類のまとめ'
+    );
+  });
+
+  test('指定した授業まとめだけを削除する', async () => {
+    const first = await saveLectureSummaryRecord(
+      '高分子化学',
+      '2026-9-21',
+      '第1回のまとめ',
+      'source-1'
+    );
+    const second = await saveLectureSummaryRecord(
+      '高分子化学',
+      '2026-9-28',
+      '第2回のまとめ',
+      'source-2'
+    );
+
+    await deleteLectureSummaryRecord(first.id);
+
+    const records = await loadLectureSummaryRecords();
+
+    expect(records[first.id]).toBeUndefined();
+    expect(records[second.id]).toBeDefined();
   });
 });
 

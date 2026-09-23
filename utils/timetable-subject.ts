@@ -47,6 +47,70 @@ export const getUniqueTimetableSubjects = (
 };
 
 
+export type TimetableSubjectRename = {
+  previousSubject: string;
+  nextSubject: string;
+};
+
+
+export const getTimetableSubjectRenames = (
+  previousTimetable: Record<string, string>,
+  nextTimetable: Record<string, string>
+): TimetableSubjectRename[] => {
+  const previousSubjects =
+    getUniqueTimetableSubjects(previousTimetable);
+  const nextSubjects =
+    getUniqueTimetableSubjects(nextTimetable);
+
+  return previousSubjects.flatMap((previousSubject) => {
+    if (
+      nextSubjects.some((subject) =>
+        areSameSubjectNames(subject, previousSubject)
+      )
+    ) {
+      return [];
+    }
+
+    const replacementSubjects = Object.entries(
+      previousTimetable
+    ).flatMap(([key, subject]) => {
+      if (!areSameSubjectNames(subject, previousSubject)) {
+        return [];
+      }
+
+      const replacement = nextTimetable[key]?.trim();
+
+      return replacement ? [replacement] : [];
+    });
+    const uniqueReplacements = [
+      ...new Map(
+        replacementSubjects.map((subject) => [
+          normalizeSubjectName(subject),
+          subject,
+        ])
+      ).values(),
+    ];
+
+    if (uniqueReplacements.length !== 1) {
+      return [];
+    }
+
+    const nextSubject = uniqueReplacements[0];
+    const nextSubjectAlreadyExisted = previousSubjects.some(
+      (subject) =>
+        !areSameSubjectNames(subject, previousSubject) &&
+        areSameSubjectNames(subject, nextSubject)
+    );
+
+    if (nextSubjectAlreadyExisted) {
+      return [];
+    }
+
+    return [{ previousSubject, nextSubject }];
+  });
+};
+
+
 export const renameTimetableSubject = (
   timetable: Record<string, string>,
   previousSubject: string,

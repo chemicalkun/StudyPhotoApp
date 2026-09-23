@@ -30,6 +30,8 @@ import {
   timetableDays,
 } from '@/utils/timetable-recognition';
 import { parsePhotoRecords } from '@/types/photo';
+import { renameSubjectLearningData } from '@/services/subject-learning-data-storage';
+import { getTimetableSubjectRenames } from '@/utils/timetable-subject';
 
 import {
   isStudyPhotoVisionAvailable,
@@ -209,6 +211,7 @@ export default function TimetableImportScreen() {
 
     let originalPhotos: string | null = null;
     let photosWereUpdated = false;
+    const learningDataRollbacks: (() => Promise<void>)[] = [];
 
     try {
       const savedTimetable =
@@ -219,7 +222,12 @@ export default function TimetableImportScreen() {
         currentTimetable,
         candidates
       );
+      const subjectRenames = getTimetableSubjectRenames(
+        currentTimetable,
+        newTimetable
+      );
       let updatedPhotoCount = 0;
+      let updatedLearningRecordCount = 0;
 
       originalPhotos = await AsyncStorage.getItem('photos');
 
@@ -244,6 +252,20 @@ export default function TimetableImportScreen() {
         }
       }
 
+      for (const subjectRename of subjectRenames) {
+        const learningDataUpdate =
+          await renameSubjectLearningData(
+            subjectRename.previousSubject,
+            subjectRename.nextSubject
+          );
+
+        updatedLearningRecordCount +=
+          learningDataUpdate.updatedRecordCount;
+        learningDataRollbacks.push(
+          learningDataUpdate.rollback
+        );
+      }
+
       await AsyncStorage.setItem(
         'timetable',
         JSON.stringify(newTimetable)
@@ -258,9 +280,15 @@ export default function TimetableImportScreen() {
 
       Alert.alert(
         '時間割を保存しました',
-        updatedPhotoCount > 0
-          ? `${candidates.length}件の授業と、既存の写真${updatedPhotoCount}枚を更新しました。`
-          : `${candidates.length}件の授業を保存しました。`,
+        [
+          `${candidates.length}件の授業を保存しました。`,
+          updatedPhotoCount > 0
+            ? `既存の写真${updatedPhotoCount}枚を更新しました。`
+            : '',
+          updatedLearningRecordCount > 0
+            ? `関連する学習データ${updatedLearningRecordCount}件の授業名も更新しました。`
+            : '',
+        ].filter(Boolean).join('\n'),
         [
           {
             text: '時間割を確認',
@@ -270,6 +298,21 @@ export default function TimetableImportScreen() {
       );
     } catch (error) {
       console.log('時間割一括保存エラー:', error);
+
+      for (
+        let index = learningDataRollbacks.length - 1;
+        index >= 0;
+        index -= 1
+      ) {
+        try {
+          await learningDataRollbacks[index]();
+        } catch (rollbackError) {
+          console.log(
+            '学習データの授業名復元エラー:',
+            rollbackError
+          );
+        }
+      }
 
       if (photosWereUpdated && originalPhotos !== null) {
         try {

@@ -25,11 +25,23 @@ import {
 
 import { LoadErrorCard } from '@/components/load-error-card';
 import {
+  getLectureSummarySourcePhotoIds,
+  createLectureSummaryId,
+} from '@/types/lecture-summary';
+import {
+  loadLectureSummaryRecords,
+  moveLectureSummaryRecord,
+} from '@/services/lecture-summary-storage';
+import {
+  isUnclassifiedPhoto,
   parsePhotoRecords,
   PhotoRecord,
 } from '@/types/photo';
 import { parseTimetable } from '@/utils/classification';
-import { getUniqueTimetableSubjects } from '@/utils/timetable-subject';
+import {
+  areSameSubjectNames,
+  getUniqueTimetableSubjects,
+} from '@/utils/timetable-subject';
 import type { PhotoOcrRecord } from '@/types/photo-ocr';
 import {
   deletePhotoOcrRecord,
@@ -558,6 +570,13 @@ export default function PhotoScreen() {
 
       const normalizedSubject =
         selectedSubject.trim() || null;
+      const previousSummarySubject =
+        isUnclassifiedPhoto(photo)
+          ? '未分類'
+          : photo.subject;
+      const nextSummarySubject =
+        normalizedSubject ?? '未分類';
+      const lectureDateKey = getDateKey(photo.takenAt);
 
       let updatedPhoto: PhotoRecord | null = null;
 
@@ -578,19 +597,127 @@ export default function PhotoScreen() {
         throw new Error('分類を変更する写真が見つかりません');
       }
 
+      const lectureSummaryRecords =
+        await loadLectureSummaryRecords();
+      const expectedPreviousSummaryId =
+        previousSummarySubject === null
+          ? null
+          : createLectureSummaryId(
+              previousSummarySubject,
+              lectureDateKey
+            );
+      const expectedPreviousSummary =
+        expectedPreviousSummaryId === null
+          ? undefined
+          : lectureSummaryRecords[
+              expectedPreviousSummaryId
+            ];
+      const summariesUsingCurrentPhoto = Object.values(
+        lectureSummaryRecords
+      ).filter((summary) => {
+        if (summary.dateKey !== lectureDateKey) {
+          return false;
+        }
+
+        return getLectureSummarySourcePhotoIds(
+          summary.sourceOcrSignature
+        )?.includes(photo.id) === true;
+      });
+      const previousSummary =
+        expectedPreviousSummary ??
+        (
+          summariesUsingCurrentPhoto.length === 1
+            ? summariesUsingCurrentPhoto[0]
+            : undefined
+        );
+      const previousSummaryId = previousSummary === undefined
+        ? undefined
+        : previousSummary.id;
+      const summarySourcePhotoIds = previousSummary === undefined
+        ? null
+        : getLectureSummarySourcePhotoIds(
+            previousSummary.sourceOcrSignature
+          );
+      const updatedPhotosById = new Map(
+        updatedPhotos.map((item) => [item.id, item])
+      );
+      const allSummaryPhotosMoved =
+        summarySourcePhotoIds !== null &&
+        summarySourcePhotoIds.length > 0 &&
+        summarySourcePhotoIds.every((photoId) => {
+          const sourcePhoto = updatedPhotosById.get(photoId);
+
+          if (
+            sourcePhoto === undefined ||
+            getDateKey(sourcePhoto.takenAt) !== lectureDateKey
+          ) {
+            return false;
+          }
+
+          return nextSummarySubject === '未分類'
+            ? isUnclassifiedPhoto(sourcePhoto)
+            : sourcePhoto.subject !== null &&
+                areSameSubjectNames(
+                  sourcePhoto.subject,
+                  nextSummarySubject
+                );
+        });
+      const shouldMoveSummary =
+        previousSummary !== undefined &&
+        previousSummaryId !== undefined &&
+        !areSameSubjectNames(
+          previousSummary.subject,
+          nextSummarySubject
+        ) &&
+        allSummaryPhotosMoved;
+
       await AsyncStorage.setItem(
         'photos',
         JSON.stringify(updatedPhotos)
       );
 
+      try {
+        if (shouldMoveSummary) {
+          await moveLectureSummaryRecord(
+            previousSummaryId,
+            nextSummarySubject
+          );
+        }
+      } catch (summaryMoveError) {
+        try {
+          await AsyncStorage.setItem(
+            'photos',
+            savedPhotos
+          );
+        } catch (rollbackError) {
+          console.log(
+            '写真分類の復元エラー:',
+            rollbackError
+          );
+        }
+
+        throw summaryMoveError;
+      }
+
       setPhoto(updatedPhoto);
       setClassificationModalVisible(false);
+
+      if (shouldMoveSummary) {
+        Alert.alert(
+          '分類を変更しました',
+          'この授業回のまとめも同じ授業へ移動しました。'
+        );
+      }
     } catch (error) {
       console.log('写真分類変更エラー:', error);
 
       Alert.alert(
         '分類を変更できませんでした',
-        '写真の分類を保存する際にエラーが発生しました。'
+        error instanceof Error &&
+        error.message ===
+          '移動先に同じ日の授業まとめがあります'
+          ? '移動先に同じ日のまとめがあるため、上書きせず中止しました。'
+          : '写真の分類を保存する際にエラーが発生しました。'
       );
     } finally {
       setSavingClassification(false);

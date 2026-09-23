@@ -36,6 +36,33 @@ export const createLectureSummarySourceSignature = (
 );
 
 
+export const getLectureSummarySourcePhotoIds = (
+  sourceOcrSignature: string
+): string[] | null => {
+  try {
+    const parsedSignature: unknown =
+      JSON.parse(sourceOcrSignature);
+
+    if (
+      !Array.isArray(parsedSignature) ||
+      !parsedSignature.every(
+        (item) =>
+          Array.isArray(item) &&
+          item.length === 2 &&
+          typeof item[0] === 'string' &&
+          typeof item[1] === 'string'
+      )
+    ) {
+      return null;
+    }
+
+    return parsedSignature.map(([photoId]) => photoId);
+  } catch {
+    return null;
+  }
+};
+
+
 const isLectureSummaryRecord = (
   value: unknown
 ): value is LectureSummaryRecord => {

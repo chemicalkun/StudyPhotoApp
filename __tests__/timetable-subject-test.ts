@@ -1,4 +1,5 @@
 import {
+  getTimetableSubjectRenames,
   getUniqueTimetableSubjects,
   renameTimetableSubject,
 } from '@/utils/timetable-subject';
@@ -40,5 +41,47 @@ describe('timetable subject', () => {
       '水-3': '英語',
       '木-4': '',
     })).toEqual(['英語', '化学']);
+  });
+
+  test('すべての時間割枠が同じ新授業名へ変わったら名称変更と判定する', () => {
+    expect(getTimetableSubjectRenames(
+      {
+        '月-1': '化学',
+        '木-2': '化学',
+      },
+      {
+        '月-1': '高分子化学',
+        '木-2': '高分子化学',
+      }
+    )).toEqual([{
+      previousSubject: '化学',
+      nextSubject: '高分子化学',
+    }]);
+  });
+
+  test('旧授業名が残る場合は名称変更と判定しない', () => {
+    expect(getTimetableSubjectRenames(
+      {
+        '月-1': '化学',
+        '木-2': '化学',
+      },
+      {
+        '月-1': '高分子化学',
+        '木-2': '化学',
+      }
+    )).toEqual([]);
+  });
+
+  test('複数の新授業名へ分かれる場合は名称変更と判定しない', () => {
+    expect(getTimetableSubjectRenames(
+      {
+        '月-1': '化学',
+        '木-2': '化学',
+      },
+      {
+        '月-1': '有機化学',
+        '木-2': '無機化学',
+      }
+    )).toEqual([]);
   });
 });

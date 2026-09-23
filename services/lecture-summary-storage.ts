@@ -102,3 +102,74 @@ export const updateLectureSummaryText = async (
 
   return updatedRecord;
 };
+
+
+export const moveLectureSummaryRecord = async (
+  summaryId: string,
+  nextSubject: string
+): Promise<LectureSummaryRecord> => {
+  const normalizedNextSubject = nextSubject.trim();
+
+  if (summaryId === '' || normalizedNextSubject === '') {
+    throw new Error('移動先の授業名が不正です');
+  }
+
+  const records = await loadLectureSummaryRecords();
+  const currentRecord = records[summaryId];
+
+  if (currentRecord === undefined) {
+    throw new Error('移動する授業まとめが見つかりません');
+  }
+
+  const nextId = createLectureSummaryId(
+    normalizedNextSubject,
+    currentRecord.dateKey
+  );
+
+  if (nextId === summaryId) {
+    return currentRecord;
+  }
+
+  if (records[nextId] !== undefined) {
+    throw new Error(
+      '移動先に同じ日の授業まとめがあります'
+    );
+  }
+
+  const movedRecord: LectureSummaryRecord = {
+    ...currentRecord,
+    id: nextId,
+    subject: normalizedNextSubject,
+  };
+  const nextRecords = { ...records };
+
+  delete nextRecords[summaryId];
+  nextRecords[nextId] = movedRecord;
+
+  await saveLectureSummaryRecords(nextRecords);
+
+  return movedRecord;
+};
+
+
+export const deleteLectureSummaryRecord = async (
+  summaryId: string
+): Promise<LectureSummaryRecord> => {
+  if (summaryId === '') {
+    throw new Error('削除する授業まとめがありません');
+  }
+
+  const records = await loadLectureSummaryRecords();
+  const deletedRecord = records[summaryId];
+
+  if (deletedRecord === undefined) {
+    throw new Error('削除する授業まとめが見つかりません');
+  }
+
+  const nextRecords = { ...records };
+
+  delete nextRecords[summaryId];
+  await saveLectureSummaryRecords(nextRecords);
+
+  return deletedRecord;
+};
