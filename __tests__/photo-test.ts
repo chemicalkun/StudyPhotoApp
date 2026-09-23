@@ -1,6 +1,8 @@
 import {
   groupPhotosBySubject,
+  getPhotoAcademicTerm,
   isUnclassifiedPhoto,
+  parsePhotoRecords,
   type PhotoRecord,
 } from '@/types/photo';
 
@@ -39,5 +41,26 @@ describe('写真の授業分類', () => {
 
     expect(Object.keys(groups)).toEqual(['高分子化学']);
     expect(groups['高分子化学']).toHaveLength(1);
+  });
+
+  test('新しい写真の学期情報を読み込む', () => {
+    const photo = {
+      ...createPhoto('term-photo', '高分子化学'),
+      academicTerm: {
+        academicYear: 2026,
+        term: '通年' as const,
+      },
+    };
+
+    expect(
+      parsePhotoRecords(JSON.stringify([photo]))[0]
+        .academicTerm
+    ).toEqual({ academicYear: 2026, term: '通年' });
+  });
+
+  test('旧い写真は撮影日から学期を補完する', () => {
+    expect(
+      getPhotoAcademicTerm(createPhoto('old-photo', '化学'))
+    ).toEqual({ academicYear: 2026, term: '前期' });
   });
 });

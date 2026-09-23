@@ -9,6 +9,7 @@ import {
   parsePhotoRecords,
   PhotoRecord,
 } from '@/types/photo';
+import { loadAcademicTerm } from '@/services/academic-term-storage';
 
 
 const photosStorageKey = 'photos';
@@ -115,6 +116,7 @@ export const savePhotoFromUri = async ({
       day,
       period,
       subject,
+      academicTerm: await loadAcademicTerm(),
     };
 
     const photos = await loadPhotoRecords();

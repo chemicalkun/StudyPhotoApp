@@ -33,10 +33,12 @@ import {
   moveLectureSummaryRecord,
 } from '@/services/lecture-summary-storage';
 import {
+  getPhotoAcademicTerm,
   isUnclassifiedPhoto,
   parsePhotoRecords,
   PhotoRecord,
 } from '@/types/photo';
+import { formatAcademicTerm } from '@/types/academic-term';
 import { parseTimetable } from '@/utils/classification';
 import {
   areSameSubjectNames,
@@ -824,6 +826,14 @@ export default function PhotoScreen() {
               {getTakenAtLabel(photo.takenAt)}
             </Text>
 
+            {getPhotoAcademicTerm(photo) !== null ? (
+              <Text style={styles.academicTermText}>
+                {formatAcademicTerm(
+                  getPhotoAcademicTerm(photo)!
+                )}
+              </Text>
+            ) : null}
+
             {currentLectureIndex >= 0 &&
             currentLecturePhotoIndex >= 0 ? (
               <Text style={styles.positionText}>
@@ -1223,6 +1233,13 @@ const styles = StyleSheet.create({
   dateText: {
     color: '#bbb',
     fontSize: 14,
+    marginTop: 4,
+  },
+
+  academicTermText: {
+    color: '#9db5e8',
+    fontSize: 13,
+    fontWeight: 'bold',
     marginTop: 4,
   },
 

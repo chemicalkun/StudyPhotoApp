@@ -1,3 +1,10 @@
+import {
+  getDefaultAcademicTerm,
+  isAcademicTerm,
+  type AcademicTerm,
+} from '@/types/academic-term';
+
+
 export type PhotoRecord = {
   id: string;
   uri: string;
@@ -5,6 +12,7 @@ export type PhotoRecord = {
   day: string;
   period: number | null;
   subject: string | null;
+  academicTerm?: AcademicTerm;
 };
 
 
@@ -42,6 +50,21 @@ export const groupPhotosBySubject = (
   );
 
 
+export const getPhotoAcademicTerm = (
+  photo: PhotoRecord
+): AcademicTerm | null => {
+  if (photo.academicTerm !== undefined) {
+    return photo.academicTerm;
+  }
+
+  const takenAt = new Date(photo.takenAt);
+
+  return Number.isNaN(takenAt.getTime())
+    ? null
+    : getDefaultAcademicTerm(takenAt);
+};
+
+
 export const isPhotoRecord = (
   value: unknown
 ): value is PhotoRecord => {
@@ -59,7 +82,11 @@ export const isPhotoRecord = (
     (typeof photo.period === 'number' ||
       photo.period === null) &&
     (typeof photo.subject === 'string' ||
-      photo.subject === null)
+      photo.subject === null) &&
+    (
+      photo.academicTerm === undefined ||
+      isAcademicTerm(photo.academicTerm)
+    )
   );
 };
 

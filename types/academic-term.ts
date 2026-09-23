@@ -46,31 +46,38 @@ export const formatAcademicTerm = (
 ) => `${academicTerm.academicYear}年度 ${academicTerm.term}`;
 
 
+export const isAcademicTerm = (
+  value: unknown
+): value is AcademicTerm => {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value)
+  ) {
+    return false;
+  }
+
+  const candidate = value as Partial<AcademicTerm>;
+
+  return (
+    Number.isInteger(candidate.academicYear) &&
+    (candidate.academicYear as number) >= 2000 &&
+    (candidate.academicYear as number) <= 2100 &&
+    academicTermNames.some(
+      (term) => term === candidate.term
+    )
+  );
+};
+
+
 export const parseAcademicTerm = (
   savedAcademicTerm: string
 ): AcademicTerm => {
   const parsedValue: unknown = JSON.parse(savedAcademicTerm);
 
-  if (
-    typeof parsedValue !== 'object' ||
-    parsedValue === null ||
-    Array.isArray(parsedValue)
-  ) {
+  if (!isAcademicTerm(parsedValue)) {
     throw new Error('学年・学期設定の形式が不正です');
   }
 
-  const candidate = parsedValue as Partial<AcademicTerm>;
-
-  if (
-    !Number.isInteger(candidate.academicYear) ||
-    (candidate.academicYear as number) < 2000 ||
-    (candidate.academicYear as number) > 2100 ||
-    !academicTermNames.some(
-      (term) => term === candidate.term
-    )
-  ) {
-    throw new Error('学年・学期設定の形式が不正です');
-  }
-
-  return candidate as AcademicTerm;
+  return parsedValue;
 };
