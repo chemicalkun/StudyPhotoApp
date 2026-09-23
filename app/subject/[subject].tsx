@@ -21,7 +21,10 @@ import {
 } from 'expo-router';
 
 import { LoadErrorCard } from '@/components/load-error-card';
-import { PhotoRecord } from '@/types/photo';
+import {
+  isUnclassifiedPhoto,
+  PhotoRecord,
+} from '@/types/photo';
 import type {
   PhotoOcrRecord,
   PhotoOcrRecords,
@@ -269,10 +272,7 @@ export default function SubjectScreen() {
           const subjectPhotos =
             allPhotos.filter((photo) => {
               if (isUnclassified) {
-                return (
-                  photo.subject === null ||
-                  photo.subject === '未分類'
-                );
+                return isUnclassifiedPhoto(photo);
               }
 
               return getPhotoLabel(photo) === subject;

@@ -1,4 +1,7 @@
-import { renameTimetableSubject } from '@/utils/timetable-subject';
+import {
+  getUniqueTimetableSubjects,
+  renameTimetableSubject,
+} from '@/utils/timetable-subject';
 
 
 describe('timetable subject', () => {
@@ -28,5 +31,14 @@ describe('timetable subject', () => {
     );
 
     expect(renamed['月-2']).toBe('化学');
+  });
+
+  test('時間割から重複と空欄を除いた授業名を取得する', () => {
+    expect(getUniqueTimetableSubjects({
+      '月-1': '化学',
+      '火-2': ' 化学 ',
+      '水-3': '英語',
+      '木-4': '',
+    })).toEqual(['英語', '化学']);
   });
 });

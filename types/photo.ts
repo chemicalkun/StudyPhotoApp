@@ -8,6 +8,40 @@ export type PhotoRecord = {
 };
 
 
+export const isUnclassifiedPhoto = (
+  photo: PhotoRecord
+) =>
+  photo.subject === null ||
+  photo.subject.trim() === '' ||
+  photo.subject === '未分類';
+
+
+export const groupPhotosBySubject = (
+  photos: PhotoRecord[]
+) =>
+  photos.reduce<Record<string, PhotoRecord[]>>(
+    (groups, photo) => {
+      if (isUnclassifiedPhoto(photo)) {
+        return groups;
+      }
+
+      const subject = photo.subject;
+
+      if (subject === null) {
+        return groups;
+      }
+
+      groups[subject] = [
+        ...(groups[subject] ?? []),
+        photo,
+      ];
+
+      return groups;
+    },
+    {}
+  );
+
+
 export const isPhotoRecord = (
   value: unknown
 ): value is PhotoRecord => {

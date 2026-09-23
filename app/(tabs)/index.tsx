@@ -13,6 +13,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LoadErrorCard } from '@/components/load-error-card';
 import { hasSeenGettingStartedGuide } from '@/services/getting-started-storage';
 import {
+  groupPhotosBySubject,
+  isUnclassifiedPhoto,
   parsePhotoRecords,
   PhotoRecord,
 } from '@/types/photo';
@@ -98,49 +100,14 @@ export default function HomeScreen() {
   );
 
 
-  const getPhotoLabel = (photo: PhotoRecord) => {
-    if (photo.subject) {
-      return photo.subject;
-    }
-
-    if (
-      photo.period !== null &&
-      photo.day !== ''
-    ) {
-      return `${photo.day}曜${photo.period}限`;
-    }
-
-    return '未分類';
-  };
-
-
-  const groupedPhotos =
-    photos.reduce<Record<string, PhotoRecord[]>>(
-      (groups, photo) => {
-        const label = getPhotoLabel(photo);
-
-        if (!groups[label]) {
-          groups[label] = [];
-        }
-
-        groups[label].push(photo);
-
-        return groups;
-      },
-      {}
-    );
-
-
   const unclassifiedPhotos = photos.filter(
-    (photo) =>
-      photo.subject === null ||
-      photo.subject === '未分類'
+    isUnclassifiedPhoto
   );
 
 
   const subjectGroups = Object.entries(
-    groupedPhotos
-  ).filter(([subject]) => subject !== '未分類');
+    groupPhotosBySubject(photos)
+  );
 
 
   return (

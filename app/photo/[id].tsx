@@ -28,6 +28,8 @@ import {
   parsePhotoRecords,
   PhotoRecord,
 } from '@/types/photo';
+import { parseTimetable } from '@/utils/classification';
+import { getUniqueTimetableSubjects } from '@/utils/timetable-subject';
 import type { PhotoOcrRecord } from '@/types/photo-ocr';
 import {
   deletePhotoOcrRecord,
@@ -105,6 +107,10 @@ export default function PhotoScreen() {
     setClassificationModalVisible,
   ] = useState(false);
   const [subjectInput, setSubjectInput] = useState('');
+  const [timetableSubjects, setTimetableSubjects] =
+    useState<string[]>([]);
+  const [classificationLoadError, setClassificationLoadError] =
+    useState('');
   const [
     savingClassification,
     setSavingClassification,
@@ -501,17 +507,39 @@ export default function PhotoScreen() {
       : null;
 
 
-  const openClassificationModal = () => {
+  const openClassificationModal = async () => {
     if (!photo) {
       return;
     }
 
     setSubjectInput(photo.subject ?? '');
+    setTimetableSubjects([]);
+    setClassificationLoadError('');
     setClassificationModalVisible(true);
+
+    try {
+      const savedTimetable =
+        await AsyncStorage.getItem('timetable');
+      const timetable = parseTimetable(savedTimetable);
+
+      setTimetableSubjects(
+        getUniqueTimetableSubjects(timetable)
+      );
+    } catch (error) {
+      console.log(
+        '分類候補読み込みエラー:',
+        error
+      );
+      setClassificationLoadError(
+        '時間割の授業候補を読み込めませんでした。授業名は手入力できます。'
+      );
+    }
   };
 
 
-  const saveClassification = async () => {
+  const saveClassification = async (
+    selectedSubject = subjectInput
+  ) => {
     if (!photo || savingClassification) {
       return;
     }
@@ -529,7 +557,7 @@ export default function PhotoScreen() {
       const photos = parsePhotoRecords(savedPhotos);
 
       const normalizedSubject =
-        subjectInput.trim() || null;
+        selectedSubject.trim() || null;
 
       let updatedPhoto: PhotoRecord | null = null;
 
@@ -774,7 +802,9 @@ export default function PhotoScreen() {
 
             <Pressable
               style={styles.classificationButton}
-              onPress={openClassificationModal}
+              onPress={() => {
+                void openClassificationModal();
+              }}
             >
               <Text style={styles.classificationButtonText}>
                 分類を変更
@@ -814,15 +844,47 @@ export default function PhotoScreen() {
             </Text>
 
             <Text style={styles.modalDescription}>
-              授業名を入力してください。
+              時間割の授業を選ぶか、授業名を入力してください。
             </Text>
+
+            {timetableSubjects.length > 0 ? (
+              <ScrollView
+                horizontal
+                keyboardShouldPersistTaps="handled"
+                showsHorizontalScrollIndicator={false}
+                style={styles.subjectCandidates}
+                contentContainerStyle={
+                  styles.subjectCandidatesContent
+                }
+              >
+                {timetableSubjects.map((candidate) => (
+                  <Pressable
+                    key={candidate}
+                    style={styles.subjectCandidateButton}
+                    disabled={savingClassification}
+                    onPress={() => {
+                      void saveClassification(candidate);
+                    }}
+                  >
+                    <Text style={styles.subjectCandidateText}>
+                      {candidate}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : null}
+
+            {classificationLoadError !== '' ? (
+              <Text style={styles.classificationLoadError}>
+                {classificationLoadError}
+              </Text>
+            ) : null}
 
             <TextInput
               style={styles.input}
               value={subjectInput}
               onChangeText={setSubjectInput}
               placeholder="例：高分子化学"
-              autoFocus
             />
 
             <Text style={styles.inputHint}>
@@ -836,12 +898,26 @@ export default function PhotoScreen() {
                   styles.disabledButton,
               ]}
               disabled={savingClassification}
-              onPress={saveClassification}
+              onPress={() => {
+                void saveClassification();
+              }}
             >
               <Text style={styles.saveButtonText}>
                 {savingClassification
                   ? '保存中...'
                   : '保存'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.unclassifiedButton}
+              disabled={savingClassification}
+              onPress={() => {
+                void saveClassification('');
+              }}
+            >
+              <Text style={styles.unclassifiedButtonText}>
+                未分類にする
               </Text>
             </Pressable>
 
@@ -1229,6 +1305,38 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
+  subjectCandidates: {
+    marginTop: 16,
+    marginHorizontal: -4,
+  },
+
+  subjectCandidatesContent: {
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+
+  subjectCandidateButton: {
+    backgroundColor: '#e9f0ff',
+    borderWidth: 1,
+    borderColor: '#9eb8ef',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+
+  subjectCandidateText: {
+    color: '#2454a6',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  classificationLoadError: {
+    color: '#9b2c2c',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
+  },
+
   input: {
     borderWidth: 1,
     borderColor: '#aaa',
@@ -1257,6 +1365,21 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  unclassifiedButton: {
+    borderWidth: 1,
+    borderColor: '#9b2c2c',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 10,
+  },
+
+  unclassifiedButtonText: {
+    color: '#9b2c2c',
+    fontSize: 14,
     fontWeight: 'bold',
     textAlign: 'center',
   },
