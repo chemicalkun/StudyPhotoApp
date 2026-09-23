@@ -95,6 +95,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="academic-term"
+          options={{
+            title: '学年・学期',
+            headerBackTitle: '設定',
+          }}
+        />
+        <Stack.Screen
           name="getting-started"
           options={{
             title: '使い方',

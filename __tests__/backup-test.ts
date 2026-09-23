@@ -38,19 +38,21 @@ describe('StudyPhoto backup', () => {
     expect(backup.storage.subjectQuestionRecords).toBeNull();
   });
 
-  test('質問履歴がない旧バックアップも読み込める', () => {
+  test('新しい保存項目がない旧バックアップも読み込める', () => {
     const backup = createStudyPhotoBackup([]);
-    const storageWithoutQuestionHistory = {
+    const legacyStorage = {
       ...backup.storage,
     } as Record<string, string | null>;
 
-    delete storageWithoutQuestionHistory.subjectQuestionRecords;
+    delete legacyStorage.academicTerm;
+    delete legacyStorage.subjectQuestionRecords;
 
     const parsed = parseStudyPhotoBackup(JSON.stringify({
       ...backup,
-      storage: storageWithoutQuestionHistory,
+      storage: legacyStorage,
     }));
 
+    expect(parsed.storage.academicTerm).toBeNull();
     expect(parsed.storage.subjectQuestionRecords).toBeNull();
   });
 

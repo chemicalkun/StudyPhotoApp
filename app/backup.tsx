@@ -158,7 +158,7 @@ export default function BackupScreen() {
         <View style={styles.includedCard}>
           <Text style={styles.cardTitle}>保存されるデータ</Text>
           <Text style={styles.cardText}>
-            時間割・時限設定・写真情報・文字認識結果・授業まとめ・試験対策・練習問題・フラッシュカード・質問履歴
+            学年・学期・時間割・時限設定・写真情報・文字認識結果・授業まとめ・試験対策・練習問題・フラッシュカード・質問履歴
           </Text>
         </View>
 

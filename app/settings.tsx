@@ -74,6 +74,12 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>授業設定</Text>
         <View style={styles.sectionCard}>
           <SettingsLink
+            title="学年・学期"
+            description="現在の時間割の年度と学期を設定"
+            onPress={() => router.push('/academic-term')}
+          />
+          <View style={styles.divider} />
+          <SettingsLink
             title="時間割"
             description="授業名の登録・変更と画像からの読み込み"
             onPress={() => router.push({

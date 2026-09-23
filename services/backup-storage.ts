@@ -7,6 +7,7 @@ import {
   parseStudyPhotoBackup,
   restorableBackupStorageKeys,
 } from '@/types/backup';
+import { parseAcademicTerm } from '@/types/academic-term';
 import { parseExamPreparationRecords } from '@/types/exam-preparation';
 import { parseFlashcardRecords } from '@/types/flashcard';
 import { parseLectureSummaryRecords } from '@/types/lecture-summary';
@@ -90,6 +91,10 @@ const validateRestorableData = (
     typeof parseStudyPhotoBackup
   >['storage']
 ) => {
+  if (storage.academicTerm !== null) {
+    parseAcademicTerm(storage.academicTerm);
+  }
+
   if (storage.timetable !== null) {
     validateTimetable(storage.timetable);
   }

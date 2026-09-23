@@ -1,4 +1,5 @@
 export const backupStorageKeys = [
+  'academicTerm',
   'timetable',
   'periodTimes',
   'photos',
@@ -25,6 +26,7 @@ export type StudyPhotoBackup = {
 
 
 export const restorableBackupStorageKeys = [
+  'academicTerm',
   'timetable',
   'periodTimes',
   'lectureSummaryRecords',
@@ -91,10 +93,14 @@ export const parseStudyPhotoBackup = (
     string,
     unknown
   >;
+  const optionalLegacyKeys = new Set<BackupStorageKey>([
+    'academicTerm',
+    'subjectQuestionRecords',
+  ]);
   const hasValidStorageValues = backupStorageKeys.every(
     (key) => {
       if (
-        key === 'subjectQuestionRecords' &&
+        optionalLegacyKeys.has(key) &&
         !Object.hasOwn(storage, key)
       ) {
         return true;
@@ -118,6 +124,10 @@ export const parseStudyPhotoBackup = (
     ...backup,
     storage: {
       ...storage,
+      academicTerm:
+        typeof storage.academicTerm === 'string'
+          ? storage.academicTerm
+          : null,
       subjectQuestionRecords:
         typeof storage.subjectQuestionRecords === 'string'
           ? storage.subjectQuestionRecords

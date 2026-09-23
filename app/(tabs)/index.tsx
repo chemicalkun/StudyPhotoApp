@@ -11,7 +11,13 @@ import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LoadErrorCard } from '@/components/load-error-card';
+import { loadAcademicTerm } from '@/services/academic-term-storage';
 import { hasSeenGettingStartedGuide } from '@/services/getting-started-storage';
+import {
+  formatAcademicTerm,
+  getDefaultAcademicTerm,
+  type AcademicTerm,
+} from '@/types/academic-term';
 import {
   groupPhotosBySubject,
   isUnclassifiedPhoto,
@@ -22,6 +28,8 @@ import {
 
 export default function HomeScreen() {
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
+  const [academicTerm, setAcademicTerm] =
+    useState<AcademicTerm>(getDefaultAcademicTerm());
   const [loadError, setLoadError] = useState('');
   const [loadRevision, setLoadRevision] = useState(0);
 
@@ -59,23 +67,26 @@ export default function HomeScreen() {
       void loadRevision;
       let active = true;
 
-      const loadPhotos = async () => {
+      const loadHomeData = async () => {
         try {
           setLoadError('');
 
-          const savedPhotos =
-            await AsyncStorage.getItem('photos');
+          const [savedPhotos, savedAcademicTerm] =
+            await Promise.all([
+              AsyncStorage.getItem('photos'),
+              loadAcademicTerm(),
+            ]);
 
           if (!active) {
             return;
           }
 
-          if (savedPhotos === null) {
-            setPhotos([]);
-            return;
-          }
-
-          setPhotos(parsePhotoRecords(savedPhotos));
+          setPhotos(
+            savedPhotos === null
+              ? []
+              : parsePhotoRecords(savedPhotos)
+          );
+          setAcademicTerm(savedAcademicTerm);
         } catch (error) {
           console.log(
             'ホーム写真読み込みエラー:',
@@ -91,7 +102,7 @@ export default function HomeScreen() {
         }
       };
 
-      void loadPhotos();
+      void loadHomeData();
 
       return () => {
         active = false;
@@ -118,6 +129,10 @@ export default function HomeScreen() {
 
       <Text style={styles.subtitle}>
         講義写真を自動で整理
+      </Text>
+
+      <Text style={styles.academicTerm}>
+        {formatAcademicTerm(academicTerm)}
       </Text>
 
 
@@ -292,7 +307,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#555',
     marginTop: 8,
-    marginBottom: 32,
+    marginBottom: 8,
+  },
+
+  academicTerm: {
+    alignSelf: 'flex-start',
+    color: '#31518f',
+    backgroundColor: '#eef2fb',
+    borderRadius: 999,
+    fontSize: 13,
+    fontWeight: 'bold',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    marginBottom: 26,
   },
 
   mainButton: {
