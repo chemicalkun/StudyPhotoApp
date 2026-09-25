@@ -19,24 +19,30 @@ import { markGettingStartedGuideAsSeen } from '@/services/getting-started-storag
 const guideSteps = [
   {
     number: 1,
-    title: '時間割を登録',
+    title: '学年・学期を確認',
     description:
-      '授業名を入力するか、時間割画像を読み込んで登録します。時限の開始・終了時刻も大学に合わせて変更できます。',
+      '使用する年度と学期を確認します。学期を切り替えると、時間割・写真・学習データは学期ごとに保存されます。',
   },
   {
     number: 2,
+    title: '時間割を登録',
+    description:
+      '授業名を入力するか、時間割画像を読み込んで登録します。新しい学期では、前の時間割をコピーしてから修正することもできます。',
+  },
+  {
+    number: 3,
     title: '授業写真を追加',
     description:
       'アプリで撮影するか、写真ライブラリから選択します。撮影日時と時間割から授業を判定します。',
   },
   {
-    number: 3,
+    number: 4,
     title: '授業・授業回ごとに確認',
     description:
       '写真は授業別に整理され、同じ授業日に撮影した写真は1回分としてまとまります。',
   },
   {
-    number: 4,
+    number: 5,
     title: '文字認識とまとめを作成',
     description:
       '写真内の文字を認識し、授業回のまとめを作成します。復習タブから試験対策・練習問題・カードも利用できます。',
@@ -115,6 +121,19 @@ export default function GettingStartedScreen() {
             写真の文字認識とAI学習機能は、対応するiPhone内で処理します。まとめ・試験対策などのAI学習機能には、対応するiOSとApple Intelligenceが必要です。
           </Text>
         </View>
+
+        <Pressable
+          style={styles.secondaryButton}
+          accessibilityRole="button"
+          onPress={() => router.push({
+            pathname: '/academic-term',
+            params: { from: 'getting-started' },
+          })}
+        >
+          <Text style={styles.secondaryButtonText}>
+            学年・学期を確認する
+          </Text>
+        </Pressable>
 
         <Pressable
           style={styles.primaryButton}
@@ -249,11 +268,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#31518f',
     borderRadius: 10,
     padding: 15,
-    marginTop: 24,
+    marginTop: 10,
   },
 
   primaryButtonText: {
     color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  secondaryButton: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#31518f',
+    borderRadius: 10,
+    padding: 15,
+    marginTop: 24,
+  },
+
+  secondaryButtonText: {
+    color: '#31518f',
     fontSize: 16,
     fontWeight: 'bold',
   },

@@ -36,7 +36,9 @@ export default function AcademicTermScreen() {
     ? 'ホーム'
     : params.from === 'review'
       ? '復習'
-      : '設定';
+      : params.from === 'getting-started'
+        ? '使い方'
+        : '設定';
   const defaultAcademicTerm = getDefaultAcademicTerm();
   const [academicYear, setAcademicYear] = useState(
     String(defaultAcademicTerm.academicYear)
