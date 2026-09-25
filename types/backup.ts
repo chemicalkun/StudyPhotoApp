@@ -30,6 +30,7 @@ export type StudyPhotoBackup = {
 export const restorableBackupStorageKeys = [
   'academicTerm',
   'academicTimetables',
+  'academicTermData',
   'timetable',
   'periodTimes',
   'lectureSummaryRecords',

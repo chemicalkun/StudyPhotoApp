@@ -90,6 +90,47 @@ describe('StudyPhoto backup', () => {
     );
   });
 
+  test('学期別学習データを復元し写真情報は現在の値を保つ', async () => {
+    const termId = JSON.stringify([2026, '前期']);
+
+    await AsyncStorage.setItem(
+      'academicTermData',
+      JSON.stringify({
+        [termId]: {
+          photos: '[{"id":"current-photo"}]',
+          photoOcrRecords: '{"current":{}}',
+          lectureSummaryRecords: '{"current":{}}',
+        },
+      })
+    );
+    const backup = createStudyPhotoBackup([
+      [
+        'academicTermData',
+        JSON.stringify({
+          [termId]: {
+            photos: '[{"id":"backup-photo"}]',
+            photoOcrRecords: '{"backup":{}}',
+            lectureSummaryRecords: '{"backup":{}}',
+            flashcardRecords: '{"cards":{}}',
+          },
+        }),
+      ],
+    ]);
+
+    await restoreBackup(JSON.stringify(backup));
+
+    const restoredData = JSON.parse(
+      await AsyncStorage.getItem('academicTermData') ?? '{}'
+    );
+
+    expect(restoredData[termId]).toEqual({
+      photos: '[{"id":"current-photo"}]',
+      photoOcrRecords: '{"current":{}}',
+      lectureSummaryRecords: '{"backup":{}}',
+      flashcardRecords: '{"cards":{}}',
+    });
+  });
+
   test('壊れた学習データがある場合は何も上書きしない', async () => {
     await AsyncStorage.setItem(
       'timetable',

@@ -11,7 +11,10 @@ import { parseAcademicTerm } from '@/types/academic-term';
 import {
   parseAcademicTimetables,
 } from '@/types/academic-timetable';
-import { parseAcademicTermData } from '@/types/academic-term-data';
+import {
+  createRestorableAcademicTermData,
+  parseAcademicTermData,
+} from '@/types/academic-term-data';
 import { parseExamPreparationRecords } from '@/types/exam-preparation';
 import { parseFlashcardRecords } from '@/types/flashcard';
 import { parseLectureSummaryRecords } from '@/types/lecture-summary';
@@ -175,15 +178,23 @@ export const restoreBackup = async (
   const currentEntries = await AsyncStorage.multiGet([
     ...restorableBackupStorageKeys,
   ]);
+  const currentValues = Object.fromEntries(currentEntries);
+  const restorableStorage = {
+    ...backup.storage,
+    academicTermData: createRestorableAcademicTermData(
+      backup.storage.academicTermData,
+      currentValues.academicTermData
+    ),
+  };
 
   const entriesToRestore = restorableBackupStorageKeys
     .flatMap((key) => {
-      const value = backup.storage[key];
+      const value = restorableStorage[key];
 
       return value === null ? [] : [[key, value] as const];
     });
   const keysToRemove = restorableBackupStorageKeys
-    .filter((key) => backup.storage[key] === null);
+    .filter((key) => restorableStorage[key] === null);
 
   try {
     if (entriesToRestore.length > 0) {
