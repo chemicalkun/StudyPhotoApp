@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
+  loadAvailableAcademicTerms,
   loadAcademicTerm,
   saveAcademicTerm,
   switchAcademicTerm,
@@ -126,6 +127,27 @@ describe('academic term', () => {
     expect(await AsyncStorage.getItem('flashcardRecords')).toBe(
       '{"first":{}}'
     );
+  });
+
+  test('保存済みの学期を新しい年度順で取得する', async () => {
+    await saveAcademicTerm({
+      academicYear: 2025,
+      term: '後期',
+    });
+    await switchAcademicTerm({
+      academicYear: 2026,
+      term: '後期',
+    });
+    await switchAcademicTerm({
+      academicYear: 2026,
+      term: '前期',
+    });
+
+    await expect(loadAvailableAcademicTerms()).resolves.toEqual([
+      { academicYear: 2026, term: '前期' },
+      { academicYear: 2026, term: '後期' },
+      { academicYear: 2025, term: '後期' },
+    ]);
   });
 
   test('不正な学年・学期設定を拒否する', () => {

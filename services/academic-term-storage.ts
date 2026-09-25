@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
+  academicTermNames,
   createAcademicTermId,
   getDefaultAcademicTerm,
   parseAcademicTerm,
+  parseAcademicTermId,
   type AcademicTerm,
 } from '@/types/academic-term';
 import {
@@ -51,6 +53,48 @@ export const saveAcademicTerm = async (
   );
 
   return validatedAcademicTerm;
+};
+
+
+export const loadAvailableAcademicTerms = async (
+): Promise<AcademicTerm[]> => {
+  const [
+    currentAcademicTerm,
+    savedAcademicTimetables,
+    savedAcademicTermData,
+  ] = await Promise.all([
+    loadAcademicTerm(),
+    AsyncStorage.getItem(academicTimetablesStorageKey),
+    AsyncStorage.getItem(academicTermDataStorageKey),
+  ]);
+  const academicTimetables = savedAcademicTimetables === null
+    ? {}
+    : parseAcademicTimetables(savedAcademicTimetables);
+  const academicTermData = savedAcademicTermData === null
+    ? {}
+    : parseAcademicTermData(savedAcademicTermData);
+  const termIds = new Set([
+    createAcademicTermId(currentAcademicTerm),
+    ...Object.keys(academicTimetables),
+    ...Object.keys(academicTermData),
+  ]);
+
+  return [...termIds]
+    .flatMap((termId) => {
+      const academicTerm = parseAcademicTermId(termId);
+
+      return academicTerm === null ? [] : [academicTerm];
+    })
+    .sort((a, b) => {
+      if (a.academicYear !== b.academicYear) {
+        return b.academicYear - a.academicYear;
+      }
+
+      return (
+        academicTermNames.indexOf(a.term) -
+        academicTermNames.indexOf(b.term)
+      );
+    });
 };
 
 

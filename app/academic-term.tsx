@@ -13,6 +13,7 @@ import {
 import { Stack, useLocalSearchParams } from 'expo-router';
 
 import {
+  loadAvailableAcademicTerms,
   loadAcademicTerm,
   switchAcademicTerm,
 } from '@/services/academic-term-storage';
@@ -44,6 +45,8 @@ export default function AcademicTermScreen() {
   );
   const [savedAcademicTerm, setSavedAcademicTerm] =
     useState<AcademicTerm>(defaultAcademicTerm);
+  const [availableAcademicTerms, setAvailableAcademicTerms] =
+    useState<AcademicTerm[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -55,7 +58,13 @@ export default function AcademicTermScreen() {
 
     const load = async () => {
       try {
-        const savedAcademicTerm = await loadAcademicTerm();
+        const [
+          savedAcademicTerm,
+          savedAvailableAcademicTerms,
+        ] = await Promise.all([
+          loadAcademicTerm(),
+          loadAvailableAcademicTerms(),
+        ]);
 
         if (!active) {
           return;
@@ -66,6 +75,9 @@ export default function AcademicTermScreen() {
         );
         setTerm(savedAcademicTerm.term);
         setSavedAcademicTerm(savedAcademicTerm);
+        setAvailableAcademicTerms(
+          savedAvailableAcademicTerms
+        );
       } catch (error) {
         console.log('学年・学期設定読み込みエラー:', error);
 
@@ -106,6 +118,9 @@ export default function AcademicTermScreen() {
       );
       setTerm(result.academicTerm.term);
       setSavedAcademicTerm(result.academicTerm);
+      setAvailableAcademicTerms(
+        await loadAvailableAcademicTerms()
+      );
       setStatusMessage(
         `${formatAcademicTerm(result.academicTerm)}の時間割に切り替えました。`
       );
@@ -189,6 +204,64 @@ export default function AcademicTermScreen() {
           />
         ) : (
           <>
+            <Text style={styles.label}>保存済みの学期</Text>
+            <Text style={styles.savedTermDescription}>
+              過去に使用した学期を選ぶと、年度と学期を簡単に切り替えられます。
+            </Text>
+            <View style={styles.savedTermList}>
+              {availableAcademicTerms.map((academicTerm) => {
+                const academicTermId = createAcademicTermId(
+                  academicTerm
+                );
+                const isCurrent = academicTermId ===
+                  createAcademicTermId(savedAcademicTerm);
+                const isSelected = academicTermId ===
+                  createAcademicTermId({
+                    academicYear: Number(academicYear),
+                    term,
+                  });
+
+                return (
+                  <Pressable
+                    key={academicTermId}
+                    style={[
+                      styles.savedTermButton,
+                      isSelected && styles.savedTermButtonSelected,
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                    onPress={() => {
+                      setAcademicYear(
+                        String(academicTerm.academicYear)
+                      );
+                      setTerm(academicTerm.term);
+                      setErrorMessage('');
+                      setStatusMessage('');
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.savedTermText,
+                        isSelected && styles.savedTermTextSelected,
+                      ]}
+                    >
+                      {formatAcademicTerm(academicTerm)}
+                    </Text>
+                    {isCurrent ? (
+                      <Text
+                        style={[
+                          styles.currentBadge,
+                          isSelected && styles.currentBadgeSelected,
+                        ]}
+                      >
+                        現在
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+
             <Text style={styles.label}>年度</Text>
             <View style={styles.yearRow}>
               <Pressable
@@ -350,6 +423,60 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 18,
     marginBottom: 10,
+  },
+
+  savedTermDescription: {
+    color: '#666',
+    fontSize: 12,
+    lineHeight: 19,
+    marginBottom: 10,
+  },
+
+  savedTermList: {
+    gap: 8,
+    marginBottom: 8,
+  },
+
+  savedTermButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#c5c8ce',
+    borderRadius: 10,
+    backgroundColor: '#f6f7f9',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  savedTermButtonSelected: {
+    borderColor: '#31518f',
+    backgroundColor: '#eef2fb',
+  },
+
+  savedTermText: {
+    color: '#444',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+
+  savedTermTextSelected: {
+    color: '#31518f',
+  },
+
+  currentBadge: {
+    color: '#555',
+    backgroundColor: '#e3e5e9',
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 'bold',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+
+  currentBadgeSelected: {
+    color: '#31518f',
+    backgroundColor: '#dce5f8',
   },
 
   yearRow: {

@@ -24,6 +24,33 @@ export const createAcademicTermId = (
 ]);
 
 
+export const parseAcademicTermId = (
+  academicTermId: string
+): AcademicTerm | null => {
+  try {
+    const parsedValue: unknown = JSON.parse(academicTermId);
+
+    if (
+      !Array.isArray(parsedValue) ||
+      parsedValue.length !== 2
+    ) {
+      return null;
+    }
+
+    const academicTerm = {
+      academicYear: parsedValue[0],
+      term: parsedValue[1],
+    };
+
+    return isAcademicTerm(academicTerm)
+      ? academicTerm
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+
 export const getDefaultAcademicTerm = (
   date = new Date()
 ): AcademicTerm => {
