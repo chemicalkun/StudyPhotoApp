@@ -18,6 +18,7 @@ import {
   type AcademicTermData,
   type AcademicTermDataSnapshot,
 } from '@/types/academic-term-data';
+import { parsePhotoRecords } from '@/types/photo';
 import { parseTimetable } from '@/utils/classification';
 
 
@@ -26,6 +27,13 @@ export const academicTimetablesStorageKey =
   'academicTimetables';
 export const academicTermDataStorageKey =
   'academicTermData';
+
+
+export type AcademicTermOverview = {
+  academicTerm: AcademicTerm;
+  registeredClassCount: number;
+  photoCount: number;
+};
 
 
 export const loadAcademicTerm = async (
@@ -95,6 +103,56 @@ export const loadAvailableAcademicTerms = async (
         academicTermNames.indexOf(b.term)
       );
     });
+};
+
+
+export const loadAcademicTermOverviews = async (
+): Promise<AcademicTermOverview[]> => {
+  const [
+    currentAcademicTerm,
+    savedCurrentTimetable,
+    savedCurrentPhotos,
+    savedAcademicTimetables,
+    savedAcademicTermData,
+  ] = await Promise.all([
+    loadAcademicTerm(),
+    AsyncStorage.getItem('timetable'),
+    AsyncStorage.getItem('photos'),
+    AsyncStorage.getItem(academicTimetablesStorageKey),
+    AsyncStorage.getItem(academicTermDataStorageKey),
+  ]);
+  const currentTermId = createAcademicTermId(
+    currentAcademicTerm
+  );
+  const currentTimetable =
+    parseTimetable(savedCurrentTimetable) ?? {};
+  const academicTimetables = savedAcademicTimetables === null
+    ? {}
+    : parseAcademicTimetables(savedAcademicTimetables);
+  const academicTermData = savedAcademicTermData === null
+    ? {}
+    : parseAcademicTermData(savedAcademicTermData);
+  const academicTerms = await loadAvailableAcademicTerms();
+
+  return academicTerms.map((academicTerm) => {
+    const termId = createAcademicTermId(academicTerm);
+    const timetable = termId === currentTermId
+      ? currentTimetable
+      : academicTimetables[termId] ?? {};
+    const savedPhotos = termId === currentTermId
+      ? savedCurrentPhotos
+      : academicTermData[termId]?.photos ?? null;
+
+    return {
+      academicTerm,
+      registeredClassCount: Object.values(timetable)
+        .filter((subject) => subject.trim() !== '')
+        .length,
+      photoCount: savedPhotos === null
+        ? 0
+        : parsePhotoRecords(savedPhotos).length,
+    };
+  });
 };
 
 

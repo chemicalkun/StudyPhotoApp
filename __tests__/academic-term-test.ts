@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   loadAvailableAcademicTerms,
+  loadAcademicTermOverviews,
   loadAcademicTerm,
   saveAcademicTerm,
   switchAcademicTerm,
@@ -147,6 +148,49 @@ describe('academic term', () => {
       { academicYear: 2026, term: '前期' },
       { academicYear: 2026, term: '後期' },
       { academicYear: 2025, term: '後期' },
+    ]);
+  });
+
+  test('学期ごとの登録コマ数と写真枚数を取得する', async () => {
+    const firstTerm = {
+      academicYear: 2026,
+      term: '前期' as const,
+    };
+    const secondTerm = {
+      academicYear: 2026,
+      term: '後期' as const,
+    };
+
+    await saveAcademicTerm(firstTerm);
+    await AsyncStorage.multiSet([
+      ['timetable', JSON.stringify({
+        '月-1': '有機化学',
+        '火-2': '物理化学',
+      })],
+      ['photos', JSON.stringify([
+        {
+          id: 'photo-1',
+          uri: 'file:///photo-1.jpg',
+          takenAt: '2026-04-10T09:00:00.000Z',
+          day: '金',
+          period: 1,
+          subject: '有機化学',
+        },
+      ])],
+    ]);
+    await switchAcademicTerm(secondTerm);
+
+    await expect(loadAcademicTermOverviews()).resolves.toEqual([
+      {
+        academicTerm: firstTerm,
+        registeredClassCount: 2,
+        photoCount: 1,
+      },
+      {
+        academicTerm: secondTerm,
+        registeredClassCount: 0,
+        photoCount: 0,
+      },
     ]);
   });
 

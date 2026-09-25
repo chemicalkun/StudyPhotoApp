@@ -13,9 +13,10 @@ import {
 import { Stack, useLocalSearchParams } from 'expo-router';
 
 import {
-  loadAvailableAcademicTerms,
+  loadAcademicTermOverviews,
   loadAcademicTerm,
   switchAcademicTerm,
+  type AcademicTermOverview,
 } from '@/services/academic-term-storage';
 import {
   academicTermNames,
@@ -45,8 +46,8 @@ export default function AcademicTermScreen() {
   );
   const [savedAcademicTerm, setSavedAcademicTerm] =
     useState<AcademicTerm>(defaultAcademicTerm);
-  const [availableAcademicTerms, setAvailableAcademicTerms] =
-    useState<AcademicTerm[]>([]);
+  const [academicTermOverviews, setAcademicTermOverviews] =
+    useState<AcademicTermOverview[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -60,10 +61,10 @@ export default function AcademicTermScreen() {
       try {
         const [
           savedAcademicTerm,
-          savedAvailableAcademicTerms,
+          savedAcademicTermOverviews,
         ] = await Promise.all([
           loadAcademicTerm(),
-          loadAvailableAcademicTerms(),
+          loadAcademicTermOverviews(),
         ]);
 
         if (!active) {
@@ -75,8 +76,8 @@ export default function AcademicTermScreen() {
         );
         setTerm(savedAcademicTerm.term);
         setSavedAcademicTerm(savedAcademicTerm);
-        setAvailableAcademicTerms(
-          savedAvailableAcademicTerms
+        setAcademicTermOverviews(
+          savedAcademicTermOverviews
         );
       } catch (error) {
         console.log('学年・学期設定読み込みエラー:', error);
@@ -118,8 +119,8 @@ export default function AcademicTermScreen() {
       );
       setTerm(result.academicTerm.term);
       setSavedAcademicTerm(result.academicTerm);
-      setAvailableAcademicTerms(
-        await loadAvailableAcademicTerms()
+      setAcademicTermOverviews(
+        await loadAcademicTermOverviews()
       );
       setStatusMessage(
         `${formatAcademicTerm(result.academicTerm)}の時間割に切り替えました。`
@@ -209,7 +210,8 @@ export default function AcademicTermScreen() {
               過去に使用した学期を選ぶと、年度と学期を簡単に切り替えられます。
             </Text>
             <View style={styles.savedTermList}>
-              {availableAcademicTerms.map((academicTerm) => {
+              {academicTermOverviews.map((overview) => {
+                const { academicTerm } = overview;
                 const academicTermId = createAcademicTermId(
                   academicTerm
                 );
@@ -239,14 +241,19 @@ export default function AcademicTermScreen() {
                       setStatusMessage('');
                     }}
                   >
-                    <Text
-                      style={[
-                        styles.savedTermText,
-                        isSelected && styles.savedTermTextSelected,
-                      ]}
-                    >
-                      {formatAcademicTerm(academicTerm)}
-                    </Text>
+                    <View style={styles.savedTermTextContainer}>
+                      <Text
+                        style={[
+                          styles.savedTermText,
+                          isSelected && styles.savedTermTextSelected,
+                        ]}
+                      >
+                        {formatAcademicTerm(academicTerm)}
+                      </Text>
+                      <Text style={styles.savedTermCounts}>
+                        登録 {overview.registeredClassCount}コマ・写真 {overview.photoCount}枚
+                      </Text>
+                    </View>
                     {isCurrent ? (
                       <Text
                         style={[
@@ -458,6 +465,16 @@ const styles = StyleSheet.create({
     color: '#444',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+
+  savedTermTextContainer: {
+    flex: 1,
+  },
+
+  savedTermCounts: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 4,
   },
 
   savedTermTextSelected: {
