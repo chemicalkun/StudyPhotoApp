@@ -20,6 +20,7 @@ import { parseTimetable } from '@/utils/classification';
 import { periodNumbers } from '@/utils/period-times';
 import {
   findFirstAvailableTimetableSlot,
+  getTimetableCandidateOverwrites,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
   reclassifyPhotosForTimetableImport,
@@ -383,27 +384,23 @@ export default function TimetableImportScreen() {
         await AsyncStorage.getItem('timetable');
       const currentTimetable =
         parseTimetable(savedTimetable) ?? {};
-      const overwriteCount = candidateDrafts.filter(
-        (candidate) => {
-          const currentSubject =
-            currentTimetable[
-              `${candidate.day}-${candidate.period}`
-            ]?.trim() ?? '';
-
-          return (
-            currentSubject !== '' &&
-            currentSubject !== candidate.subject.trim()
-          );
-        }
-      ).length;
+      const overwrites = getTimetableCandidateOverwrites(
+        currentTimetable,
+        candidateDrafts
+      );
       const overwriteMessage =
-        overwriteCount > 0
-          ? `\n登録済みの授業${overwriteCount}件は上書きされます。`
+        overwrites.length > 0
+          ? `\n\n上書きされる授業\n${overwrites
+              .map(
+                (overwrite) =>
+                  `${overwrite.day}曜${overwrite.period}限：${overwrite.previousSubject} → ${overwrite.nextSubject}`
+              )
+              .join('\n')}`
           : '';
 
       Alert.alert(
         '時間割を保存しますか？',
-        `${candidateDrafts.length}件の候補を保存します。${overwriteMessage}`,
+        `${candidateDrafts.length}件の候補を保存します。候補にない登録済み授業はそのまま残ります。${overwriteMessage}`,
         [
           {
             text: 'キャンセル',

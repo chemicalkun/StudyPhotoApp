@@ -16,6 +16,13 @@ export type TimetableImportCandidate = {
   subject: string;
 };
 
+export type TimetableCandidateOverwrite = {
+  day: TimetableDay;
+  period: PeriodNumber;
+  previousSubject: string;
+  nextSubject: string;
+};
+
 type PhotoImportResult = {
   photos: PhotoRecord[];
   updatedCount: number;
@@ -64,6 +71,29 @@ export const getTimetableImportValidationError = (
 
   return null;
 };
+
+
+export const getTimetableCandidateOverwrites = (
+  timetable: Timetable,
+  candidates: TimetableImportCandidate[]
+): TimetableCandidateOverwrite[] =>
+  candidates.flatMap((candidate) => {
+    const previousSubject =
+      timetable[
+        `${candidate.day}-${candidate.period}`
+      ]?.trim() ?? '';
+    const nextSubject = candidate.subject.trim();
+
+    return previousSubject !== '' &&
+      previousSubject !== nextSubject
+      ? [{
+          day: candidate.day,
+          period: candidate.period,
+          previousSubject,
+          nextSubject,
+        }]
+      : [];
+  });
 
 
 export const mergeTimetableCandidates = (

@@ -1,5 +1,6 @@
 import {
   findFirstAvailableTimetableSlot,
+  getTimetableCandidateOverwrites,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
   reclassifyPhotosForTimetableImport,
@@ -76,6 +77,28 @@ describe('mergeTimetableCandidates', () => {
       '火-1': '英語',
       '月-2': '高分子化学',
     });
+  });
+});
+
+
+describe('getTimetableCandidateOverwrites', () => {
+  test('上書き対象の授業名の変更を返す', () => {
+    expect(
+      getTimetableCandidateOverwrites(
+        {
+          '月-2': '旧科目名',
+          '火-1': '英語',
+        },
+        candidates
+      )
+    ).toEqual([
+      {
+        day: '月',
+        period: 2,
+        previousSubject: '旧科目名',
+        nextSubject: '高分子化学',
+      },
+    ]);
   });
 });
 
