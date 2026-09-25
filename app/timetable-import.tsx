@@ -90,6 +90,12 @@ export default function TimetableImportScreen() {
     ),
     [candidateDrafts]
   );
+  const candidateValidationError = useMemo(
+    () => getTimetableImportValidationError(
+      candidateDrafts
+    ),
+    [candidateDrafts]
+  );
 
 
   useEffect(() => {
@@ -626,14 +632,20 @@ export default function TimetableImportScreen() {
               </View>
             ) : null}
 
-            {candidateDrafts.map(
-              (candidate, index) => (
+            {candidateDrafts.map((candidate, index) => {
+              const candidateKey =
+                `${candidate.day}-${candidate.period}`;
+              const subjectIsEmpty =
+                candidate.subject.trim() === '';
+
+              return (
                 <View
                   style={[
                     styles.candidateRow,
                     duplicateCandidateSlots.has(
-                      `${candidate.day}-${candidate.period}`
+                      candidateKey
                     ) && styles.duplicateCandidateRow,
+                    subjectIsEmpty && styles.emptyCandidateRow,
                   ]}
                   key={`${candidate.day}-${candidate.period}-${index}`}
                 >
@@ -720,10 +732,16 @@ export default function TimetableImportScreen() {
                   </Text>
 
                   {duplicateCandidateSlots.has(
-                    `${candidate.day}-${candidate.period}`
+                    candidateKey
                   ) ? (
                     <Text style={styles.duplicateCandidateText}>
                       同じ曜日・時限の候補が重複しています
+                    </Text>
+                  ) : null}
+
+                  {subjectIsEmpty ? (
+                    <Text style={styles.emptyCandidateText}>
+                      授業名を入力するか、この候補を外してください
                     </Text>
                   ) : null}
 
@@ -737,8 +755,8 @@ export default function TimetableImportScreen() {
                     </Text>
                   </Pressable>
                 </View>
-              )
-            )}
+              );
+            })}
 
             <Pressable
               style={styles.addCandidateButton}
@@ -755,22 +773,33 @@ export default function TimetableImportScreen() {
             </Text>
 
             {candidateDrafts.length > 0 ? (
-              <Pressable
-                style={[
-                  styles.saveCandidatesButton,
-                  saving && styles.disabledButton,
-                ]}
-                disabled={saving}
-                onPress={confirmSave}
-              >
-                {saving ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={styles.selectButtonText}>
-                    確認して保存
+              <>
+                {candidateValidationError !== null ? (
+                  <Text style={styles.validationErrorText}>
+                    {candidateValidationError}
                   </Text>
-                )}
-              </Pressable>
+                ) : null}
+
+                <Pressable
+                  style={[
+                    styles.saveCandidatesButton,
+                    (saving || candidateValidationError !== null) &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={
+                    saving || candidateValidationError !== null
+                  }
+                  onPress={confirmSave}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.selectButtonText}>
+                      確認して保存
+                    </Text>
+                  )}
+                </Pressable>
+              </>
             ) : null}
           </View>
 
@@ -1032,6 +1061,23 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
 
+  emptyCandidateRow: {
+    backgroundColor: '#fff8e6',
+    borderColor: '#d4a846',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginTop: 8,
+  },
+
+  emptyCandidateText: {
+    color: '#8a6518',
+    fontSize: 12,
+    fontWeight: 'bold',
+    lineHeight: 18,
+    marginTop: 7,
+  },
+
   candidateLabel: {
     color: '#3d5f49',
     fontSize: 12,
@@ -1114,6 +1160,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: 8,
+  },
+
+  validationErrorText: {
+    color: '#a13333',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
   },
 
   saveCandidatesButton: {
