@@ -30,7 +30,9 @@ type PhotoImportResult = {
 
 
 export const findFirstAvailableTimetableSlot = (
-  candidates: TimetableImportCandidate[]
+  candidates: TimetableImportCandidate[],
+  days: readonly TimetableDay[] = timetableDays,
+  periods: readonly PeriodNumber[] = periodNumbers
 ) => {
   const usedSlots = new Set(
     candidates.map(
@@ -38,8 +40,8 @@ export const findFirstAvailableTimetableSlot = (
     )
   );
 
-  for (const day of timetableDays) {
-    for (const period of periodNumbers) {
+  for (const day of days) {
+    for (const period of periods) {
       if (!usedSlots.has(`${day}-${period}`)) {
         return { day, period };
       }

@@ -24,6 +24,7 @@ import {
   parseTimetable,
 } from '@/utils/classification';
 import { savePhotoFromUri } from '@/services/photo-storage';
+import { loadTimetableDisplayOptions } from '@/utils/timetable-display-options';
 
 
 export default function CameraScreen() {
@@ -76,10 +77,15 @@ export default function CameraScreen() {
       const hour = now.getHours();
       const minute = now.getMinutes();
 
-      const [configuredPeriodTimes, savedTimetable] =
+      const [
+        configuredPeriodTimes,
+        savedTimetable,
+        displayOptions,
+      ] =
         await Promise.all([
           loadPeriodTimes(),
           AsyncStorage.getItem('timetable'),
+          loadTimetableDisplayOptions(),
         ]);
       const timetable = parseTimetable(savedTimetable);
 
@@ -88,7 +94,8 @@ export default function CameraScreen() {
         hour,
         minute,
         configuredPeriodTimes,
-        timetable
+        timetable,
+        displayOptions
       );
 
       const savedPhoto = await savePhotoFromUri({

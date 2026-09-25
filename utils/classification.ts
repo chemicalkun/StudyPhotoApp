@@ -2,6 +2,11 @@ import {
   findPeriod,
   PeriodTimes,
 } from '@/utils/period-times';
+import {
+  defaultTimetableDisplayOptions,
+  isTimetableSlotEnabled,
+  type TimetableDisplayOptions,
+} from '@/utils/timetable-display-options';
 
 
 export type ClassInfo = {
@@ -62,7 +67,9 @@ export const classifyClassTime = (
   hour: number,
   minute: number,
   periodTimes: PeriodTimes,
-  timetable: Timetable | null
+  timetable: Timetable | null,
+  displayOptions: TimetableDisplayOptions =
+    defaultTimetableDisplayOptions
 ): ClassInfo => {
   const period = findPeriod(
     hour,
@@ -85,6 +92,15 @@ export const classifyClassTime = (
       period,
       subject: null,
       label: '日曜日は授業なし',
+    };
+  }
+
+  if (!isTimetableSlotEnabled(day, period, displayOptions)) {
+    return {
+      day,
+      period,
+      subject: null,
+      label: `${day}曜日 ${period}限：使用しない設定`,
     };
   }
 

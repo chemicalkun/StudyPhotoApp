@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
@@ -17,7 +17,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, Stack } from 'expo-router';
 
 import { parseTimetable } from '@/utils/classification';
-import { periodNumbers } from '@/utils/period-times';
 import {
   findFirstAvailableTimetableSlot,
   getTimetableCandidateOverwrites,
@@ -29,7 +28,6 @@ import {
   normalizeTimetableText,
   parseTimetableCandidates,
   type TimetableCandidate,
-  timetableDays,
 } from '@/utils/timetable-recognition';
 import { parsePhotoRecords } from '@/types/photo';
 import { renameSubjectLearningData } from '@/services/subject-learning-data-storage';
@@ -40,6 +38,13 @@ import {
   recognizeText,
   type RecognizedTextBlock,
 } from '../modules/study-photo-vision';
+import {
+  defaultTimetableDisplayOptions,
+  getEnabledPeriodNumbers,
+  getEnabledTimetableDays,
+  loadTimetableDisplayOptions,
+  type TimetableDisplayOptions,
+} from '@/utils/timetable-display-options';
 
 
 type SelectedTimetableImage = {
@@ -68,10 +73,34 @@ export default function TimetableImportScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [settingsRequired, setSettingsRequired] =
     useState(false);
+  const [displayOptions, setDisplayOptions] =
+    useState<TimetableDisplayOptions>(
+      defaultTimetableDisplayOptions
+    );
+  const enabledDays = getEnabledTimetableDays(displayOptions);
+  const enabledPeriods = getEnabledPeriodNumbers(displayOptions);
   const timetableRecognitionResult = useMemo(
     () => parseTimetableCandidates(recognizedTextBlocks),
     [recognizedTextBlocks]
   );
+
+
+  useEffect(() => {
+    const loadDisplayOptions = async () => {
+      try {
+        setDisplayOptions(
+          await loadTimetableDisplayOptions()
+        );
+      } catch (error) {
+        console.log(
+          '時間割の表示範囲読み込みエラー:',
+          error
+        );
+      }
+    };
+
+    void loadDisplayOptions();
+  }, []);
 
 
   const pickTimetableImage = async () => {
@@ -164,7 +193,13 @@ export default function TimetableImportScreen() {
         parseTimetableCandidates(recognizedBlocks);
 
       setRecognizedTextBlocks(recognizedBlocks);
-      setCandidateDrafts(recognitionResult.candidates);
+      setCandidateDrafts(
+        recognitionResult.candidates.filter(
+          (candidate) =>
+            enabledDays.includes(candidate.day) &&
+            enabledPeriods.includes(candidate.period)
+        )
+      );
 
       if (recognizedBlocks.length === 0) {
         setErrorMessage(
@@ -208,7 +243,9 @@ export default function TimetableImportScreen() {
 
   const addCandidate = () => {
     const availableSlot = findFirstAvailableTimetableSlot(
-      candidateDrafts
+      candidateDrafts,
+      enabledDays,
+      enabledPeriods
     );
 
     if (availableSlot === null) {
@@ -593,7 +630,7 @@ export default function TimetableImportScreen() {
                   </Text>
 
                   <View style={styles.selectorRow}>
-                    {timetableDays.map((day) => (
+                    {enabledDays.map((day) => (
                       <Pressable
                         key={day}
                         style={[
@@ -624,7 +661,7 @@ export default function TimetableImportScreen() {
                   </Text>
 
                   <View style={styles.selectorRow}>
-                    {periodNumbers.map((period) => (
+                    {enabledPeriods.map((period) => (
                       <Pressable
                         key={period}
                         style={[

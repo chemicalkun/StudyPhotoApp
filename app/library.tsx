@@ -21,6 +21,7 @@ import {
   parseTimetable,
 } from '@/utils/classification';
 import { savePhotoFromUri } from '@/services/photo-storage';
+import { loadTimetableDisplayOptions } from '@/utils/timetable-display-options';
 
 export default function LibraryScreen() {
   const [message, setMessage] = useState('');
@@ -66,10 +67,15 @@ export default function LibraryScreen() {
         return;
       }
 
-      const [configuredPeriodTimes, savedTimetable] =
+      const [
+        configuredPeriodTimes,
+        savedTimetable,
+        displayOptions,
+      ] =
         await Promise.all([
           loadPeriodTimes(),
           AsyncStorage.getItem('timetable'),
+          loadTimetableDisplayOptions(),
         ]);
       const timetable = parseTimetable(savedTimetable);
 
@@ -115,7 +121,8 @@ export default function LibraryScreen() {
             takenAt.getHours(),
             takenAt.getMinutes(),
             configuredPeriodTimes,
-            timetable
+            timetable,
+            displayOptions
           );
 
           const savedPhoto = await savePhotoFromUri({

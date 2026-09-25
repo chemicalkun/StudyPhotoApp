@@ -81,6 +81,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="timetable-display-settings"
+          options={{
+            title: '表示する曜日・時限',
+            headerBackTitle: '設定',
+          }}
+        />
+        <Stack.Screen
           name="backup"
           options={{
             title: 'バックアップ',

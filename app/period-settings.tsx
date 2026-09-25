@@ -24,7 +24,6 @@ import {
   loadPeriodTimes,
   PeriodTime,
   PeriodTimes,
-  periodNumbers,
   savePeriodTimes,
 } from '@/utils/period-times';
 import {
@@ -33,6 +32,12 @@ import {
   parseTimetable,
 } from '@/utils/classification';
 import { parsePhotoRecords } from '@/types/photo';
+import {
+  defaultTimetableDisplayOptions,
+  getEnabledPeriodNumbers,
+  loadTimetableDisplayOptions,
+  type TimetableDisplayOptions,
+} from '@/utils/timetable-display-options';
 
 
 export default function PeriodSettingsScreen() {
@@ -40,6 +45,10 @@ export default function PeriodSettingsScreen() {
   const openedFromSettings = params.from === 'settings';
   const [periodTimes, setPeriodTimes] =
     useState<PeriodTimes>(defaultPeriodTimes);
+  const [displayOptions, setDisplayOptions] =
+    useState<TimetableDisplayOptions>(
+      defaultTimetableDisplayOptions
+    );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -56,11 +65,15 @@ export default function PeriodSettingsScreen() {
         setLoading(true);
         setLoadError('');
 
-        const savedPeriodTimes =
-          await loadPeriodTimes();
+        const [savedPeriodTimes, savedDisplayOptions] =
+          await Promise.all([
+            loadPeriodTimes(),
+            loadTimetableDisplayOptions(),
+          ]);
 
         if (active) {
           setPeriodTimes(savedPeriodTimes);
+          setDisplayOptions(savedDisplayOptions);
         }
       } catch (error) {
         console.log('時限設定読み込みエラー:', error);
@@ -70,6 +83,9 @@ export default function PeriodSettingsScreen() {
             '保存済みの時限設定を読み込めませんでした。デフォルト値を表示しています。'
           );
           setPeriodTimes(defaultPeriodTimes);
+          setDisplayOptions(
+            defaultTimetableDisplayOptions
+          );
         }
       } finally {
         if (active) {
@@ -84,6 +100,10 @@ export default function PeriodSettingsScreen() {
       active = false;
     };
   }, [loadRevision]);
+
+  const displayedPeriods = getEnabledPeriodNumbers(
+    displayOptions
+  );
 
 
   const updateTime = (
@@ -121,10 +141,15 @@ export default function PeriodSettingsScreen() {
     let updatedPhotoCount = 0;
 
     try {
-      const [savedPhotos, savedTimetable] =
+      const [
+        savedPhotos,
+        savedTimetable,
+        displayOptions,
+      ] =
         await Promise.all([
           AsyncStorage.getItem('photos'),
           AsyncStorage.getItem('timetable'),
+          loadTimetableDisplayOptions(),
         ]);
 
       originalPhotos = savedPhotos;
@@ -167,7 +192,8 @@ export default function PeriodSettingsScreen() {
               takenAt.getHours(),
               takenAt.getMinutes(),
               periodTimes,
-              timetable
+              timetable,
+              displayOptions
             );
 
             const shouldUpdate =
@@ -302,7 +328,7 @@ export default function PeriodSettingsScreen() {
         />
       ) : (
         <>
-          {periodNumbers.map((period) => (
+          {displayedPeriods.map((period) => (
             <View key={period} style={styles.periodRow}>
               <Text style={styles.periodLabel}>
                 {period}限

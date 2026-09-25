@@ -82,6 +82,13 @@ import {
   timetableDays,
   type TimetableDay,
 } from '@/utils/timetable-recognition';
+import {
+  defaultTimetableDisplayOptions,
+  getEnabledPeriodNumbers,
+  getEnabledTimetableDays,
+  loadTimetableDisplayOptions,
+  type TimetableDisplayOptions,
+} from '@/utils/timetable-display-options';
 
 
 type ReviewMode = 'lecture' | 'subject';
@@ -90,12 +97,6 @@ type SubjectClassSlot = {
   day: TimetableDay;
   period: number;
 };
-
-
-const reviewDays: ReviewDay[] = [
-  'すべて',
-  ...timetableDays,
-];
 
 
 const getDateLabel = (dateKey: string) => {
@@ -198,8 +199,22 @@ export default function ReviewScreen() {
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
   const [timetable, setTimetable] =
     useState<Timetable>({});
+  const [displayOptions, setDisplayOptions] =
+    useState<TimetableDisplayOptions>(
+      defaultTimetableDisplayOptions
+    );
   const [photoOcrRecords, setPhotoOcrRecords] =
     useState<PhotoOcrRecords>({});
+  const enabledDays = getEnabledTimetableDays(
+    displayOptions
+  );
+  const enabledPeriods = getEnabledPeriodNumbers(
+    displayOptions
+  );
+  const reviewDays: ReviewDay[] = [
+    'すべて',
+    ...enabledDays,
+  ];
 
   const summaryGroups = summaries.reduce<
     Record<string, LectureSummaryRecord[]>
@@ -248,10 +263,12 @@ export default function ReviewScreen() {
         const period = Number(periodText);
 
         if (
-          !timetableDays.some(
+          !enabledDays.some(
             (timetableDay) => timetableDay === day
           ) ||
-          !Number.isInteger(period)
+          !enabledPeriods.some(
+            (enabledPeriod) => enabledPeriod === period
+          )
         ) {
           return;
         }
@@ -264,8 +281,11 @@ export default function ReviewScreen() {
       if (
         getReviewSubject(photo) !== targetSubject ||
         photo.period === null ||
-        !timetableDays.some(
+        !enabledDays.some(
           (timetableDay) => timetableDay === photo.day
+        ) ||
+        !enabledPeriods.some(
+          (enabledPeriod) => enabledPeriod === photo.period
         )
       ) {
         return;
@@ -490,6 +510,7 @@ export default function ReviewScreen() {
             loadPhotoOcrRecords(),
             AsyncStorage.getItem('timetable'),
             loadAcademicTerm(),
+            loadTimetableDisplayOptions(),
           ]);
           const [
             lectureSummaryResult,
@@ -500,6 +521,7 @@ export default function ReviewScreen() {
             photoOcrResult,
             timetableResult,
             academicTermResult,
+            displayOptionsResult,
           ] = learningDataResults;
 
           if (!active) {
@@ -585,6 +607,20 @@ export default function ReviewScreen() {
             console.log(
               '復習学期設定読み込みエラー:',
               academicTermResult.reason
+            );
+          }
+          if (displayOptionsResult.status === 'fulfilled') {
+            setDisplayOptions(displayOptionsResult.value);
+            setSelectedReviewDay((currentDay) =>
+              currentDay === '土' &&
+              !displayOptionsResult.value.showSaturday
+                ? 'すべて'
+                : currentDay
+            );
+          } else {
+            console.log(
+              '復習表示範囲読み込みエラー:',
+              displayOptionsResult.reason
             );
           }
 

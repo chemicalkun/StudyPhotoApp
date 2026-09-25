@@ -4,6 +4,7 @@ export const backupStorageKeys = [
   'academicTermData',
   'timetable',
   'periodTimes',
+  'timetableDisplayOptions',
   'photos',
   'photoOcrRecords',
   'lectureSummaryRecords',
@@ -33,6 +34,7 @@ export const restorableBackupStorageKeys = [
   'academicTermData',
   'timetable',
   'periodTimes',
+  'timetableDisplayOptions',
   'lectureSummaryRecords',
   'examPreparationRecords',
   'practiceQuestionRecords',
@@ -101,6 +103,7 @@ export const parseStudyPhotoBackup = (
     'academicTerm',
     'academicTimetables',
     'academicTermData',
+    'timetableDisplayOptions',
     'subjectQuestionRecords',
   ]);
   const hasValidStorageValues = backupStorageKeys.every(
@@ -141,6 +144,10 @@ export const parseStudyPhotoBackup = (
       academicTermData:
         typeof storage.academicTermData === 'string'
           ? storage.academicTermData
+          : null,
+      timetableDisplayOptions:
+        typeof storage.timetableDisplayOptions === 'string'
+          ? storage.timetableDisplayOptions
           : null,
       subjectQuestionRecords:
         typeof storage.subjectQuestionRecords === 'string'

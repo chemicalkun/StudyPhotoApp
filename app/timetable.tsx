@@ -23,7 +23,6 @@ import { renameSubjectLearningData } from '@/services/subject-learning-data-stor
 import {
   defaultPeriodTimes,
   loadPeriodTimes,
-  periodNumbers,
   PeriodTimes,
 } from '@/utils/period-times';
 import { isTimetable } from '@/utils/classification';
@@ -31,7 +30,13 @@ import {
   areSameSubjectNames,
   renameTimetableSubject,
 } from '@/utils/timetable-subject';
-import { timetableDays } from '@/utils/timetable-recognition';
+import {
+  defaultTimetableDisplayOptions,
+  getEnabledPeriodNumbers,
+  getEnabledTimetableDays,
+  loadTimetableDisplayOptions,
+  type TimetableDisplayOptions,
+} from '@/utils/timetable-display-options';
 import { parsePhotoRecords } from '@/types/photo';
 
 
@@ -60,6 +65,10 @@ export default function TimetableScreen() {
   const [timetable, setTimetable] = useState<Record<string, string>>({});
   const [periodTimes, setPeriodTimes] =
     useState<PeriodTimes>(defaultPeriodTimes);
+  const [displayOptions, setDisplayOptions] =
+    useState<TimetableDisplayOptions>(
+      defaultTimetableDisplayOptions
+    );
 
 
   useFocusEffect(
@@ -123,11 +132,17 @@ export default function TimetableScreen() {
 
       const loadSettings = async () => {
         try {
-          const savedPeriodTimes =
-            await loadPeriodTimes();
+          const [
+            savedPeriodTimes,
+            savedDisplayOptions,
+          ] = await Promise.all([
+            loadPeriodTimes(),
+            loadTimetableDisplayOptions(),
+          ]);
 
           if (active) {
             setPeriodTimes(savedPeriodTimes);
+            setDisplayOptions(savedDisplayOptions);
             setPeriodTimesError('');
           }
         } catch (error) {
@@ -135,6 +150,9 @@ export default function TimetableScreen() {
 
           if (active) {
             setPeriodTimes(defaultPeriodTimes);
+            setDisplayOptions(
+              defaultTimetableDisplayOptions
+            );
             setPeriodTimesError(
               '時限設定を読み込めなかったため、デフォルト時刻を表示しています。'
             );
@@ -148,6 +166,13 @@ export default function TimetableScreen() {
         active = false;
       };
     }, [periodTimesLoadRevision])
+  );
+
+  const displayedDays = getEnabledTimetableDays(
+    displayOptions
+  );
+  const displayedPeriods = getEnabledPeriodNumbers(
+    displayOptions
   );
 
 
@@ -571,14 +596,14 @@ export default function TimetableScreen() {
       <View style={styles.headerRow}>
         <View style={styles.cornerHeader} />
 
-        {timetableDays.map((day) => (
+        {displayedDays.map((day) => (
           <View key={day} style={styles.dayHeader}>
             <Text style={styles.headerText}>{day}</Text>
           </View>
         ))}
       </View>
 
-      {periodNumbers.map((period) => (
+      {displayedPeriods.map((period) => (
         <View key={period} style={styles.row}>
           <View style={styles.periodHeader}>
             <Text style={styles.headerText}>
@@ -598,7 +623,7 @@ export default function TimetableScreen() {
             </Text>
           </View>
 
-          {timetableDays.map((day) => {
+          {displayedDays.map((day) => {
             const key = `${day}-${period}`;
             const subject = timetable[key];
 

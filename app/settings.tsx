@@ -92,6 +92,12 @@ export default function SettingsScreen() {
           />
           <View style={styles.divider} />
           <SettingsLink
+            title="表示する曜日・時限"
+            description="土曜日と6限の表示を変更"
+            onPress={() => router.push('/timetable-display-settings')}
+          />
+          <View style={styles.divider} />
+          <SettingsLink
             title="時限設定"
             description="各時限の開始・終了時刻を変更"
             onPress={() => router.push({

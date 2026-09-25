@@ -35,6 +35,9 @@ describe('StudyPhoto backup', () => {
       '{"月-1":"高分子化学"}'
     );
     expect(backup.storage.flashcardRecords).toBeNull();
+    expect(
+      backup.storage.timetableDisplayOptions
+    ).toBeNull();
     expect(backup.storage.subjectQuestionRecords).toBeNull();
   });
 
@@ -47,6 +50,7 @@ describe('StudyPhoto backup', () => {
     delete legacyStorage.academicTerm;
     delete legacyStorage.academicTimetables;
     delete legacyStorage.academicTermData;
+    delete legacyStorage.timetableDisplayOptions;
     delete legacyStorage.subjectQuestionRecords;
 
     const parsed = parseStudyPhotoBackup(JSON.stringify({
@@ -57,6 +61,9 @@ describe('StudyPhoto backup', () => {
     expect(parsed.storage.academicTerm).toBeNull();
     expect(parsed.storage.academicTimetables).toBeNull();
     expect(parsed.storage.academicTermData).toBeNull();
+    expect(
+      parsed.storage.timetableDisplayOptions
+    ).toBeNull();
     expect(parsed.storage.subjectQuestionRecords).toBeNull();
   });
 

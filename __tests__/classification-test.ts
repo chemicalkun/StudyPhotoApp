@@ -67,6 +67,36 @@ describe('classifyClassTime', () => {
     expect(classInfo.subject).toBeNull();
     expect(classInfo.label).toBe('日曜日は授業なし');
   });
+
+  test('オンの場合は土曜日の授業を判定する', () => {
+    const classInfo = classifyClassTime(
+      '土',
+      9,
+      30,
+      defaultPeriodTimes,
+      { '土-1': '有機化学' },
+      {
+        showSaturday: true,
+        showSixthPeriod: false,
+      }
+    );
+
+    expect(classInfo.subject).toBe('有機化学');
+  });
+
+  test('オフの6限は自動分類しない', () => {
+    const classInfo = classifyClassTime(
+      '月',
+      18,
+      30,
+      defaultPeriodTimes,
+      { '月-6': '有機化学' }
+    );
+
+    expect(classInfo.period).toBe(6);
+    expect(classInfo.subject).toBeNull();
+    expect(classInfo.label).toContain('使用しない設定');
+  });
 });
 
 

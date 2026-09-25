@@ -21,10 +21,12 @@ import { parseLectureSummaryRecords } from '@/types/lecture-summary';
 import { parsePracticeQuestionRecords } from '@/types/practice-question';
 import { parseSubjectQuestionRecords } from '@/types/subject-question';
 import {
+  defaultPeriodTimes,
   getPeriodTimesValidationError,
   periodNumbers,
   type PeriodTimes,
 } from '@/utils/period-times';
+import { parseTimetableDisplayOptions } from '@/utils/timetable-display-options';
 
 
 const parseJson = (savedValue: string) => {
@@ -67,9 +69,15 @@ const validatePeriodTimes = (
     string,
     unknown
   >;
+  const migratedPeriodTimes = !('6' in candidate)
+    ? {
+        ...candidate,
+        6: defaultPeriodTimes[6],
+      }
+    : candidate;
 
   for (const period of periodNumbers) {
-    const time = candidate[String(period)];
+    const time = migratedPeriodTimes[String(period)];
 
     if (
       typeof time !== 'object' ||
@@ -85,7 +93,7 @@ const validatePeriodTimes = (
 
   if (
     getPeriodTimesValidationError(
-      periodTimes as PeriodTimes
+      migratedPeriodTimes as PeriodTimes
     ) !== null
   ) {
     throw new Error('時限設定データが不正です');
@@ -116,6 +124,12 @@ const validateRestorableData = (
 
   if (storage.periodTimes !== null) {
     validatePeriodTimes(storage.periodTimes);
+  }
+
+  if (storage.timetableDisplayOptions !== null) {
+    parseTimetableDisplayOptions(
+      storage.timetableDisplayOptions
+    );
   }
 
   if (storage.lectureSummaryRecords !== null) {
