@@ -1,5 +1,6 @@
 import {
   findFirstAvailableTimetableSlot,
+  getDuplicateTimetableSlots,
   getTimetableCandidateOverwrites,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
@@ -62,6 +63,19 @@ describe('getTimetableImportValidationError', () => {
         { day: '月', period: 1, subject: '数学' },
       ])
     ).toContain('複数');
+  });
+});
+
+
+describe('getDuplicateTimetableSlots', () => {
+  test('重複する曜日・時限だけを返す', () => {
+    expect(
+      getDuplicateTimetableSlots([
+        { day: '月', period: 1, subject: '英語' },
+        { day: '月', period: 1, subject: '数学' },
+        { day: '火', period: 2, subject: '化学' },
+      ])
+    ).toEqual(['月-1']);
   });
 });
 

@@ -19,6 +19,7 @@ import { router, Stack } from 'expo-router';
 import { parseTimetable } from '@/utils/classification';
 import {
   findFirstAvailableTimetableSlot,
+  getDuplicateTimetableSlots,
   getTimetableCandidateOverwrites,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
@@ -82,6 +83,12 @@ export default function TimetableImportScreen() {
   const timetableRecognitionResult = useMemo(
     () => parseTimetableCandidates(recognizedTextBlocks),
     [recognizedTextBlocks]
+  );
+  const duplicateCandidateSlots = useMemo(
+    () => new Set(
+      getDuplicateTimetableSlots(candidateDrafts)
+    ),
+    [candidateDrafts]
   );
 
 
@@ -622,7 +629,12 @@ export default function TimetableImportScreen() {
             {candidateDrafts.map(
               (candidate, index) => (
                 <View
-                  style={styles.candidateRow}
+                  style={[
+                    styles.candidateRow,
+                    duplicateCandidateSlots.has(
+                      `${candidate.day}-${candidate.period}`
+                    ) && styles.duplicateCandidateRow,
+                  ]}
                   key={`${candidate.day}-${candidate.period}-${index}`}
                 >
                   <Text style={styles.candidateLabel}>
@@ -706,6 +718,14 @@ export default function TimetableImportScreen() {
                       ? '手動で追加した候補'
                       : `OCR参考値 ${Math.round(candidate.confidence * 100)}%`}
                   </Text>
+
+                  {duplicateCandidateSlots.has(
+                    `${candidate.day}-${candidate.period}`
+                  ) ? (
+                    <Text style={styles.duplicateCandidateText}>
+                      同じ曜日・時限の候補が重複しています
+                    </Text>
+                  ) : null}
 
                   <Pressable
                     style={styles.removeCandidateButton}
@@ -993,6 +1013,23 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#c9dfd0',
     paddingVertical: 11,
+  },
+
+  duplicateCandidateRow: {
+    backgroundColor: '#fff0f0',
+    borderColor: '#d98282',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginTop: 8,
+  },
+
+  duplicateCandidateText: {
+    color: '#a13333',
+    fontSize: 12,
+    fontWeight: 'bold',
+    lineHeight: 18,
+    marginTop: 7,
   },
 
   candidateLabel: {

@@ -75,6 +75,27 @@ export const getTimetableImportValidationError = (
 };
 
 
+export const getDuplicateTimetableSlots = (
+  candidates: TimetableImportCandidate[]
+) => {
+  const slotCounts = candidates.reduce<Record<string, number>>(
+    (counts, candidate) => {
+      const key = `${candidate.day}-${candidate.period}`;
+
+      return {
+        ...counts,
+        [key]: (counts[key] ?? 0) + 1,
+      };
+    },
+    {}
+  );
+
+  return Object.entries(slotCounts)
+    .filter(([, count]) => count > 1)
+    .map(([key]) => key);
+};
+
+
 export const getTimetableCandidateOverwrites = (
   timetable: Timetable,
   candidates: TimetableImportCandidate[]
