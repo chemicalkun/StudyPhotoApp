@@ -19,6 +19,12 @@ import {
 } from 'expo-router';
 
 import { LoadErrorCard } from '@/components/load-error-card';
+import { loadAcademicTerm } from '@/services/academic-term-storage';
+import {
+  formatAcademicTerm,
+  getDefaultAcademicTerm,
+  type AcademicTerm,
+} from '@/types/academic-term';
 import { renameSubjectLearningData } from '@/services/subject-learning-data-storage';
 import {
   defaultPeriodTimes,
@@ -63,6 +69,8 @@ export default function TimetableScreen() {
   const [subjectName, setSubjectName] = useState('');
 
   const [timetable, setTimetable] = useState<Record<string, string>>({});
+  const [academicTerm, setAcademicTerm] =
+    useState<AcademicTerm>(getDefaultAcademicTerm());
   const [periodTimes, setPeriodTimes] =
     useState<PeriodTimes>(defaultPeriodTimes);
   const [displayOptions, setDisplayOptions] =
@@ -79,8 +87,15 @@ export default function TimetableScreen() {
 
       const loadTimetable = async () => {
         try {
-          const savedTimetable =
-            await AsyncStorage.getItem('timetable');
+          const [savedTimetable, savedAcademicTerm] =
+            await Promise.all([
+              AsyncStorage.getItem('timetable'),
+              loadAcademicTerm(),
+            ]);
+
+          if (active) {
+            setAcademicTerm(savedAcademicTerm);
+          }
 
           if (savedTimetable === null) {
             if (active) {
@@ -553,6 +568,23 @@ export default function TimetableScreen() {
 
       <Text style={styles.title}>時間割</Text>
 
+      <Pressable
+        style={styles.academicTermButton}
+        accessibilityRole="button"
+        accessibilityLabel={`${formatAcademicTerm(academicTerm)}、学期を変更`}
+        onPress={() => router.push({
+          pathname: '/academic-term',
+          params: { from: 'timetable' },
+        })}
+      >
+        <Text style={styles.academicTermText}>
+          {formatAcademicTerm(academicTerm)}
+        </Text>
+        <Text style={styles.academicTermArrow}>
+          変更 ›
+        </Text>
+      </Pressable>
+
       {loadError !== '' ? (
         <LoadErrorCard
           message={loadError}
@@ -731,6 +763,31 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'black',
     marginBottom: 24,
+  },
+
+  academicTermButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f2f5fb',
+    borderWidth: 1,
+    borderColor: '#c8d4eb',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 16,
+  },
+
+  academicTermText: {
+    color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  academicTermArrow: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 
   periodTime: {

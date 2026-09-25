@@ -36,6 +36,8 @@ export default function AcademicTermScreen() {
     ? 'ホーム'
     : params.from === 'review'
       ? '復習'
+      : params.from === 'timetable'
+        ? '時間割'
       : params.from === 'getting-started'
         ? '使い方'
         : '設定';
