@@ -612,7 +612,19 @@ export default function TimetableScreen() {
         onPress={() => router.push('/timetable-import')}
       >
         <Text style={styles.imageImportButtonText}>
-          🖼️ 時間割画像から登録
+          時間割画像から登録
+        </Text>
+      </Pressable>
+
+      <Pressable
+        style={styles.displaySettingsButton}
+        onPress={() => router.push({
+          pathname: '/timetable-display-settings',
+          params: { from: 'timetable' },
+        })}
+      >
+        <Text style={styles.periodSettingsButtonText}>
+          表示する曜日・時限を変更
         </Text>
       </Pressable>
 
@@ -621,7 +633,7 @@ export default function TimetableScreen() {
         onPress={() => router.push('/period-settings')}
       >
         <Text style={styles.periodSettingsButtonText}>
-          ⏰ 時限の開始・終了時刻を変更
+          時限の開始・終了時刻を変更
         </Text>
       </Pressable>
 
@@ -816,6 +828,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     marginBottom: 20,
+  },
+
+  displaySettingsButton: {
+    backgroundColor: '#eef3ff',
+    borderWidth: 1,
+    borderColor: '#9eb8ef',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
   },
 
   periodSettingsButtonText: {

@@ -9,7 +9,11 @@ import {
   View,
 } from 'react-native';
 
-import { router, Stack } from 'expo-router';
+import {
+  router,
+  Stack,
+  useLocalSearchParams,
+} from 'expo-router';
 
 import {
   defaultTimetableDisplayOptions,
@@ -20,6 +24,12 @@ import {
 
 
 export default function TimetableDisplaySettingsScreen() {
+  const params = useLocalSearchParams<{
+    from?: string;
+  }>();
+  const headerBackTitle = params.from === 'timetable'
+    ? '時間割'
+    : '設定';
   const [options, setOptions] =
     useState<TimetableDisplayOptions>(
       defaultTimetableDisplayOptions
@@ -89,7 +99,7 @@ export default function TimetableDisplaySettingsScreen() {
       <Stack.Screen
         options={{
           title: '表示する曜日・時限',
-          headerBackTitle: '設定',
+          headerBackTitle,
         }}
       />
 
