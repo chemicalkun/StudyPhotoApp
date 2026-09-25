@@ -103,7 +103,8 @@ export default function AcademicTermScreen() {
 
 
   const performSave = async (
-    nextAcademicTerm: AcademicTerm
+    nextAcademicTerm: AcademicTerm,
+    copyCurrentTimetable = false
   ) => {
     try {
       setSaving(true);
@@ -111,7 +112,8 @@ export default function AcademicTermScreen() {
       setStatusMessage('');
 
       const result = await switchAcademicTerm(
-        nextAcademicTerm
+        nextAcademicTerm,
+        { copyCurrentTimetable }
       );
 
       setAcademicYear(
@@ -123,7 +125,9 @@ export default function AcademicTermScreen() {
         await loadAcademicTermOverviews()
       );
       setStatusMessage(
-        `${formatAcademicTerm(result.academicTerm)}の時間割に切り替えました。`
+        copyCurrentTimetable
+          ? `${formatAcademicTerm(result.academicTerm)}へ現在の時間割をコピーしました。`
+          : `${formatAcademicTerm(result.academicTerm)}の時間割に切り替えました。`
       );
     } catch (error) {
       console.log('学年・学期設定保存エラー:', error);
@@ -161,6 +165,35 @@ export default function AcademicTermScreen() {
       createAcademicTermId(savedAcademicTerm)
     ) {
       void performSave(nextAcademicTerm);
+      return;
+    }
+
+    const isNewAcademicTerm = !academicTermOverviews.some(
+      (overview) =>
+        createAcademicTermId(overview.academicTerm) ===
+        createAcademicTermId(nextAcademicTerm)
+    );
+
+    if (isNewAcademicTerm) {
+      Alert.alert(
+        '新しい学期を始めますか？',
+        `${formatAcademicTerm(savedAcademicTerm)}のデータを保存し、${formatAcademicTerm(nextAcademicTerm)}へ切り替えます。`,
+        [
+          { text: 'キャンセル', style: 'cancel' },
+          {
+            text: '空で始める',
+            onPress: () => {
+              void performSave(nextAcademicTerm);
+            },
+          },
+          {
+            text: '時間割をコピー',
+            onPress: () => {
+              void performSave(nextAcademicTerm, true);
+            },
+          },
+        ]
+      );
       return;
     }
 

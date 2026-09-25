@@ -89,6 +89,34 @@ describe('academic term', () => {
     ).toEqual({ '月-1': '有機化学' });
   });
 
+  test('新しい学期へ現在の時間割をコピーする', async () => {
+    const firstTerm = {
+      academicYear: 2026,
+      term: '前期' as const,
+    };
+    const secondTerm = {
+      academicYear: 2026,
+      term: '後期' as const,
+    };
+
+    await saveAcademicTerm(firstTerm);
+    await AsyncStorage.setItem(
+      'timetable',
+      JSON.stringify({ '月-1': '有機化学' })
+    );
+
+    await switchAcademicTerm(secondTerm, {
+      copyCurrentTimetable: true,
+    });
+
+    expect(
+      JSON.parse(
+        await AsyncStorage.getItem('timetable') ?? '{}'
+      )
+    ).toEqual({ '月-1': '有機化学' });
+    expect(await loadAcademicTerm()).toEqual(secondTerm);
+  });
+
   test('学期ごとに写真と学習データを切り替える', async () => {
     const firstTerm = {
       academicYear: 2026,

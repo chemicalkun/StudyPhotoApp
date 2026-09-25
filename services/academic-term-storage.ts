@@ -157,7 +157,10 @@ export const loadAcademicTermOverviews = async (
 
 
 export const switchAcademicTerm = async (
-  nextAcademicTerm: AcademicTerm
+  nextAcademicTerm: AcademicTerm,
+  options: {
+    copyCurrentTimetable?: boolean;
+  } = {}
 ) => {
   const validatedNextAcademicTerm = parseAcademicTerm(
     JSON.stringify(nextAcademicTerm)
@@ -201,9 +204,15 @@ export const switchAcademicTerm = async (
     ...academicTimetables,
     [currentTermId]: currentTimetable,
   };
+  const hasSavedNextTimetable = Object.prototype.hasOwnProperty.call(
+    updatedAcademicTimetables,
+    nextTermId
+  );
   const nextTimetable = currentTermId === nextTermId
     ? currentTimetable
-    : updatedAcademicTimetables[nextTermId] ?? {};
+    : options.copyCurrentTimetable && !hasSavedNextTimetable
+      ? currentTimetable
+      : updatedAcademicTimetables[nextTermId] ?? {};
   const currentTermData = Object.fromEntries(
     academicTermDataStorageKeys.flatMap((key) => {
       const value = currentValues[key];
