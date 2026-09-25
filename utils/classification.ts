@@ -15,7 +15,7 @@ export type ClassInfo = {
 export type Timetable = Record<string, string>;
 
 
-const dayNames = ['', '月', '火', '水', '木', '金', ''];
+const dayNames = ['', '月', '火', '水', '木', '金', '土'];
 
 
 export const getDayName = (date: Date) =>
@@ -84,7 +84,7 @@ export const classifyClassTime = (
       day,
       period,
       subject: null,
-      label: '土日は授業なし',
+      label: '日曜日は授業なし',
     };
   }
 

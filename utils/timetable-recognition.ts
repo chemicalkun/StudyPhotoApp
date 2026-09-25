@@ -7,6 +7,7 @@ export const timetableDays = [
   '水',
   '木',
   '金',
+  '土',
 ] as const;
 
 export type TimetableDay =
@@ -115,7 +116,7 @@ const getDayAnchors = (
 ): DayAnchor[] => {
   const text = compactText(block.text);
   const matches = text.match(
-    /(?:月|火|水|木|金)(?:曜日|曜)?/g
+    /(?:月|火|水|木|金|土)(?:曜日|曜)?/g
   );
 
   if (

@@ -31,9 +31,8 @@ import {
   areSameSubjectNames,
   renameTimetableSubject,
 } from '@/utils/timetable-subject';
+import { timetableDays } from '@/utils/timetable-recognition';
 import { parsePhotoRecords } from '@/types/photo';
-
-const days = ['月', '火', '水', '木', '金'];
 
 
 export default function TimetableScreen() {
@@ -572,7 +571,7 @@ export default function TimetableScreen() {
       <View style={styles.headerRow}>
         <View style={styles.cornerHeader} />
 
-        {days.map((day) => (
+        {timetableDays.map((day) => (
           <View key={day} style={styles.dayHeader}>
             <Text style={styles.headerText}>{day}</Text>
           </View>
@@ -599,7 +598,7 @@ export default function TimetableScreen() {
             </Text>
           </View>
 
-          {days.map((day) => {
+          {timetableDays.map((day) => {
             const key = `${day}-${period}`;
             const subject = timetable[key];
 

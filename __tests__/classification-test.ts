@@ -54,7 +54,7 @@ describe('classifyClassTime', () => {
     expect(classInfo.label).toBe('授業時間外');
   });
 
-  test('土日は授業名を付けない', () => {
+  test('日曜日は授業名を付けない', () => {
     const classInfo = classifyClassTime(
       '',
       9,
@@ -65,7 +65,7 @@ describe('classifyClassTime', () => {
 
     expect(classInfo.period).toBe(1);
     expect(classInfo.subject).toBeNull();
-    expect(classInfo.label).toBe('土日は授業なし');
+    expect(classInfo.label).toBe('日曜日は授業なし');
   });
 });
 
@@ -75,7 +75,11 @@ describe('getDayName', () => {
     expect(getDayName(new Date(2026, 7, 24))).toBe('月');
   });
 
-  test('土日は空文字になる', () => {
+  test('土曜日を取得する', () => {
+    expect(getDayName(new Date(2026, 7, 22))).toBe('土');
+  });
+
+  test('日曜日は空文字になる', () => {
     expect(getDayName(new Date(2026, 7, 23))).toBe('');
   });
 });

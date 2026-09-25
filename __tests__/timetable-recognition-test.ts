@@ -69,7 +69,7 @@ describe('parseTimetableCandidates', () => {
 
   test('曜日が1つの文字領域にまとまっていても検出する', () => {
     const result = parseTimetableCandidates([
-      createBlock('月 火 水 木 金', 0.2, 0.9, 0.9, 0.7),
+      createBlock('月 火 水 木 金 土', 0.2, 0.9, 0.9, 0.7),
       createBlock('1限', 0.05, 0.7),
       createBlock('2限', 0.05, 0.4),
       createBlock('数学', 0.27, 0.7),
@@ -81,6 +81,7 @@ describe('parseTimetableCandidates', () => {
       '水',
       '木',
       '金',
+      '土',
     ]);
     expect(result.candidates[0]).toMatchObject({
       day: '月',
