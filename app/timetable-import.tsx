@@ -19,6 +19,7 @@ import { router, Stack } from 'expo-router';
 import { parseTimetable } from '@/utils/classification';
 import { periodNumbers } from '@/utils/period-times';
 import {
+  findFirstAvailableTimetableSlot,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
   reclassifyPhotosForTimetableImport,
@@ -48,6 +49,11 @@ type SelectedTimetableImage = {
 };
 
 
+type EditableTimetableCandidate = TimetableCandidate & {
+  manuallyAdded?: boolean;
+};
+
+
 export default function TimetableImportScreen() {
   const [selectedImage, setSelectedImage] =
     useState<SelectedTimetableImage | null>(null);
@@ -57,7 +63,7 @@ export default function TimetableImportScreen() {
   const [recognizedTextBlocks, setRecognizedTextBlocks] =
     useState<RecognizedTextBlock[]>([]);
   const [candidateDrafts, setCandidateDrafts] =
-    useState<TimetableCandidate[]>([]);
+    useState<EditableTimetableCandidate[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [settingsRequired, setSettingsRequired] =
     useState(false);
@@ -196,6 +202,31 @@ export default function TimetableImportScreen() {
         (_, candidateIndex) => candidateIndex !== index
       )
     );
+  };
+
+
+  const addCandidate = () => {
+    const availableSlot = findFirstAvailableTimetableSlot(
+      candidateDrafts
+    );
+
+    if (availableSlot === null) {
+      Alert.alert(
+        '候補を追加できません',
+        '月曜から金曜のすべての時限に候補があります。'
+      );
+      return;
+    }
+
+    setCandidateDrafts((currentCandidates) => [
+      ...currentCandidates,
+      {
+        ...availableSlot,
+        subject: '',
+        confidence: 0,
+        manuallyAdded: true,
+      },
+    ]);
   };
 
 
@@ -637,8 +668,9 @@ export default function TimetableImportScreen() {
                   />
 
                   <Text style={styles.confidenceText}>
-                    OCR参考値{' '}
-                    {Math.round(candidate.confidence * 100)}%
+                    {candidate.manuallyAdded
+                      ? '手動で追加した候補'
+                      : `OCR参考値 ${Math.round(candidate.confidence * 100)}%`}
                   </Text>
 
                   <Pressable
@@ -653,6 +685,16 @@ export default function TimetableImportScreen() {
                 </View>
               )
             )}
+
+            <Pressable
+              style={styles.addCandidateButton}
+              disabled={saving}
+              onPress={addCandidate}
+            >
+              <Text style={styles.addCandidateText}>
+                候補を追加
+              </Text>
+            </Pressable>
 
             <Text style={styles.notSavedText}>
               「確認して保存」を押すまで時間割は変更されません。
@@ -979,6 +1021,21 @@ const styles = StyleSheet.create({
   removeCandidateText: {
     color: '#a13333',
     fontSize: 12,
+  },
+
+  addCandidateButton: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#31518f',
+    borderRadius: 9,
+    paddingVertical: 12,
+    marginTop: 2,
+  },
+
+  addCandidateText: {
+    color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 
   notSavedText: {

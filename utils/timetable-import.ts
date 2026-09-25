@@ -1,7 +1,13 @@
 import { Timetable } from '@/utils/classification';
-import { PeriodNumber } from '@/utils/period-times';
+import {
+  PeriodNumber,
+  periodNumbers,
+} from '@/utils/period-times';
 import { PhotoRecord } from '@/types/photo';
-import { TimetableDay } from '@/utils/timetable-recognition';
+import {
+  timetableDays,
+  TimetableDay,
+} from '@/utils/timetable-recognition';
 
 
 export type TimetableImportCandidate = {
@@ -13,6 +19,27 @@ export type TimetableImportCandidate = {
 type PhotoImportResult = {
   photos: PhotoRecord[];
   updatedCount: number;
+};
+
+
+export const findFirstAvailableTimetableSlot = (
+  candidates: TimetableImportCandidate[]
+) => {
+  const usedSlots = new Set(
+    candidates.map(
+      (candidate) => `${candidate.day}-${candidate.period}`
+    )
+  );
+
+  for (const day of timetableDays) {
+    for (const period of periodNumbers) {
+      if (!usedSlots.has(`${day}-${period}`)) {
+        return { day, period };
+      }
+    }
+  }
+
+  return null;
 };
 
 

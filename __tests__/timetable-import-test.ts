@@ -1,4 +1,5 @@
 import {
+  findFirstAvailableTimetableSlot,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
   reclassifyPhotosForTimetableImport,
@@ -14,6 +15,21 @@ const candidates: TimetableImportCandidate[] = [
     subject: '  高分子化学  ',
   },
 ];
+
+
+describe('findFirstAvailableTimetableSlot', () => {
+  test('未使用の最初の曜日・時限を返す', () => {
+    expect(
+      findFirstAvailableTimetableSlot([
+        {
+          day: '月',
+          period: 1,
+          subject: '有機化学',
+        },
+      ])
+    ).toEqual({ day: '月', period: 2 });
+  });
+});
 
 
 const createPhoto = (
