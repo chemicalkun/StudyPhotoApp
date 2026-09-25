@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +22,10 @@ import {
   saveTimetableDisplayOptions,
   type TimetableDisplayOptions,
 } from '@/utils/timetable-display-options';
+import { parsePhotoRecords } from '@/types/photo';
+import { parseTimetable } from '@/utils/classification';
+import { loadPeriodTimes } from '@/utils/period-times';
+import { reclassifyPhotosForSchedule } from '@/utils/photo-reclassification';
 
 
 export default function TimetableDisplaySettingsScreen() {
@@ -31,6 +36,10 @@ export default function TimetableDisplaySettingsScreen() {
     ? '時間割'
     : '設定';
   const [options, setOptions] =
+    useState<TimetableDisplayOptions>(
+      defaultTimetableDisplayOptions
+    );
+  const [savedOptions, setSavedOptions] =
     useState<TimetableDisplayOptions>(
       defaultTimetableDisplayOptions
     );
@@ -48,6 +57,7 @@ export default function TimetableDisplaySettingsScreen() {
 
         if (active) {
           setOptions(savedOptions);
+          setSavedOptions(savedOptions);
         }
       } catch (error) {
         console.log('時間割の表示範囲読み込みエラー:', error);
@@ -78,12 +88,84 @@ export default function TimetableDisplaySettingsScreen() {
       return;
     }
 
+    let originalPhotos: string | null = null;
+    let photosWereUpdated = false;
+
     try {
       setSaving(true);
+      const enabledAdditionalSlots =
+        (!savedOptions.showSaturday && options.showSaturday) ||
+        (!savedOptions.showSixthPeriod &&
+          options.showSixthPeriod);
+      let updatedPhotoCount = 0;
+
+      if (enabledAdditionalSlots) {
+        const [
+          savedPhotos,
+          savedTimetable,
+          periodTimes,
+        ] = await Promise.all([
+          AsyncStorage.getItem('photos'),
+          AsyncStorage.getItem('timetable'),
+          loadPeriodTimes(),
+        ]);
+
+        originalPhotos = savedPhotos;
+
+        if (savedPhotos !== null) {
+          const result = reclassifyPhotosForSchedule(
+            parsePhotoRecords(savedPhotos),
+            parseTimetable(savedTimetable) ?? {},
+            periodTimes,
+            options
+          );
+
+          updatedPhotoCount = result.updatedCount;
+
+          if (updatedPhotoCount > 0) {
+            await AsyncStorage.setItem(
+              'photos',
+              JSON.stringify(result.photos)
+            );
+            photosWereUpdated = true;
+          }
+        }
+      }
+
       await saveTimetableDisplayOptions(options);
-      router.back();
+      setSavedOptions(options);
+
+      if (updatedPhotoCount > 0) {
+        Alert.alert(
+          '表示設定を保存しました',
+          `既存の写真${updatedPhotoCount}枚を新しい表示範囲に合わせて再分類しました。`,
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      } else {
+        router.back();
+      }
     } catch (error) {
       console.log('時間割の表示範囲保存エラー:', error);
+
+      if (photosWereUpdated && originalPhotos !== null) {
+        try {
+          await AsyncStorage.setItem(
+            'photos',
+            originalPhotos
+          );
+        } catch (rollbackError) {
+          console.log(
+            '表示設定による写真再分類の復元エラー:',
+            rollbackError
+          );
+        }
+      }
+
       Alert.alert(
         '設定を保存できませんでした',
         'もう一度お試しください。'
