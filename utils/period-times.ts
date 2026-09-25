@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-export const periodNumbers = [1, 2, 3, 4, 5] as const;
+export const periodNumbers = [1, 2, 3, 4, 5, 6] as const;
 
 export type PeriodNumber =
   (typeof periodNumbers)[number];
@@ -23,6 +23,7 @@ export const defaultPeriodTimes: PeriodTimes = {
   3: { start: '13:00', end: '14:30' },
   4: { start: '14:40', end: '16:10' },
   5: { start: '16:20', end: '17:50' },
+  6: { start: '18:00', end: '19:30' },
 };
 
 
@@ -118,12 +119,22 @@ export const loadPeriodTimes = async () => {
 
   const parsedPeriodTimes: unknown =
     JSON.parse(savedPeriodTimes);
+  const migratedPeriodTimes =
+    typeof parsedPeriodTimes === 'object' &&
+    parsedPeriodTimes !== null &&
+    !Array.isArray(parsedPeriodTimes) &&
+    !('6' in parsedPeriodTimes)
+      ? {
+          ...parsedPeriodTimes,
+          6: defaultPeriodTimes[6],
+        }
+      : parsedPeriodTimes;
 
-  if (!isPeriodTimes(parsedPeriodTimes)) {
+  if (!isPeriodTimes(migratedPeriodTimes)) {
     throw new Error('時限設定の形式が不正です');
   }
 
-  return parsedPeriodTimes;
+  return migratedPeriodTimes;
 };
 
 

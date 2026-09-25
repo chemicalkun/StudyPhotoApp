@@ -1,9 +1,17 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import {
   defaultPeriodTimes,
   findPeriod,
   getPeriodTimesValidationError,
+  loadPeriodTimes,
   PeriodTimes,
 } from '@/utils/period-times';
+
+
+beforeEach(async () => {
+  await AsyncStorage.clear();
+});
 
 
 describe('findPeriod', () => {
@@ -14,7 +22,10 @@ describe('findPeriod', () => {
     [10, 31, null],
     [10, 40, 2],
     [17, 50, 5],
-    [17, 51, null],
+    [17, 59, null],
+    [18, 0, 6],
+    [19, 30, 6],
+    [19, 31, null],
   ])(
     '%i:%iを正しい時限へ変換する',
     (hour, minute, expectedPeriod) => {
@@ -32,6 +43,23 @@ describe('findPeriod', () => {
 
     expect(findPeriod(8, 50, customPeriodTimes)).toBe(1);
     expect(findPeriod(8, 49, customPeriodTimes)).toBeNull();
+  });
+
+  test('旧い5限までの設定に6限を補う', async () => {
+    await AsyncStorage.setItem(
+      'periodTimes',
+      JSON.stringify({
+        1: defaultPeriodTimes[1],
+        2: defaultPeriodTimes[2],
+        3: defaultPeriodTimes[3],
+        4: defaultPeriodTimes[4],
+        5: defaultPeriodTimes[5],
+      })
+    );
+
+    await expect(loadPeriodTimes()).resolves.toEqual(
+      defaultPeriodTimes
+    );
   });
 });
 
