@@ -81,9 +81,17 @@ describe('StudyPhoto backup', () => {
       'photos',
       '[{"id":"current-photo"}]'
     );
+    await AsyncStorage.setItem(
+      'photoOcrRecords',
+      '{"current":{"text":"現在のOCR"}}'
+    );
     const backup = createStudyPhotoBackup([
       ['timetable', '{"月-1":"高分子化学"}'],
       ['photos', '[{"id":"old-photo"}]'],
+      [
+        'photoOcrRecords',
+        '{"backup":{"text":"過去のOCR"}}',
+      ],
       ['lectureSummaryRecords', '{}'],
     ]);
 
@@ -95,6 +103,9 @@ describe('StudyPhoto backup', () => {
     expect(await AsyncStorage.getItem('photos')).toBe(
       '[{"id":"current-photo"}]'
     );
+    expect(
+      await AsyncStorage.getItem('photoOcrRecords')
+    ).toBe('{"current":{"text":"現在のOCR"}}');
   });
 
   test('学期別学習データを復元し写真情報は現在の値を保つ', async () => {

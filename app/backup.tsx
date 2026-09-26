@@ -72,7 +72,7 @@ export default function BackupScreen() {
 
       await restoreBackup(savedBackup);
       setStatusMessage(
-        '設定と学習データを復元しました。現在の写真は変更していません。'
+        '設定と学習データを復元しました。現在の写真情報と写真OCRは変更していません。'
       );
     } catch (error) {
       console.log('バックアップ復元エラー:', error);
@@ -113,7 +113,7 @@ export default function BackupScreen() {
 
       Alert.alert(
         'バックアップを復元しますか？',
-        `${exportedAt}に作成されたバックアップです。現在の時間割と学習データは上書きされます。写真画像と写真情報は変更しません。`,
+        `${exportedAt}に作成されたバックアップです。現在の時間割と学習データは上書きされます。写真画像・写真情報・写真OCRは変更しません。`,
         [
           { text: 'キャンセル', style: 'cancel' },
           {
@@ -156,16 +156,22 @@ export default function BackupScreen() {
         </Text>
 
         <View style={styles.includedCard}>
-          <Text style={styles.cardTitle}>保存されるデータ</Text>
+          <Text style={styles.cardTitle}>
+            ファイルに記録されるデータ
+          </Text>
           <Text style={styles.cardText}>
-            学年・学期・時間割・時限設定・写真情報・文字認識結果・授業まとめ・試験対策・練習問題・フラッシュカード・質問履歴
+            学年・学期・時間割・時限設定・授業まとめ・試験対策・練習問題・フラッシュカード・質問履歴
+            {'\n\n'}
+            写真情報と写真OCRも、参照用としてファイルに記録されます。
           </Text>
         </View>
 
         <View style={styles.warningCard}>
-          <Text style={styles.warningTitle}>現在の制限</Text>
+          <Text style={styles.warningTitle}>
+            写真の取り扱い
+          </Text>
           <Text style={styles.warningText}>
-            写真画像そのものは、このバックアップファイルに含まれません。復元しても現在の写真は変更されません。
+            写真画像そのものはファイルに含まれません。復元時は、この端末にある現在の写真情報と写真OCRを保護し、バックアップ内のデータで上書きしません。
           </Text>
         </View>
 
@@ -198,7 +204,7 @@ export default function BackupScreen() {
         </Text>
 
         <Text style={styles.restoreDescription}>
-          保存したJSONファイルから、時間割と学習データを復元します。現在の写真と写真OCRは変更しません。
+          保存したJSONファイルから、時間割と学習データを復元します。現在の写真画像・写真情報・写真OCRは変更しません。
         </Text>
 
         <Pressable
