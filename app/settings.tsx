@@ -15,7 +15,10 @@ import {
   useFocusEffect,
 } from 'expo-router';
 
-import { loadAcademicTerm } from '@/services/academic-term-storage';
+import {
+  loadAcademicTerm,
+  loadAvailableAcademicTerms,
+} from '@/services/academic-term-storage';
 import { formatAcademicTerm } from '@/types/academic-term';
 import { parseLectureSummaryRecords } from '@/types/lecture-summary';
 import { parsePhotoRecords } from '@/types/photo';
@@ -114,10 +117,14 @@ export default function SettingsScreen() {
 
       const refreshBackupOverview = async () => {
         try {
-          const entries = await AsyncStorage.multiGet([
-            'photos',
-            'lectureSummaryRecords',
-          ]);
+          const [entries, availableAcademicTerms] =
+            await Promise.all([
+              AsyncStorage.multiGet([
+                'photos',
+                'lectureSummaryRecords',
+              ]),
+              loadAvailableAcademicTerms(),
+            ]);
           const savedValues = Object.fromEntries(entries);
           const photoCount = savedValues.photos === null
             ? 0
@@ -133,7 +140,7 @@ export default function SettingsScreen() {
 
           if (active) {
             setBackupDescription(
-              `現在の学期：写真${photoCount}枚・授業まとめ${summaryCount}件`
+              `保存済み${availableAcademicTerms.length}学期・現在：写真${photoCount}枚・授業まとめ${summaryCount}件`
             );
           }
         } catch (error) {
