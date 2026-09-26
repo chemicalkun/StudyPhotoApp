@@ -16,6 +16,7 @@ import {
 
 import { loadAcademicTerm } from '@/services/academic-term-storage';
 import { formatAcademicTerm } from '@/types/academic-term';
+import { loadPeriodTimes } from '@/utils/period-times';
 import { loadTimetableDisplayOptions } from '@/utils/timetable-display-options';
 
 
@@ -59,6 +60,8 @@ export default function SettingsScreen() {
     useState('現在の学年・学期を読み込み中...');
   const [displayOptionsDescription, setDisplayOptionsDescription] =
     useState('現在の表示範囲を読み込み中...');
+  const [periodTimesDescription, setPeriodTimesDescription] =
+    useState('現在の時限設定を読み込み中...');
 
 
   useFocusEffect(
@@ -89,6 +92,42 @@ export default function SettingsScreen() {
       };
 
       void refreshAcademicTerm();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const refreshPeriodTimes = async () => {
+        try {
+          const periodTimes = await loadPeriodTimes();
+
+          if (active) {
+            setPeriodTimesDescription(
+              `1限：${periodTimes[1].start}〜${periodTimes[1].end}・各時限の時刻を変更`
+            );
+          }
+        } catch (error) {
+          console.log(
+            '設定画面の時限設定読み込みエラー:',
+            error
+          );
+
+          if (active) {
+            setPeriodTimesDescription(
+              '現在の時限設定を確認できません'
+            );
+          }
+        }
+      };
+
+      void refreshPeriodTimes();
 
       return () => {
         active = false;
@@ -190,7 +229,7 @@ export default function SettingsScreen() {
           <View style={styles.divider} />
           <SettingsLink
             title="時限設定"
-            description="各時限の開始・終了時刻を変更"
+            description={periodTimesDescription}
             onPress={() => router.push({
               pathname: '/period-settings',
               params: { from: 'settings' },
