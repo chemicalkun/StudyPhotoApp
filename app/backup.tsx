@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,7 @@ import {
 
 import {
   createBackupFile,
+  loadLastBackupExportedAt,
   restoreBackup,
   saveLastBackupExportedAt,
 } from '@/services/backup-storage';
@@ -39,6 +40,39 @@ export default function BackupScreen() {
   const [statusMessage, setStatusMessage] = useState('');
   const [restoreCompleted, setRestoreCompleted] =
     useState(false);
+  const [lastBackupExportedAt, setLastBackupExportedAt] =
+    useState<string | null | undefined>(undefined);
+
+
+  useEffect(() => {
+    let active = true;
+
+    const loadLastExportedAt = async () => {
+      try {
+        const savedExportedAt =
+          await loadLastBackupExportedAt();
+
+        if (active) {
+          setLastBackupExportedAt(savedExportedAt);
+        }
+      } catch (error) {
+        console.log(
+          '最終バックアップ日時読み込みエラー:',
+          error
+        );
+
+        if (active) {
+          setLastBackupExportedAt(null);
+        }
+      }
+    };
+
+    void loadLastExportedAt();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
 
   const exportBackup = async () => {
@@ -59,7 +93,10 @@ export default function BackupScreen() {
       });
 
       if (result.action === Share.sharedAction) {
-        await saveLastBackupExportedAt();
+        const exportedAt = new Date().toISOString();
+
+        await saveLastBackupExportedAt(exportedAt);
+        setLastBackupExportedAt(exportedAt);
         setStatusMessage(
           'バックアップファイルを書き出しました。'
         );
@@ -192,6 +229,21 @@ export default function BackupScreen() {
           StudyPhotoの設定と学習データを、1つのJSONファイルとして書き出します。
         </Text>
 
+        <View style={styles.lastBackupCard}>
+          <Text style={styles.lastBackupLabel}>
+            前回の書き出し
+          </Text>
+          <Text style={styles.lastBackupValue}>
+            {lastBackupExportedAt === undefined
+              ? '確認中...'
+              : lastBackupExportedAt === null
+                ? 'まだありません'
+                : new Date(
+                    lastBackupExportedAt
+                  ).toLocaleString('ja-JP')}
+          </Text>
+        </View>
+
         <View style={styles.includedCard}>
           <Text style={styles.cardTitle}>
             ファイルに記録されるデータ
@@ -299,6 +351,9 @@ const styles = StyleSheet.create({
   contentContainer: { padding: 24, paddingBottom: 48 },
   title: { color: '#111', fontSize: 30, fontWeight: 'bold', marginTop: 24 },
   description: { color: '#555', fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 20 },
+  lastBackupCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f5f6f8', borderWidth: 1, borderColor: '#d9dde5', borderRadius: 12, padding: 14, marginBottom: 14 },
+  lastBackupLabel: { color: '#444', fontSize: 13, fontWeight: 'bold' },
+  lastBackupValue: { color: '#555', fontSize: 13, marginLeft: 12 },
   includedCard: { backgroundColor: '#eef8f2', borderWidth: 1, borderColor: '#9bc9aa', borderRadius: 12, padding: 16 },
   cardTitle: { color: '#28794c', fontSize: 16, fontWeight: 'bold' },
   cardText: { color: '#333', fontSize: 14, lineHeight: 22, marginTop: 8 },
