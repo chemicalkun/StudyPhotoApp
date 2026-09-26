@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  useNavigation,
+  usePreventRemove,
+} from '@react-navigation/native';
+import {
   ActivityIndicator,
   Alert,
   Linking,
@@ -62,6 +66,7 @@ type EditableTimetableCandidate = TimetableCandidate & {
 
 
 export default function TimetableImportScreen() {
+  const navigation = useNavigation();
   const [selectedImage, setSelectedImage] =
     useState<SelectedTimetableImage | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -71,6 +76,8 @@ export default function TimetableImportScreen() {
     useState<RecognizedTextBlock[]>([]);
   const [candidateDrafts, setCandidateDrafts] =
     useState<EditableTimetableCandidate[]>([]);
+  const [candidatesSaved, setCandidatesSaved] =
+    useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [settingsRequired, setSettingsRequired] =
     useState(false);
@@ -95,6 +102,30 @@ export default function TimetableImportScreen() {
       candidateDrafts
     ),
     [candidateDrafts]
+  );
+
+
+  usePreventRemove(
+    candidateDrafts.length > 0 && !candidatesSaved,
+    ({ data }) => {
+      Alert.alert(
+        '編集内容を破棄しますか？',
+        '時間割候補はまだ保存されていません。',
+        [
+          {
+            text: '編集を続ける',
+            style: 'cancel',
+          },
+          {
+            text: '破棄して戻る',
+            style: 'destructive',
+            onPress: () => {
+              navigation.dispatch(data.action);
+            },
+          },
+        ]
+      );
+    }
   );
 
 
@@ -169,6 +200,7 @@ export default function TimetableImportScreen() {
       });
       setRecognizedTextBlocks([]);
       setCandidateDrafts([]);
+      setCandidatesSaved(false);
     } catch (error) {
       console.log('時間割画像選択エラー:', error);
 
@@ -196,6 +228,7 @@ export default function TimetableImportScreen() {
     setRecognizing(true);
     setRecognizedTextBlocks([]);
     setCandidateDrafts([]);
+    setCandidatesSaved(false);
     setErrorMessage('');
 
     try {
@@ -235,6 +268,7 @@ export default function TimetableImportScreen() {
     index: number,
     updates: Partial<TimetableCandidate>
   ) => {
+    setCandidatesSaved(false);
     setCandidateDrafts((currentCandidates) =>
       currentCandidates.map((candidate, candidateIndex) =>
         candidateIndex === index
@@ -246,6 +280,7 @@ export default function TimetableImportScreen() {
 
 
   const removeCandidate = (index: number) => {
+    setCandidatesSaved(false);
     setCandidateDrafts((currentCandidates) =>
       currentCandidates.filter(
         (_, candidateIndex) => candidateIndex !== index
@@ -269,6 +304,7 @@ export default function TimetableImportScreen() {
       return;
     }
 
+    setCandidatesSaved(false);
     setCandidateDrafts((currentCandidates) => [
       ...currentCandidates,
       {
@@ -353,6 +389,7 @@ export default function TimetableImportScreen() {
         JSON.stringify(newTimetable)
       );
 
+      setCandidatesSaved(true);
       setCandidateDrafts(
         candidates.map((candidate) => ({
           ...candidate,
@@ -483,6 +520,7 @@ export default function TimetableImportScreen() {
         options={{
           title: '時間割画像から登録',
           headerBackTitle: '時間割',
+          headerBackButtonMenuEnabled: false,
         }}
       />
 
