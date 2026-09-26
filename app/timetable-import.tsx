@@ -64,6 +64,7 @@ type SelectedTimetableImage = {
 
 type EditableTimetableCandidate = TimetableCandidate & {
   manuallyAdded?: boolean;
+  reviewed?: boolean;
 };
 
 
@@ -129,6 +130,7 @@ export default function TimetableImportScreen() {
     () => candidateDrafts.filter(
       (candidate) =>
         !candidate.manuallyAdded &&
+        !candidate.reviewed &&
         candidate.confidence < lowConfidenceThreshold
     ).length,
     [candidateDrafts]
@@ -365,7 +367,18 @@ export default function TimetableImportScreen() {
     setCandidateDrafts((currentCandidates) =>
       currentCandidates.map((candidate, candidateIndex) =>
         candidateIndex === index
-          ? { ...candidate, ...updates }
+          ? { ...candidate, ...updates, reviewed: true }
+          : candidate
+      )
+    );
+  };
+
+
+  const markCandidateReviewed = (index: number) => {
+    setCandidateDrafts((currentCandidates) =>
+      currentCandidates.map((candidate, candidateIndex) =>
+        candidateIndex === index
+          ? { ...candidate, reviewed: true }
           : candidate
       )
     );
@@ -864,6 +877,7 @@ export default function TimetableImportScreen() {
                 candidate.subject.trim() === '';
               const needsReview =
                 !candidate.manuallyAdded &&
+                !candidate.reviewed &&
                 candidate.confidence < lowConfidenceThreshold;
 
               return (
@@ -966,9 +980,22 @@ export default function TimetableImportScreen() {
                   </Text>
 
                   {needsReview ? (
-                    <Text style={styles.lowConfidenceCandidateText}>
-                      要確認：認識結果が時間割と合っているか確認してください
-                    </Text>
+                    <>
+                      <Text style={styles.lowConfidenceCandidateText}>
+                        要確認：認識結果が時間割と合っているか確認してください
+                      </Text>
+
+                      <Pressable
+                        style={styles.markReviewedButton}
+                        accessibilityRole="button"
+                        disabled={saving}
+                        onPress={() => markCandidateReviewed(index)}
+                      >
+                        <Text style={styles.markReviewedText}>
+                          内容を確認しました
+                        </Text>
+                      </Pressable>
+                    </>
                   ) : null}
 
                   {duplicateCandidateSlots.has(
@@ -1377,6 +1404,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     lineHeight: 18,
     marginTop: 7,
+  },
+
+  markReviewedButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#a77a1c',
+    borderRadius: 7,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+
+  markReviewedText: {
+    color: '#76530d',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   duplicateCandidateRow: {
