@@ -1,6 +1,7 @@
 import {
   findFirstAvailableTimetableSlot,
   getDuplicateTimetableSlots,
+  getFirstInvalidTimetableCandidateIndex,
   getTimetableCandidateOverwrites,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
@@ -76,6 +77,37 @@ describe('getDuplicateTimetableSlots', () => {
         { day: '火', period: 2, subject: '化学' },
       ])
     ).toEqual(['月-1']);
+  });
+});
+
+
+describe('getFirstInvalidTimetableCandidateIndex', () => {
+  test('空欄の授業名を最優先で返す', () => {
+    expect(
+      getFirstInvalidTimetableCandidateIndex([
+        { day: '月', period: 1, subject: '英語' },
+        { day: '火', period: 2, subject: ' ' },
+        { day: '月', period: 1, subject: '数学' },
+      ])
+    ).toBe(1);
+  });
+
+  test('重複した最初の候補を返す', () => {
+    expect(
+      getFirstInvalidTimetableCandidateIndex([
+        { day: '月', period: 1, subject: '英語' },
+        { day: '火', period: 2, subject: '化学' },
+        { day: '月', period: 1, subject: '数学' },
+      ])
+    ).toBe(0);
+  });
+
+  test('問題がなければ-1を返す', () => {
+    expect(
+      getFirstInvalidTimetableCandidateIndex([
+        { day: '月', period: 1, subject: '英語' },
+      ])
+    ).toBe(-1);
   });
 });
 

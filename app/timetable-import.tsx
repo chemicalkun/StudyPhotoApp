@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useNavigation,
@@ -24,6 +24,7 @@ import { parseTimetable } from '@/utils/classification';
 import {
   findFirstAvailableTimetableSlot,
   getDuplicateTimetableSlots,
+  getFirstInvalidTimetableCandidateIndex,
   getTimetableCandidateOverwrites,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
@@ -67,6 +68,9 @@ type EditableTimetableCandidate = TimetableCandidate & {
 
 export default function TimetableImportScreen() {
   const navigation = useNavigation();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const candidateContainerY = useRef(0);
+  const candidateRowYs = useRef<Record<number, number>>({});
   const [selectedImage, setSelectedImage] =
     useState<SelectedTimetableImage | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -99,6 +103,12 @@ export default function TimetableImportScreen() {
   );
   const candidateValidationError = useMemo(
     () => getTimetableImportValidationError(
+      candidateDrafts
+    ),
+    [candidateDrafts]
+  );
+  const firstInvalidCandidateIndex = useMemo(
+    () => getFirstInvalidTimetableCandidateIndex(
       candidateDrafts
     ),
     [candidateDrafts]
@@ -511,8 +521,27 @@ export default function TimetableImportScreen() {
   };
 
 
+  const scrollToFirstInvalidCandidate = () => {
+    if (firstInvalidCandidateIndex < 0) {
+      return;
+    }
+
+    const candidateRowY =
+      candidateRowYs.current[firstInvalidCandidateIndex] ?? 0;
+
+    scrollViewRef.current?.scrollTo({
+      y: Math.max(
+        candidateContainerY.current + candidateRowY - 16,
+        0
+      ),
+      animated: true,
+    });
+  };
+
+
   return (
     <ScrollView
+      ref={scrollViewRef}
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
     >
@@ -641,7 +670,13 @@ export default function TimetableImportScreen() {
 
       {recognizedTextBlocks.length > 0 ? (
         <>
-          <View style={styles.candidateContainer}>
+          <View
+            style={styles.candidateContainer}
+            onLayout={({ nativeEvent }) => {
+              candidateContainerY.current =
+                nativeEvent.layout.y;
+            }}
+          >
             <Text style={styles.resultTitle}>
               時間割候補（
               {candidateDrafts.length}件）
@@ -686,6 +721,10 @@ export default function TimetableImportScreen() {
                     subjectIsEmpty && styles.emptyCandidateRow,
                   ]}
                   key={`${candidate.day}-${candidate.period}-${index}`}
+                  onLayout={({ nativeEvent }) => {
+                    candidateRowYs.current[index] =
+                      nativeEvent.layout.y;
+                  }}
                 >
                   <Text style={styles.candidateLabel}>
                     曜日
@@ -813,9 +852,19 @@ export default function TimetableImportScreen() {
             {candidateDrafts.length > 0 ? (
               <>
                 {candidateValidationError !== null ? (
-                  <Text style={styles.validationErrorText}>
-                    {candidateValidationError}
-                  </Text>
+                  <Pressable
+                    style={styles.validationNavigationButton}
+                    accessibilityRole="button"
+                    onPress={scrollToFirstInvalidCandidate}
+                  >
+                    <Text style={styles.validationErrorText}>
+                      {candidateValidationError}
+                    </Text>
+
+                    <Text style={styles.validationNavigationText}>
+                      最初の修正箇所を見る
+                    </Text>
+                  </Pressable>
                 ) : null}
 
                 <Pressable
@@ -1204,7 +1253,22 @@ const styles = StyleSheet.create({
     color: '#a13333',
     fontSize: 12,
     lineHeight: 18,
+  },
+
+  validationNavigationButton: {
+    backgroundColor: '#fff0f0',
+    borderWidth: 1,
+    borderColor: '#d98282',
+    borderRadius: 8,
+    padding: 10,
     marginTop: 10,
+  },
+
+  validationNavigationText: {
+    color: '#8a2020',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginTop: 5,
   },
 
   saveCandidatesButton: {

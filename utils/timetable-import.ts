@@ -96,6 +96,29 @@ export const getDuplicateTimetableSlots = (
 };
 
 
+export const getFirstInvalidTimetableCandidateIndex = (
+  candidates: TimetableImportCandidate[]
+) => {
+  const emptySubjectIndex = candidates.findIndex(
+    (candidate) => candidate.subject.trim() === ''
+  );
+
+  if (emptySubjectIndex >= 0) {
+    return emptySubjectIndex;
+  }
+
+  const duplicateSlots = new Set(
+    getDuplicateTimetableSlots(candidates)
+  );
+
+  return candidates.findIndex((candidate) =>
+    duplicateSlots.has(
+      `${candidate.day}-${candidate.period}`
+    )
+  );
+};
+
+
 export const getTimetableCandidateOverwrites = (
   timetable: Timetable,
   candidates: TimetableImportCandidate[]
