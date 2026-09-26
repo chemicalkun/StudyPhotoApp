@@ -67,6 +67,9 @@ type EditableTimetableCandidate = TimetableCandidate & {
 };
 
 
+const lowConfidenceThreshold = 0.6;
+
+
 export default function TimetableImportScreen() {
   const navigation = useNavigation();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -122,6 +125,14 @@ export default function TimetableImportScreen() {
       (candidate, index) => candidate === candidateDrafts[index]
     ),
   [candidateDrafts]);
+  const lowConfidenceCandidateCount = useMemo(
+    () => candidateDrafts.filter(
+      (candidate) =>
+        !candidate.manuallyAdded &&
+        candidate.confidence < lowConfidenceThreshold
+    ).length,
+    [candidateDrafts]
+  );
 
 
   usePreventRemove(
@@ -811,6 +822,15 @@ export default function TimetableImportScreen() {
               OCR参考値は文字認識の確実さの目安です。数値が低くても、表示内容が正しければ問題ありません。
             </Text>
 
+            {lowConfidenceCandidateCount > 0 ? (
+              <View style={styles.reviewNoticeBox}>
+                <Text style={styles.reviewNoticeText}>
+                  要確認の候補が
+                  {lowConfidenceCandidateCount}件あります。内容が正しければそのまま保存できます。
+                </Text>
+              </View>
+            ) : null}
+
             {candidateDrafts.length > 1 ? (
               <Pressable
                 style={[
@@ -842,11 +862,16 @@ export default function TimetableImportScreen() {
                 `${candidate.day}-${candidate.period}`;
               const subjectIsEmpty =
                 candidate.subject.trim() === '';
+              const needsReview =
+                !candidate.manuallyAdded &&
+                candidate.confidence < lowConfidenceThreshold;
 
               return (
                 <View
                   style={[
                     styles.candidateRow,
+                    needsReview &&
+                      styles.lowConfidenceCandidateRow,
                     duplicateCandidateSlots.has(
                       candidateKey
                     ) && styles.duplicateCandidateRow,
@@ -939,6 +964,12 @@ export default function TimetableImportScreen() {
                       ? '手動で追加した候補'
                       : `OCR参考値 ${Math.round(candidate.confidence * 100)}%`}
                   </Text>
+
+                  {needsReview ? (
+                    <Text style={styles.lowConfidenceCandidateText}>
+                      要確認：認識結果が時間割と合っているか確認してください
+                    </Text>
+                  ) : null}
 
                   {duplicateCandidateSlots.has(
                     candidateKey
@@ -1278,6 +1309,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
+  reviewNoticeBox: {
+    backgroundColor: '#fff8e6',
+    borderWidth: 1,
+    borderColor: '#d4a846',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+
+  reviewNoticeText: {
+    color: '#76530d',
+    fontSize: 13,
+    fontWeight: 'bold',
+    lineHeight: 19,
+  },
+
   sortCandidatesButton: {
     alignItems: 'center',
     borderWidth: 1,
@@ -1313,6 +1360,23 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#c9dfd0',
     paddingVertical: 11,
+  },
+
+  lowConfidenceCandidateRow: {
+    backgroundColor: '#fffdf2',
+    borderColor: '#dfc46a',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginTop: 8,
+  },
+
+  lowConfidenceCandidateText: {
+    color: '#76530d',
+    fontSize: 12,
+    fontWeight: 'bold',
+    lineHeight: 18,
+    marginTop: 7,
   },
 
   duplicateCandidateRow: {
