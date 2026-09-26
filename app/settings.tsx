@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -7,7 +8,14 @@ import {
 } from 'react-native';
 
 import Constants from 'expo-constants';
-import { router, Stack } from 'expo-router';
+import {
+  router,
+  Stack,
+  useFocusEffect,
+} from 'expo-router';
+
+import { loadAcademicTerm } from '@/services/academic-term-storage';
+import { formatAcademicTerm } from '@/types/academic-term';
 
 
 type SettingsLinkProps = {
@@ -46,6 +54,44 @@ function SettingsLink({
 
 export default function SettingsScreen() {
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const [academicTermDescription, setAcademicTermDescription] =
+    useState('現在の学年・学期を読み込み中...');
+
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const refreshAcademicTerm = async () => {
+        try {
+          const academicTerm = await loadAcademicTerm();
+
+          if (active) {
+            setAcademicTermDescription(
+              `現在：${formatAcademicTerm(academicTerm)}`
+            );
+          }
+        } catch (error) {
+          console.log(
+            '設定画面の学年・学期読み込みエラー:',
+            error
+          );
+
+          if (active) {
+            setAcademicTermDescription(
+              '現在の学年・学期を確認できません'
+            );
+          }
+        }
+      };
+
+      void refreshAcademicTerm();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
 
   return (
     <View style={styles.container}>
@@ -75,7 +121,7 @@ export default function SettingsScreen() {
         <View style={styles.sectionCard}>
           <SettingsLink
             title="学年・学期"
-            description="現在の時間割の年度と学期を設定"
+            description={academicTermDescription}
             onPress={() => router.push({
               pathname: '/academic-term',
               params: { from: 'settings' },
