@@ -16,6 +16,7 @@ import {
 
 import { loadAcademicTerm } from '@/services/academic-term-storage';
 import { formatAcademicTerm } from '@/types/academic-term';
+import { loadTimetableDisplayOptions } from '@/utils/timetable-display-options';
 
 
 type SettingsLinkProps = {
@@ -56,6 +57,8 @@ export default function SettingsScreen() {
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
   const [academicTermDescription, setAcademicTermDescription] =
     useState('現在の学年・学期を読み込み中...');
+  const [displayOptionsDescription, setDisplayOptionsDescription] =
+    useState('現在の表示範囲を読み込み中...');
 
 
   useFocusEffect(
@@ -86,6 +89,48 @@ export default function SettingsScreen() {
       };
 
       void refreshAcademicTerm();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const refreshDisplayOptions = async () => {
+        try {
+          const displayOptions =
+            await loadTimetableDisplayOptions();
+
+          if (active) {
+            setDisplayOptionsDescription([
+              displayOptions.showSaturday
+                ? '土曜日：表示'
+                : '土曜日：非表示',
+              displayOptions.showSixthPeriod
+                ? '6限：表示'
+                : '6限：非表示',
+            ].join('・'));
+          }
+        } catch (error) {
+          console.log(
+            '設定画面の表示範囲読み込みエラー:',
+            error
+          );
+
+          if (active) {
+            setDisplayOptionsDescription(
+              '現在の表示範囲を確認できません'
+            );
+          }
+        }
+      };
+
+      void refreshDisplayOptions();
 
       return () => {
         active = false;
@@ -139,7 +184,7 @@ export default function SettingsScreen() {
           <View style={styles.divider} />
           <SettingsLink
             title="表示する曜日・時限"
-            description="土曜日と6限の表示を変更"
+            description={displayOptionsDescription}
             onPress={() => router.push('/timetable-display-settings')}
           />
           <View style={styles.divider} />
