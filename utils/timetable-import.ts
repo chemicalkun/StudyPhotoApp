@@ -23,6 +23,12 @@ export type TimetableCandidateOverwrite = {
   nextSubject: string;
 };
 
+export type TimetableCandidateChangeSummary = {
+  newCount: number;
+  unchangedCount: number;
+  overwrites: TimetableCandidateOverwrite[];
+};
+
 type PhotoImportResult = {
   photos: PhotoRecord[];
   updatedCount: number;
@@ -156,6 +162,38 @@ export const getTimetableCandidateOverwrites = (
         }]
       : [];
   });
+
+
+export const getTimetableCandidateChangeSummary = (
+  timetable: Timetable,
+  candidates: TimetableImportCandidate[]
+): TimetableCandidateChangeSummary => {
+  let newCount = 0;
+  let unchangedCount = 0;
+
+  candidates.forEach((candidate) => {
+    const previousSubject =
+      timetable[
+        `${candidate.day}-${candidate.period}`
+      ]?.trim() ?? '';
+    const nextSubject = candidate.subject.trim();
+
+    if (previousSubject === '') {
+      newCount += 1;
+    } else if (previousSubject === nextSubject) {
+      unchangedCount += 1;
+    }
+  });
+
+  return {
+    newCount,
+    unchangedCount,
+    overwrites: getTimetableCandidateOverwrites(
+      timetable,
+      candidates
+    ),
+  };
+};
 
 
 export const mergeTimetableCandidates = (

@@ -2,6 +2,7 @@ import {
   findFirstAvailableTimetableSlot,
   getDuplicateTimetableSlots,
   getFirstInvalidTimetableCandidateIndex,
+  getTimetableCandidateChangeSummary,
   getTimetableCandidateOverwrites,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
@@ -166,6 +167,36 @@ describe('getTimetableCandidateOverwrites', () => {
         nextSubject: '高分子化学',
       },
     ]);
+  });
+});
+
+
+describe('getTimetableCandidateChangeSummary', () => {
+  test('新規・上書き・変更なしを分ける', () => {
+    expect(
+      getTimetableCandidateChangeSummary(
+        {
+          '月-1': '英語',
+          '月-2': '旧科目名',
+        },
+        [
+          { day: '月', period: 1, subject: '英語' },
+          { day: '月', period: 2, subject: '新科目名' },
+          { day: '火', period: 1, subject: '数学' },
+        ]
+      )
+    ).toEqual({
+      newCount: 1,
+      unchangedCount: 1,
+      overwrites: [
+        {
+          day: '月',
+          period: 2,
+          previousSubject: '旧科目名',
+          nextSubject: '新科目名',
+        },
+      ],
+    });
   });
 });
 

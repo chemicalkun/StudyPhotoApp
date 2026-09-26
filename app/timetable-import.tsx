@@ -25,7 +25,7 @@ import {
   findFirstAvailableTimetableSlot,
   getDuplicateTimetableSlots,
   getFirstInvalidTimetableCandidateIndex,
-  getTimetableCandidateOverwrites,
+  getTimetableCandidateChangeSummary,
   getTimetableImportValidationError,
   mergeTimetableCandidates,
   reclassifyPhotosForTimetableImport,
@@ -499,10 +499,17 @@ export default function TimetableImportScreen() {
         await AsyncStorage.getItem('timetable');
       const currentTimetable =
         parseTimetable(savedTimetable) ?? {};
-      const overwrites = getTimetableCandidateOverwrites(
-        currentTimetable,
-        candidateDrafts
-      );
+      const changeSummary =
+        getTimetableCandidateChangeSummary(
+          currentTimetable,
+          candidateDrafts
+        );
+      const overwrites = changeSummary.overwrites;
+      const countMessage = [
+        `新規登録：${changeSummary.newCount}件`,
+        `上書き：${overwrites.length}件`,
+        `変更なし：${changeSummary.unchangedCount}件`,
+      ].join('\n');
       const overwriteMessage =
         overwrites.length > 0
           ? `\n\n上書きされる授業\n${overwrites
@@ -515,7 +522,7 @@ export default function TimetableImportScreen() {
 
       Alert.alert(
         '時間割を保存しますか？',
-        `${candidateDrafts.length}件の候補を保存します。候補にない登録済み授業はそのまま残ります。${overwriteMessage}`,
+        `${candidateDrafts.length}件の候補を保存します。\n\n${countMessage}\n\n候補にない登録済み授業はそのまま残ります。${overwriteMessage}`,
         [
           {
             text: 'キャンセル',
