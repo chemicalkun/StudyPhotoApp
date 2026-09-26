@@ -364,6 +364,11 @@ export default function TimetableImportScreen() {
         await AsyncStorage.getItem('timetable');
       const currentTimetable =
         parseTimetable(savedTimetable) ?? {};
+      const changeSummary =
+        getTimetableCandidateChangeSummary(
+          currentTimetable,
+          candidates
+        );
       const newTimetable = mergeTimetableCandidates(
         currentTimetable,
         candidates
@@ -429,6 +434,11 @@ export default function TimetableImportScreen() {
         '時間割を保存しました',
         [
           `${candidates.length}件の授業を保存しました。`,
+          [
+            `新規登録 ${changeSummary.newCount}件`,
+            `上書き ${changeSummary.overwrites.length}件`,
+            `変更なし ${changeSummary.unchangedCount}件`,
+          ].join('・'),
           updatedPhotoCount > 0
             ? `既存の写真${updatedPhotoCount}枚を更新しました。`
             : '',
