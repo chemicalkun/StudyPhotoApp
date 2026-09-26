@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fukuyamashouta.studyphoto"
+      "bundleIdentifier": "com.fukuyamashouta.studyphoto",
+      "infoPlist": {
+        "UIDesignRequiresCompatibility": true
+      }
     },
     "android": {
       "adaptiveIcon": {
