@@ -37,7 +37,7 @@ export default function BackupScreen() {
 
 
   const exportBackup = async () => {
-    if (exporting) {
+    if (exporting || restoring) {
       return;
     }
 
@@ -72,6 +72,10 @@ export default function BackupScreen() {
   const restoreSelectedBackup = async (
     savedBackup: string
   ) => {
+    if (exporting || restoring) {
+      return;
+    }
+
     try {
       setRestoring(true);
       setErrorMessage('');
@@ -96,7 +100,7 @@ export default function BackupScreen() {
 
 
   const selectBackupFile = async () => {
-    if (restoring) {
+    if (exporting || restoring) {
       return;
     }
 
@@ -189,9 +193,10 @@ export default function BackupScreen() {
         <Pressable
           style={[
             styles.exportButton,
-            exporting && styles.exportButtonDisabled,
+            (exporting || restoring) &&
+              styles.exportButtonDisabled,
           ]}
-          disabled={exporting}
+          disabled={exporting || restoring}
           onPress={() => void exportBackup()}
         >
           {exporting ? (
@@ -221,9 +226,10 @@ export default function BackupScreen() {
         <Pressable
           style={[
             styles.restoreButton,
-            restoring && styles.exportButtonDisabled,
+            (exporting || restoring) &&
+              styles.exportButtonDisabled,
           ]}
-          disabled={restoring}
+          disabled={exporting || restoring}
           onPress={() => void selectBackupFile()}
         >
           {restoring ? (
