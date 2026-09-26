@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Pressable,
   ScrollView,
@@ -16,6 +17,7 @@ import {
 
 import { loadAcademicTerm } from '@/services/academic-term-storage';
 import { formatAcademicTerm } from '@/types/academic-term';
+import { parseTimetable } from '@/utils/classification';
 import { loadPeriodTimes } from '@/utils/period-times';
 import { loadTimetableDisplayOptions } from '@/utils/timetable-display-options';
 
@@ -62,6 +64,8 @@ export default function SettingsScreen() {
     useState('現在の表示範囲を読み込み中...');
   const [periodTimesDescription, setPeriodTimesDescription] =
     useState('現在の時限設定を読み込み中...');
+  const [timetableDescription, setTimetableDescription] =
+    useState('現在の時間割を読み込み中...');
 
 
   useFocusEffect(
@@ -92,6 +96,50 @@ export default function SettingsScreen() {
       };
 
       void refreshAcademicTerm();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const refreshTimetable = async () => {
+        try {
+          const savedTimetable =
+            await AsyncStorage.getItem('timetable');
+          const timetable =
+            parseTimetable(savedTimetable) ?? {};
+          const registeredClassCount = Object.values(
+            timetable
+          ).filter((subject) => subject.trim() !== '').length;
+
+          if (active) {
+            setTimetableDescription(
+              registeredClassCount > 0
+                ? `${registeredClassCount}コマ登録済み・授業名の登録・変更`
+                : '授業はまだ登録されていません'
+            );
+          }
+        } catch (error) {
+          console.log(
+            '設定画面の時間割読み込みエラー:',
+            error
+          );
+
+          if (active) {
+            setTimetableDescription(
+              '現在の時間割を確認できません'
+            );
+          }
+        }
+      };
+
+      void refreshTimetable();
 
       return () => {
         active = false;
@@ -214,7 +262,7 @@ export default function SettingsScreen() {
           <View style={styles.divider} />
           <SettingsLink
             title="時間割"
-            description="授業名の登録・変更と画像からの読み込み"
+            description={timetableDescription}
             onPress={() => router.push({
               pathname: '/timetable',
               params: { from: 'settings' },
