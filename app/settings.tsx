@@ -19,6 +19,7 @@ import {
   loadAcademicTerm,
   loadAvailableAcademicTerms,
 } from '@/services/academic-term-storage';
+import { loadLastBackupExportedAt } from '@/services/backup-storage';
 import { formatAcademicTerm } from '@/types/academic-term';
 import { parseLectureSummaryRecords } from '@/types/lecture-summary';
 import { parsePhotoRecords } from '@/types/photo';
@@ -117,13 +118,18 @@ export default function SettingsScreen() {
 
       const refreshBackupOverview = async () => {
         try {
-          const [entries, availableAcademicTerms] =
+          const [
+            entries,
+            availableAcademicTerms,
+            lastBackupExportedAt,
+          ] =
             await Promise.all([
               AsyncStorage.multiGet([
                 'photos',
                 'lectureSummaryRecords',
               ]),
               loadAvailableAcademicTerms(),
+              loadLastBackupExportedAt(),
             ]);
           const savedValues = Object.fromEntries(entries);
           const photoCount = savedValues.photos === null
@@ -139,8 +145,15 @@ export default function SettingsScreen() {
                 ).length;
 
           if (active) {
+            const lastBackupDescription =
+              lastBackupExportedAt === null
+                ? '最終書き出し：まだありません'
+                : `最終書き出し：${new Date(
+                    lastBackupExportedAt
+                  ).toLocaleString('ja-JP')}`;
+
             setBackupDescription(
-              `保存済み${availableAcademicTerms.length}学期・現在：写真${photoCount}枚・授業まとめ${summaryCount}件`
+              `保存済み${availableAcademicTerms.length}学期・現在：写真${photoCount}枚・授業まとめ${summaryCount}件\n${lastBackupDescription}`
             );
           }
         } catch (error) {

@@ -29,6 +29,24 @@ import {
 import { parseTimetableDisplayOptions } from '@/utils/timetable-display-options';
 
 
+const lastBackupExportedAtStorageKey =
+  'lastBackupExportedAt';
+
+
+export const loadLastBackupExportedAt = async () =>
+  AsyncStorage.getItem(lastBackupExportedAtStorageKey);
+
+
+export const saveLastBackupExportedAt = async (
+  exportedAt = new Date().toISOString()
+) => {
+  await AsyncStorage.setItem(
+    lastBackupExportedAtStorageKey,
+    exportedAt
+  );
+};
+
+
 const parseJson = (savedValue: string) => {
   const parsedValue: unknown = JSON.parse(savedValue);
 

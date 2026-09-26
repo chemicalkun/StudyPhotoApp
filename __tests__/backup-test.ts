@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { restoreBackup } from '@/services/backup-storage';
+import {
+  loadLastBackupExportedAt,
+  restoreBackup,
+  saveLastBackupExportedAt,
+} from '@/services/backup-storage';
 import {
   backupStorageKeys,
   createStudyPhotoBackup,
@@ -39,6 +43,18 @@ describe('StudyPhoto backup', () => {
       backup.storage.timetableDisplayOptions
     ).toBeNull();
     expect(backup.storage.subjectQuestionRecords).toBeNull();
+  });
+
+  test('最後にバックアップを書き出した日時を保存する', async () => {
+    expect(await loadLastBackupExportedAt()).toBeNull();
+
+    await saveLastBackupExportedAt(
+      '2026-09-26T06:30:00.000Z'
+    );
+
+    expect(await loadLastBackupExportedAt()).toBe(
+      '2026-09-26T06:30:00.000Z'
+    );
   });
 
   test('新しい保存項目がない旧バックアップも読み込める', () => {

@@ -21,6 +21,7 @@ import {
 import {
   createBackupFile,
   restoreBackup,
+  saveLastBackupExportedAt,
 } from '@/services/backup-storage';
 import {
   formatAcademicTerm,
@@ -58,6 +59,7 @@ export default function BackupScreen() {
       });
 
       if (result.action === Share.sharedAction) {
+        await saveLastBackupExportedAt();
         setStatusMessage(
           'バックアップファイルを書き出しました。'
         );
