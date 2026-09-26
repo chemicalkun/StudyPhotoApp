@@ -79,6 +79,8 @@ export default function TimetableImportScreen() {
   const [saving, setSaving] = useState(false);
   const [recognizedTextBlocks, setRecognizedTextBlocks] =
     useState<RecognizedTextBlock[]>([]);
+  const [recognizedTextExpanded, setRecognizedTextExpanded] =
+    useState(false);
   const [candidateDrafts, setCandidateDrafts] =
     useState<EditableTimetableCandidate[]>([]);
   const [candidatesSaved, setCandidatesSaved] =
@@ -215,6 +217,7 @@ export default function TimetableImportScreen() {
         height: asset.height,
       });
       setRecognizedTextBlocks([]);
+      setRecognizedTextExpanded(false);
       setCandidateDrafts([]);
       setCandidatesSaved(false);
     } catch (error) {
@@ -243,6 +246,7 @@ export default function TimetableImportScreen() {
 
     setRecognizing(true);
     setRecognizedTextBlocks([]);
+    setRecognizedTextExpanded(false);
     setCandidateDrafts([]);
     setCandidatesSaved(false);
     setErrorMessage('');
@@ -923,25 +927,51 @@ export default function TimetableImportScreen() {
           </View>
 
           <View style={styles.resultContainer}>
-            <Text style={styles.resultTitle}>
-              認識した文字（{recognizedTextBlocks.length}件）
-            </Text>
-
-            {recognizedTextBlocks.map((block, index) => (
-              <View
-                style={styles.resultRow}
-                key={`${block.text}-${index}`}
+            <Pressable
+              style={styles.resultDisclosureButton}
+              accessibilityRole="button"
+              accessibilityState={{
+                expanded: recognizedTextExpanded,
+              }}
+              onPress={() => {
+                setRecognizedTextExpanded((expanded) => !expanded);
+              }}
+            >
+              <Text
+                style={[
+                  styles.resultTitle,
+                  styles.resultDisclosureTitle,
+                ]}
               >
-                <Text style={styles.resultText}>
-                  {normalizeTimetableText(block.text)}
-                </Text>
+                認識した文字（{recognizedTextBlocks.length}件）
+              </Text>
 
-                <Text style={styles.confidenceText}>
-                  OCR参考値{' '}
-                  {Math.round(block.confidence * 100)}%
-                </Text>
-              </View>
-            ))}
+              <Text style={styles.resultDisclosureText}>
+                {recognizedTextExpanded ? '閉じる ▲' : '開く ▼'}
+              </Text>
+            </Pressable>
+
+            {recognizedTextExpanded ? (
+              recognizedTextBlocks.map((block, index) => (
+                <View
+                  style={styles.resultRow}
+                  key={`${block.text}-${index}`}
+                >
+                  <Text style={styles.resultText}>
+                    {normalizeTimetableText(block.text)}
+                  </Text>
+
+                  <Text style={styles.confidenceText}>
+                    OCR参考値{' '}
+                    {Math.round(block.confidence * 100)}%
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.collapsedResultText}>
+                タップするとOCRの認識結果を確認できます。
+              </Text>
+            )}
           </View>
         </>
       ) : null}
@@ -1343,6 +1373,31 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: 'bold',
     marginBottom: 8,
+  },
+
+  resultDisclosureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+
+  resultDisclosureTitle: {
+    flex: 1,
+    marginBottom: 0,
+  },
+
+  resultDisclosureText: {
+    color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  collapsedResultText: {
+    color: '#667085',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
   },
 
   resultRow: {
