@@ -12,7 +12,11 @@ import {
 
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import {
+  router,
+  Stack,
+  useLocalSearchParams,
+} from 'expo-router';
 
 import {
   createBackupFile,
@@ -28,6 +32,8 @@ export default function BackupScreen() {
   const [restoring, setRestoring] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
+  const [restoreCompleted, setRestoreCompleted] =
+    useState(false);
 
 
   const exportBackup = async () => {
@@ -39,6 +45,7 @@ export default function BackupScreen() {
       setExporting(true);
       setErrorMessage('');
       setStatusMessage('');
+      setRestoreCompleted(false);
 
       const fileUri = await createBackupFile();
       const result = await Share.share({
@@ -69,13 +76,16 @@ export default function BackupScreen() {
       setRestoring(true);
       setErrorMessage('');
       setStatusMessage('');
+      setRestoreCompleted(false);
 
       await restoreBackup(savedBackup);
       setStatusMessage(
         '設定と学習データを復元しました。現在の写真情報と写真OCRは変更していません。'
       );
+      setRestoreCompleted(true);
     } catch (error) {
       console.log('バックアップ復元エラー:', error);
+      setRestoreCompleted(false);
       setErrorMessage(
         'バックアップを復元できませんでした。ファイルが壊れている可能性があります。'
       );
@@ -93,6 +103,7 @@ export default function BackupScreen() {
     try {
       setErrorMessage('');
       setStatusMessage('');
+      setRestoreCompleted(false);
 
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/json',
@@ -231,6 +242,18 @@ export default function BackupScreen() {
           </Text>
         ) : null}
 
+        {restoreCompleted ? (
+          <Pressable
+            style={styles.returnHomeButton}
+            accessibilityRole="button"
+            onPress={() => router.replace('/(tabs)')}
+          >
+            <Text style={styles.returnHomeButtonText}>
+              ホームで復元内容を確認
+            </Text>
+          </Pressable>
+        ) : null}
+
         {errorMessage !== '' ? (
           <Text style={styles.errorText}>
             {errorMessage}
@@ -263,5 +286,7 @@ const styles = StyleSheet.create({
   restoreDescription: { color: '#555', fontSize: 13, lineHeight: 21, marginTop: 8 },
   restoreButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: '#8a5a20', borderRadius: 10, padding: 15, marginTop: 16 },
   successText: { color: '#28794c', fontSize: 13, textAlign: 'center', marginTop: 16 },
+  returnHomeButton: { alignItems: 'center', borderWidth: 1, borderColor: '#28794c', borderRadius: 10, padding: 13, marginTop: 12 },
+  returnHomeButtonText: { color: '#28794c', fontSize: 14, fontWeight: 'bold' },
   errorText: { color: '#9b2c2c', fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 16 },
 });
