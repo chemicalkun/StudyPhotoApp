@@ -6,6 +6,7 @@ import {
   getTimetableImportValidationError,
   mergeTimetableCandidates,
   reclassifyPhotosForTimetableImport,
+  sortTimetableCandidates,
   TimetableImportCandidate,
 } from '@/utils/timetable-import';
 import { PhotoRecord } from '@/types/photo';
@@ -108,6 +109,26 @@ describe('getFirstInvalidTimetableCandidateIndex', () => {
         { day: '月', period: 1, subject: '英語' },
       ])
     ).toBe(-1);
+  });
+});
+
+
+describe('sortTimetableCandidates', () => {
+  test('曜日と時限の順に並べ替える', () => {
+    const unsortedCandidates: TimetableImportCandidate[] = [
+      { day: '火', period: 2, subject: '化学' },
+      { day: '月', period: 3, subject: '数学' },
+      { day: '月', period: 1, subject: '英語' },
+      { day: '土', period: 1, subject: '演習' },
+    ];
+
+    expect(sortTimetableCandidates(unsortedCandidates)).toEqual([
+      { day: '月', period: 1, subject: '英語' },
+      { day: '月', period: 3, subject: '数学' },
+      { day: '火', period: 2, subject: '化学' },
+      { day: '土', period: 1, subject: '演習' },
+    ]);
+    expect(unsortedCandidates[0].subject).toBe('化学');
   });
 });
 

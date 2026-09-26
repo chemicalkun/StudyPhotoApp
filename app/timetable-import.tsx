@@ -29,6 +29,7 @@ import {
   getTimetableImportValidationError,
   mergeTimetableCandidates,
   reclassifyPhotosForTimetableImport,
+  sortTimetableCandidates,
 } from '@/utils/timetable-import';
 import {
   normalizeTimetableText,
@@ -113,6 +114,11 @@ export default function TimetableImportScreen() {
     ),
     [candidateDrafts]
   );
+  const candidatesAreSorted = useMemo(() =>
+    sortTimetableCandidates(candidateDrafts).every(
+      (candidate, index) => candidate === candidateDrafts[index]
+    ),
+  [candidateDrafts]);
 
 
   usePreventRemove(
@@ -324,6 +330,14 @@ export default function TimetableImportScreen() {
         manuallyAdded: true,
       },
     ]);
+  };
+
+
+  const sortCandidates = () => {
+    setCandidatesSaved(false);
+    setCandidateDrafts((currentCandidates) =>
+      sortTimetableCandidates(currentCandidates)
+    );
   };
 
 
@@ -696,6 +710,24 @@ export default function TimetableImportScreen() {
             <Text style={styles.confidenceNotice}>
               OCR参考値は文字認識の確実さの目安です。数値が低くても、表示内容が正しければ問題ありません。
             </Text>
+
+            {candidateDrafts.length > 1 ? (
+              <Pressable
+                style={[
+                  styles.sortCandidatesButton,
+                  (saving || candidatesAreSorted) &&
+                    styles.disabledButton,
+                ]}
+                disabled={saving || candidatesAreSorted}
+                onPress={sortCandidates}
+              >
+                <Text style={styles.sortCandidatesText}>
+                  {candidatesAreSorted
+                    ? '曜日・時限順に並んでいます'
+                    : '曜日・時限順に並べ替え'}
+                </Text>
+              </Pressable>
+            ) : null}
 
             {timetableRecognitionResult.warning !== null ? (
               <View style={styles.candidateWarningBox}>
@@ -1108,6 +1140,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 8,
+  },
+
+  sortCandidatesButton: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#28794c',
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+
+  sortCandidatesText: {
+    color: '#28794c',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 
   candidateWarningBox: {

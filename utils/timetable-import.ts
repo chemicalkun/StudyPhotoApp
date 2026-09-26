@@ -119,6 +119,22 @@ export const getFirstInvalidTimetableCandidateIndex = (
 };
 
 
+export const sortTimetableCandidates = <
+  Candidate extends TimetableImportCandidate,
+>(candidates: readonly Candidate[]) =>
+  [...candidates].sort((firstCandidate, secondCandidate) => {
+    const dayDifference =
+      timetableDays.indexOf(firstCandidate.day) -
+      timetableDays.indexOf(secondCandidate.day);
+
+    if (dayDifference !== 0) {
+      return dayDifference;
+    }
+
+    return firstCandidate.period - secondCandidate.period;
+  });
+
+
 export const getTimetableCandidateOverwrites = (
   timetable: Timetable,
   candidates: TimetableImportCandidate[]
