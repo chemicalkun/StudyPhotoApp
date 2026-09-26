@@ -22,6 +22,10 @@ import {
   createBackupFile,
   restoreBackup,
 } from '@/services/backup-storage';
+import {
+  formatAcademicTerm,
+  parseAcademicTerm,
+} from '@/types/academic-term';
 import { parseStudyPhotoBackup } from '@/types/backup';
 
 
@@ -119,16 +123,32 @@ export default function BackupScreen() {
         return;
       }
 
-      const selectedFile = new File(result.assets[0].uri);
+      const selectedAsset = result.assets[0];
+
+      if (!selectedAsset) {
+        throw new Error(
+          '選択したバックアップファイルがありません'
+        );
+      }
+
+      const selectedFile = new File(selectedAsset.uri);
       const savedBackup = await selectedFile.text();
       const backup = parseStudyPhotoBackup(savedBackup);
       const exportedAt = new Date(
         backup.exportedAt
       ).toLocaleString('ja-JP');
+      const academicTermLabel =
+        backup.storage.academicTerm !== null
+          ? formatAcademicTerm(
+              parseAcademicTerm(
+                backup.storage.academicTerm
+              )
+            )
+          : '学年・学期情報なし';
 
       Alert.alert(
         'バックアップを復元しますか？',
-        `${exportedAt}に作成されたバックアップです。現在の時間割と学習データは上書きされます。写真画像・写真情報・写真OCRは変更しません。`,
+        `ファイル：${selectedAsset.name}\n作成日時：${exportedAt}\n選択中の学期：${academicTermLabel}\n\n現在の時間割と学習データは上書きされます。写真画像・写真情報・写真OCRは変更しません。`,
         [
           { text: 'キャンセル', style: 'cancel' },
           {
