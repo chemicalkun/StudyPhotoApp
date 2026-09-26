@@ -17,6 +17,8 @@ import {
 
 import { loadAcademicTerm } from '@/services/academic-term-storage';
 import { formatAcademicTerm } from '@/types/academic-term';
+import { parseLectureSummaryRecords } from '@/types/lecture-summary';
+import { parsePhotoRecords } from '@/types/photo';
 import { parseTimetable } from '@/utils/classification';
 import { loadPeriodTimes } from '@/utils/period-times';
 import { loadTimetableDisplayOptions } from '@/utils/timetable-display-options';
@@ -66,6 +68,8 @@ export default function SettingsScreen() {
     useState('現在の時限設定を読み込み中...');
   const [timetableDescription, setTimetableDescription] =
     useState('現在の時間割を読み込み中...');
+  const [backupDescription, setBackupDescription] =
+    useState('現在の学習データを読み込み中...');
 
 
   useFocusEffect(
@@ -96,6 +100,57 @@ export default function SettingsScreen() {
       };
 
       void refreshAcademicTerm();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const refreshBackupOverview = async () => {
+        try {
+          const entries = await AsyncStorage.multiGet([
+            'photos',
+            'lectureSummaryRecords',
+          ]);
+          const savedValues = Object.fromEntries(entries);
+          const photoCount = savedValues.photos === null
+            ? 0
+            : parsePhotoRecords(savedValues.photos).length;
+          const summaryCount =
+            savedValues.lectureSummaryRecords === null
+              ? 0
+              : Object.keys(
+                  parseLectureSummaryRecords(
+                    savedValues.lectureSummaryRecords
+                  )
+                ).length;
+
+          if (active) {
+            setBackupDescription(
+              `現在の学期：写真${photoCount}枚・授業まとめ${summaryCount}件`
+            );
+          }
+        } catch (error) {
+          console.log(
+            '設定画面のバックアップ対象読み込みエラー:',
+            error
+          );
+
+          if (active) {
+            setBackupDescription(
+              '現在の学習データを確認できません'
+            );
+          }
+        }
+      };
+
+      void refreshBackupOverview();
 
       return () => {
         active = false;
@@ -289,7 +344,7 @@ export default function SettingsScreen() {
         <View style={styles.sectionCard}>
           <SettingsLink
             title="バックアップ"
-            description="設定と学習データの書き出し・復元"
+            description={backupDescription}
             onPress={() => router.push({
               pathname: '/backup',
               params: { from: 'settings' },
