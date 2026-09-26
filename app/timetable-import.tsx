@@ -75,6 +75,7 @@ export default function TimetableImportScreen() {
   const [selectedImage, setSelectedImage] =
     useState<SelectedTimetableImage | null>(null);
   const [selecting, setSelecting] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [recognizedTextBlocks, setRecognizedTextBlocks] =
@@ -165,8 +166,24 @@ export default function TimetableImportScreen() {
   }, []);
 
 
+  const applySelectedImage = (
+    asset: ImagePicker.ImagePickerAsset
+  ) => {
+    setSelectedImage({
+      uri: asset.uri,
+      fileName: asset.fileName ?? null,
+      width: asset.width,
+      height: asset.height,
+    });
+    setRecognizedTextBlocks([]);
+    setRecognizedTextExpanded(false);
+    setCandidateDrafts([]);
+    setCandidatesSaved(false);
+  };
+
+
   const pickTimetableImage = async () => {
-    if (selecting) {
+    if (selecting || capturing) {
       return;
     }
 
@@ -210,16 +227,7 @@ export default function TimetableImportScreen() {
         );
       }
 
-      setSelectedImage({
-        uri: asset.uri,
-        fileName: asset.fileName ?? null,
-        width: asset.width,
-        height: asset.height,
-      });
-      setRecognizedTextBlocks([]);
-      setRecognizedTextExpanded(false);
-      setCandidateDrafts([]);
-      setCandidatesSaved(false);
+      applySelectedImage(asset);
     } catch (error) {
       console.log('時間割画像選択エラー:', error);
 
@@ -228,6 +236,60 @@ export default function TimetableImportScreen() {
       );
     } finally {
       setSelecting(false);
+    }
+  };
+
+
+  const captureTimetableImage = async () => {
+    if (selecting || capturing) {
+      return;
+    }
+
+    setCapturing(true);
+    setErrorMessage('');
+
+    try {
+      const permissionResult =
+        await ImagePicker.requestCameraPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        setSettingsRequired(
+          !permissionResult.canAskAgain
+        );
+        setErrorMessage(
+          permissionResult.canAskAgain
+            ? '時間割を撮影するには、カメラへのアクセスが必要です。'
+            : 'iPhoneの設定からカメラへのアクセスを許可してください。'
+        );
+        return;
+      }
+
+      setSettingsRequired(false);
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 1,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets[0];
+
+      if (!asset) {
+        throw new Error('撮影した時間割画像がありません');
+      }
+
+      applySelectedImage(asset);
+    } catch (error) {
+      console.log('時間割画像撮影エラー:', error);
+
+      setErrorMessage(
+        '時間割画像を撮影できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setCapturing(false);
     }
   };
 
@@ -593,7 +655,7 @@ export default function TimetableImportScreen() {
       </Text>
 
       <Text style={styles.description}>
-        時間割のスクリーンショットや保存画像を1枚選んでください。
+        時間割の画像を1枚選ぶか、その場で撮影してください。
       </Text>
 
       <View style={styles.noticeBox}>
@@ -658,9 +720,9 @@ export default function TimetableImportScreen() {
       <Pressable
         style={[
           styles.selectButton,
-          selecting && styles.disabledButton,
+          (selecting || capturing) && styles.disabledButton,
         ]}
-        disabled={selecting}
+        disabled={selecting || capturing}
         onPress={pickTimetableImage}
       >
         {selecting ? (
@@ -670,6 +732,23 @@ export default function TimetableImportScreen() {
             {selectedImage === null
               ? '時間割画像を選択'
               : '別の画像を選択'}
+          </Text>
+        )}
+      </Pressable>
+
+      <Pressable
+        style={[
+          styles.captureButton,
+          (selecting || capturing) && styles.disabledButton,
+        ]}
+        disabled={selecting || capturing}
+        onPress={captureTimetableImage}
+      >
+        {capturing ? (
+          <ActivityIndicator color="white" />
+        ) : (
+          <Text style={styles.selectButtonText}>
+            カメラで撮影
           </Text>
         )}
       </Pressable>
@@ -1135,6 +1214,16 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+
+  captureButton: {
+    backgroundColor: '#5a477c',
+    borderRadius: 10,
+    minHeight: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    marginTop: 12,
   },
 
   disabledButton: {
