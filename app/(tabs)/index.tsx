@@ -20,6 +20,7 @@ import {
 } from '@/types/academic-term';
 import {
   groupPhotosBySubject,
+  getLatestPhotoTakenAt,
   getPhotoLectureCount,
   isUnclassifiedPhoto,
   parsePhotoRecords,
@@ -132,6 +133,17 @@ export default function HomeScreen() {
   const unclassifiedPhotos = photos.filter(
     isUnclassifiedPhoto
   );
+  const latestUnclassifiedPhotoTakenAt =
+    getLatestPhotoTakenAt(unclassifiedPhotos);
+  const latestUnclassifiedPhotoLabel =
+    latestUnclassifiedPhotoTakenAt === null
+      ? null
+      : new Date(
+          latestUnclassifiedPhotoTakenAt
+        ).toLocaleDateString('ja-JP', {
+          month: 'numeric',
+          day: 'numeric',
+        });
 
 
   const subjectGroups = Object.entries(
@@ -282,11 +294,14 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.subjectCount}>
+                {getPhotoLectureCount(unclassifiedPhotos)}日分・
                 {unclassifiedPhotos.length}枚
               </Text>
 
               <Text style={styles.unclassifiedHint}>
-                授業名を確認して整理できます
+                {latestUnclassifiedPhotoLabel === null
+                  ? '授業名を確認して整理できます'
+                  : `最新：${latestUnclassifiedPhotoLabel}・授業名を確認して整理`}
               </Text>
             </View>
 

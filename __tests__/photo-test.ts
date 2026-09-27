@@ -1,5 +1,6 @@
 import {
   groupPhotosBySubject,
+  getLatestPhotoTakenAt,
   getPhotoLectureCount,
   getPhotoAcademicTerm,
   isUnclassifiedPhoto,
@@ -56,6 +57,21 @@ describe('写真の授業分類', () => {
         takenAt: '2026-09-30T09:30:00.000Z',
       },
     ])).toBe(2);
+  });
+
+  test('最新の写真撮影日時を取得する', () => {
+    expect(getLatestPhotoTakenAt([
+      createPhoto('first', null),
+      {
+        ...createPhoto('latest', null),
+        takenAt: '2026-09-30T09:30:00.000Z',
+      },
+      {
+        ...createPhoto('invalid', null),
+        takenAt: 'invalid',
+      },
+    ])).toBe('2026-09-30T09:30:00.000Z');
+    expect(getLatestPhotoTakenAt([])).toBeNull();
   });
 
   test('新しい写真の学期情報を読み込む', () => {

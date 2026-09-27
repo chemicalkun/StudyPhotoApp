@@ -65,6 +65,28 @@ export const getPhotoLectureCount = (
 ).size;
 
 
+export const getLatestPhotoTakenAt = (
+  photos: PhotoRecord[]
+): string | null => {
+  const latestPhoto = photos.reduce<
+    { takenAt: string; timestamp: number } | null
+  >((latest, photo) => {
+    const timestamp = new Date(photo.takenAt).getTime();
+
+    if (
+      Number.isNaN(timestamp) ||
+      (latest !== null && timestamp <= latest.timestamp)
+    ) {
+      return latest;
+    }
+
+    return { takenAt: photo.takenAt, timestamp };
+  }, null);
+
+  return latestPhoto?.takenAt ?? null;
+};
+
+
 export const getPhotoAcademicTerm = (
   photo: PhotoRecord
 ): AcademicTerm | null => {
