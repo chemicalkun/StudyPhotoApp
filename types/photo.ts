@@ -14,6 +14,8 @@ export type PhotoRecord = {
   subject: string | null;
   academicTerm?: AcademicTerm;
   takenAtEstimated?: boolean;
+  originalTakenAt?: string;
+  lectureOrder?: number;
 };
 
 
@@ -128,6 +130,17 @@ export const isPhotoRecord = (
     (
       photo.takenAtEstimated === undefined ||
       typeof photo.takenAtEstimated === 'boolean'
+    ) &&
+    (
+      photo.originalTakenAt === undefined ||
+      typeof photo.originalTakenAt === 'string'
+    ) &&
+    (
+      photo.lectureOrder === undefined ||
+      (
+        Number.isInteger(photo.lectureOrder) &&
+        photo.lectureOrder >= 0
+      )
     )
   );
 };

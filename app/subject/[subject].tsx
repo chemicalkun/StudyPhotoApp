@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Modal,
   Pressable,
@@ -13,6 +14,8 @@ import {
   View,
 } from 'react-native';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File } from 'expo-file-system';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -36,12 +39,14 @@ import type {
   PhotoOcrRecords,
 } from '@/types/photo-ocr';
 import {
+  deletePhotoOcrRecord,
   loadPhotoOcrRecords,
   savePhotoOcrRecord,
 } from '@/services/photo-ocr-storage';
 import {
   loadPhotoRecords,
   savePhotoFromUri,
+  savePhotoRecords,
 } from '@/services/photo-storage';
 import {
   isStudyPhotoVisionAvailable,
@@ -66,6 +71,17 @@ import {
 import type {
   LectureSummaryRecords,
 } from '@/types/lecture-summary';
+import { parseTimetable } from '@/utils/classification';
+import { getUniqueTimetableSubjects } from '@/utils/timetable-subject';
+import {
+  moveSelectedPhotosToLecture,
+  removeSelectedPhotos,
+  updateSelectedPhotoSubjects,
+} from '@/utils/photo-bulk-actions';
+import {
+  applyLecturePhotoOrder,
+  comparePhotosByLectureOrder,
+} from '@/utils/photo-order';
 
 
 type LectureGroup = {
@@ -98,6 +114,13 @@ type LecturePhotoImportFeedback = {
   message: string;
   isError: boolean;
 };
+
+
+type BulkOperation =
+  | 'ocr'
+  | 'classification'
+  | 'lecture'
+  | 'delete';
 
 
 const getLectureOcrItems = (
@@ -214,6 +237,27 @@ export default function SubjectScreen() {
     useState<LecturePhotoImportFeedback | null>(null);
   const [photoLibrarySettingsRequired, setPhotoLibrarySettingsRequired] =
     useState(false);
+  const [isSelectingPhotos, setIsSelectingPhotos] =
+    useState(false);
+  const [selectedPhotoIds, setSelectedPhotoIds] =
+    useState<Set<string>>(new Set());
+  const [bulkOperation, setBulkOperation] =
+    useState<BulkOperation | null>(null);
+  const [bulkLectureModalVisible, setBulkLectureModalVisible] =
+    useState(false);
+  const [bulkClassificationModalVisible, setBulkClassificationModalVisible] =
+    useState(false);
+  const [bulkSubjectInput, setBulkSubjectInput] = useState('');
+  const [bulkTimetableSubjects, setBulkTimetableSubjects] =
+    useState<string[]>([]);
+  const [bulkClassificationLoadError, setBulkClassificationLoadError] =
+    useState('');
+  const [reorderingLectureSection, setReorderingLectureSection] =
+    useState<LectureSection | null>(null);
+  const [reorderedPhotoIds, setReorderedPhotoIds] =
+    useState<string[]>([]);
+  const [savingPhotoOrder, setSavingPhotoOrder] =
+    useState(false);
 
 
   useFocusEffect(
@@ -324,16 +368,9 @@ export default function SubjectScreen() {
           const groups: LectureGroup[] =
             Object.entries(grouped)
               .map(([dateKey, photos]) => {
-                const sortedPhotos =
-                  [...photos].sort((a, b) => {
-                    const dateA =
-                      new Date(a.takenAt).getTime();
-
-                    const dateB =
-                      new Date(b.takenAt).getTime();
-
-                    return dateA - dateB;
-                  });
+                const sortedPhotos = [...photos].sort(
+                  comparePhotosByLectureOrder
+                );
 
                 return {
                   dateKey,
@@ -903,6 +940,373 @@ export default function SubjectScreen() {
   };
 
 
+  const selectedPhotos = sections
+    .flatMap((section) => section.photos)
+    .filter((photo) => selectedPhotoIds.has(photo.id));
+  const selectedPhotoCount = selectedPhotos.length;
+  const reorderedPhotos = reorderedPhotoIds.flatMap(
+    (photoId) => {
+      const photo = reorderingLectureSection?.photos.find(
+        (item) => item.id === photoId
+      );
+
+      return photo === undefined ? [] : [photo];
+    }
+  );
+
+
+  const openPhotoOrder = (section: LectureSection) => {
+    setReorderingLectureSection(section);
+    setReorderedPhotoIds(
+      section.photos.map((photo) => photo.id)
+    );
+  };
+
+
+  const movePhotoOrder = (
+    photoId: string,
+    direction: -1 | 1
+  ) => {
+    setReorderedPhotoIds((currentIds) => {
+      const currentIndex = currentIds.indexOf(photoId);
+      const targetIndex = currentIndex + direction;
+
+      if (
+        currentIndex < 0 ||
+        targetIndex < 0 ||
+        targetIndex >= currentIds.length
+      ) {
+        return currentIds;
+      }
+
+      const nextIds = [...currentIds];
+
+      [nextIds[currentIndex], nextIds[targetIndex]] = [
+        nextIds[targetIndex],
+        nextIds[currentIndex],
+      ];
+
+      return nextIds;
+    });
+  };
+
+
+  const savePhotoOrder = async () => {
+    if (
+      reorderingLectureSection === null ||
+      savingPhotoOrder
+    ) {
+      return;
+    }
+
+    setSavingPhotoOrder(true);
+
+    try {
+      const photos = await loadPhotoRecords();
+      const updatedPhotos = applyLecturePhotoOrder(
+        photos,
+        reorderedPhotoIds
+      );
+
+      await savePhotoRecords(updatedPhotos);
+      setReorderingLectureSection(null);
+      setReorderedPhotoIds([]);
+      setLoadRevision((revision) => revision + 1);
+    } catch (error) {
+      console.log('写真並び替え保存エラー:', error);
+      Alert.alert(
+        '並び順を保存できませんでした',
+        '写真は削除されていません。もう一度お試しください。'
+      );
+    } finally {
+      setSavingPhotoOrder(false);
+    }
+  };
+
+
+  const finishPhotoSelection = () => {
+    setSelectedPhotoIds(new Set());
+    setIsSelectingPhotos(false);
+    setBulkLectureModalVisible(false);
+    setBulkClassificationModalVisible(false);
+  };
+
+
+  const togglePhotoSelection = (photoId: string) => {
+    setSelectedPhotoIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+
+      if (nextIds.has(photoId)) {
+        nextIds.delete(photoId);
+      } else {
+        nextIds.add(photoId);
+      }
+
+      return nextIds;
+    });
+  };
+
+
+  const recognizeSelectedPhotos = async () => {
+    if (
+      selectedPhotoCount === 0 ||
+      bulkOperation !== null
+    ) {
+      return;
+    }
+
+    if (!isStudyPhotoVisionAvailable) {
+      Alert.alert(
+        '開発ビルドが必要です',
+        '写真の文字認識はApple Visionを組み込んだ開発ビルドで利用できます。'
+      );
+      return;
+    }
+
+    setBulkOperation('ocr');
+    let recognizedCount = 0;
+    let failedCount = 0;
+    const updatedOcrRecords = { ...photoOcrRecords };
+
+    try {
+      for (const selectedPhoto of selectedPhotos) {
+        try {
+          const blocks = await recognizeText(
+            selectedPhoto.uri
+          );
+
+          if (blocks.length === 0) {
+            failedCount += 1;
+            continue;
+          }
+
+          const savedRecord = await savePhotoOcrRecord(
+            selectedPhoto.id,
+            blocks
+          );
+
+          updatedOcrRecords[selectedPhoto.id] = savedRecord;
+          recognizedCount += 1;
+          setPhotoOcrRecords({ ...updatedOcrRecords });
+        } catch (error) {
+          failedCount += 1;
+          console.log('一括文字認識エラー:', error);
+        }
+      }
+
+      finishPhotoSelection();
+      Alert.alert(
+        '文字認識が完了しました',
+        failedCount === 0
+          ? `${recognizedCount}枚の写真を認識しました。`
+          : `${recognizedCount}枚を認識し、${failedCount}枚は認識できませんでした。`
+      );
+    } finally {
+      setBulkOperation(null);
+    }
+  };
+
+
+  const openBulkClassification = async () => {
+    if (
+      selectedPhotoCount === 0 ||
+      bulkOperation !== null
+    ) {
+      return;
+    }
+
+    setBulkSubjectInput(isUnclassified ? '' : subject);
+    setBulkTimetableSubjects([]);
+    setBulkClassificationLoadError('');
+    setBulkClassificationModalVisible(true);
+
+    try {
+      const savedTimetable =
+        await AsyncStorage.getItem('timetable');
+      const timetable = parseTimetable(savedTimetable);
+
+      setBulkTimetableSubjects(
+        getUniqueTimetableSubjects(timetable)
+      );
+    } catch (error) {
+      console.log('一括分類候補読み込みエラー:', error);
+      setBulkClassificationLoadError(
+        '時間割の授業候補を読み込めませんでした。授業名は手入力できます。'
+      );
+    }
+  };
+
+
+  const saveBulkClassification = async (
+    selectedSubject = bulkSubjectInput
+  ) => {
+    if (
+      selectedPhotoCount === 0 ||
+      bulkOperation !== null
+    ) {
+      return;
+    }
+
+    setBulkOperation('classification');
+
+    try {
+      const photos = await loadPhotoRecords();
+      const normalizedSubject =
+        selectedSubject.trim() || null;
+      const updatedPhotos = updateSelectedPhotoSubjects(
+        photos,
+        selectedPhotoIds,
+        normalizedSubject
+      );
+
+      await savePhotoRecords(updatedPhotos);
+      finishPhotoSelection();
+      setLoadRevision((revision) => revision + 1);
+
+      Alert.alert(
+        '分類を変更しました',
+        `${selectedPhotoCount}枚の写真を${
+          normalizedSubject ?? '未分類'
+        }に変更しました。`
+      );
+    } catch (error) {
+      console.log('一括分類変更エラー:', error);
+      Alert.alert(
+        '分類を変更できませんでした',
+        '写真の分類を保存する際にエラーが発生しました。'
+      );
+    } finally {
+      setBulkOperation(null);
+    }
+  };
+
+
+  const moveSelectedPhotos = async (
+    targetSection: LectureSection
+  ) => {
+    if (
+      selectedPhotoCount === 0 ||
+      bulkOperation !== null
+    ) {
+      return;
+    }
+
+    const targetLecturePhoto = targetSection.photos[0];
+
+    if (targetLecturePhoto === undefined) {
+      return;
+    }
+
+    setBulkOperation('lecture');
+
+    try {
+      const photos = await loadPhotoRecords();
+      const updatedPhotos = moveSelectedPhotosToLecture(
+        photos,
+        selectedPhotoIds,
+        targetLecturePhoto
+      );
+
+      await savePhotoRecords(updatedPhotos);
+      finishPhotoSelection();
+      setLoadRevision((revision) => revision + 1);
+
+      Alert.alert(
+        '授業回を変更しました',
+        `${selectedPhotoCount}枚の写真を${targetSection.title}へ移動しました。必要なまとめは更新状態になります。`
+      );
+    } catch (error) {
+      console.log('一括授業回変更エラー:', error);
+      Alert.alert(
+        '授業回を変更できませんでした',
+        '写真の移動を保存する際にエラーが発生しました。'
+      );
+    } finally {
+      setBulkOperation(null);
+    }
+  };
+
+
+  const deleteSelectedPhotos = async () => {
+    if (
+      selectedPhotoCount === 0 ||
+      bulkOperation !== null
+    ) {
+      return;
+    }
+
+    setBulkOperation('delete');
+
+    try {
+      const photos = await loadPhotoRecords();
+      const photosToDelete = photos.filter((photo) =>
+        selectedPhotoIds.has(photo.id)
+      );
+      const remainingPhotos = removeSelectedPhotos(
+        photos,
+        selectedPhotoIds
+      );
+
+      await savePhotoRecords(remainingPhotos);
+
+      for (const selectedPhoto of photosToDelete) {
+        try {
+          const photoFile = new File(selectedPhoto.uri);
+
+          if (photoFile.exists) {
+            photoFile.delete();
+          }
+        } catch (error) {
+          console.log('一括写真ファイル削除エラー:', error);
+        }
+
+        try {
+          await deletePhotoOcrRecord(selectedPhoto.id);
+        } catch (error) {
+          console.log('OCR結果一括削除エラー:', error);
+        }
+      }
+
+      finishPhotoSelection();
+      setLoadRevision((revision) => revision + 1);
+      Alert.alert(
+        '写真を削除しました',
+        `${photosToDelete.length}枚の写真を削除しました。`
+      );
+    } catch (error) {
+      console.log('写真一括削除エラー:', error);
+      Alert.alert(
+        '写真を削除できませんでした',
+        '写真データの保存中にエラーが発生しました。'
+      );
+    } finally {
+      setBulkOperation(null);
+    }
+  };
+
+
+  const confirmDeleteSelectedPhotos = () => {
+    if (selectedPhotoCount === 0) {
+      return;
+    }
+
+    Alert.alert(
+      `${selectedPhotoCount}枚の写真を削除しますか？`,
+      'この操作は取り消せません。',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: () => {
+            void deleteSelectedPhotos();
+          },
+        },
+      ]
+    );
+  };
+
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -936,6 +1340,121 @@ export default function SubjectScreen() {
         }}
       />
 
+      {isSelectingPhotos ? (
+        <View style={styles.bulkSelectionBar}>
+          <View style={styles.bulkSelectionHeader}>
+            <View style={styles.bulkSelectionCountRow}>
+              {bulkOperation !== null ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#31518f"
+                />
+              ) : null}
+
+              <Text style={styles.bulkSelectionCount}>
+                {selectedPhotoCount}枚選択
+              </Text>
+            </View>
+
+            <Pressable
+              disabled={bulkOperation !== null}
+              accessibilityRole="button"
+              onPress={finishPhotoSelection}
+            >
+              <Text style={styles.bulkSelectionDone}>
+                完了
+              </Text>
+            </Pressable>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.bulkActionList}
+          >
+            <Pressable
+              style={[
+                styles.bulkActionButton,
+                (selectedPhotoCount === 0 ||
+                  bulkOperation !== null) &&
+                  styles.summaryButtonDisabled,
+              ]}
+              disabled={
+                selectedPhotoCount === 0 ||
+                bulkOperation !== null
+              }
+              onPress={() => {
+                void recognizeSelectedPhotos();
+              }}
+            >
+              <Text style={styles.bulkActionButtonText}>
+                文字認識
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.bulkActionButton,
+                (selectedPhotoCount === 0 ||
+                  bulkOperation !== null) &&
+                  styles.summaryButtonDisabled,
+              ]}
+              disabled={
+                selectedPhotoCount === 0 ||
+                bulkOperation !== null
+              }
+              onPress={() => {
+                void openBulkClassification();
+              }}
+            >
+              <Text style={styles.bulkActionButtonText}>
+                分類変更
+              </Text>
+            </Pressable>
+
+            {!isUnclassified && sections.length > 1 ? (
+              <Pressable
+                style={[
+                  styles.bulkActionButton,
+                  (selectedPhotoCount === 0 ||
+                    bulkOperation !== null) &&
+                    styles.summaryButtonDisabled,
+                ]}
+                disabled={
+                  selectedPhotoCount === 0 ||
+                  bulkOperation !== null
+                }
+                onPress={() => {
+                  setBulkLectureModalVisible(true);
+                }}
+              >
+                <Text style={styles.bulkActionButtonText}>
+                  授業回変更
+                </Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              style={[
+                styles.bulkDeleteButton,
+                (selectedPhotoCount === 0 ||
+                  bulkOperation !== null) &&
+                  styles.summaryButtonDisabled,
+              ]}
+              disabled={
+                selectedPhotoCount === 0 ||
+                bulkOperation !== null
+              }
+              onPress={confirmDeleteSelectedPhotos}
+            >
+              <Text style={styles.bulkDeleteButtonText}>
+                削除
+              </Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      ) : null}
+
       <SectionList
         style={styles.list}
         contentContainerStyle={styles.contentContainer}
@@ -957,7 +1476,7 @@ export default function SubjectScreen() {
               {status}
             </Text>
 
-            {!isUnclassified ? (
+            {!isUnclassified && !isSelectingPhotos ? (
               <Pressable
                 style={[
                   styles.addLecturePhotoButton,
@@ -1014,6 +1533,21 @@ export default function SubjectScreen() {
                   </Pressable>
                 ) : null}
               </View>
+            ) : null}
+
+            {sections.length > 0 && !isSelectingPhotos ? (
+              <Pressable
+                style={styles.startBulkSelectionButton}
+                accessibilityRole="button"
+                onPress={() => {
+                  setSelectedPhotoIds(new Set());
+                  setIsSelectingPhotos(true);
+                }}
+              >
+                <Text style={styles.startBulkSelectionButtonText}>
+                  写真を複数選択
+                </Text>
+              </Pressable>
             ) : null}
 
             {loadError !== '' ? (
@@ -1084,10 +1618,14 @@ export default function SubjectScreen() {
             <Pressable
               style={[
                 styles.lectureOcrButton,
-                processingLectureDateKey !== null &&
+                (processingLectureDateKey !== null ||
+                  isSelectingPhotos) &&
                   styles.summaryButtonDisabled,
               ]}
-              disabled={processingLectureDateKey !== null}
+              disabled={
+                processingLectureDateKey !== null ||
+                isSelectingPhotos
+              }
               onPress={() => {
                 if (hasCurrentLectureSummary(section)) {
                   void openLectureOcr(section);
@@ -1115,60 +1653,421 @@ export default function SubjectScreen() {
               </Text>
             </Pressable>
 
+            {section.photos.length > 1 ? (
+              <Pressable
+                style={[
+                  styles.photoOrderButton,
+                  isSelectingPhotos &&
+                    styles.summaryButtonDisabled,
+                ]}
+                disabled={isSelectingPhotos}
+                accessibilityRole="button"
+                onPress={() => openPhotoOrder(section)}
+              >
+                <Text style={styles.photoOrderButtonText}>
+                  写真を並び替え
+                </Text>
+              </Pressable>
+            ) : null}
+
           </View>
         )}
         renderItem={({ item: row }) => (
           <View style={styles.photoRow}>
-            {row.photos.map((photo) => (
-              <Pressable
-                key={photo.id}
-                style={styles.photoButton}
-                accessibilityRole="button"
-                accessibilityLabel="写真を大きく表示"
-                onPress={() =>
-                  router.push({
-                    pathname: '/photo/[id]',
-                    params: { id: photo.id },
-                  })
-                }
-              >
-                {failedPhotoIds[photo.id] ? (
-                  <View style={styles.photoError}>
-                    <Text style={styles.photoErrorText}>
-                      画像を表示できません
-                    </Text>
-                  </View>
-                ) : (
-                  <Image
-                    source={{ uri: photo.uri }}
-                    style={styles.photo}
-                    contentFit="cover"
-                    allowDownscaling
-                    enforceEarlyResizing
-                    cachePolicy="disk"
-                    onError={(error) => {
-                      console.log(
-                        '画像表示エラー:',
-                        error.error
-                      );
+            {row.photos.map((photo) => {
+              const isSelected = selectedPhotoIds.has(photo.id);
 
-                      setFailedPhotoIds(
-                        (currentIds) => ({
-                          ...currentIds,
-                          [photo.id]: true,
-                        })
-                      );
-                    }}
-                  />
-                )}
-              </Pressable>
-            ))}
+              return (
+                <Pressable
+                  key={photo.id}
+                  style={[
+                    styles.photoButton,
+                    isSelected && styles.selectedPhotoButton,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isSelectingPhotos
+                      ? `写真を${isSelected ? '選択解除' : '選択'}`
+                      : '写真を大きく表示'
+                  }
+                  accessibilityState={{ selected: isSelected }}
+                  onLongPress={() => {
+                    if (!isSelectingPhotos) {
+                      setIsSelectingPhotos(true);
+                      setSelectedPhotoIds(new Set([photo.id]));
+                    }
+                  }}
+                  onPress={() => {
+                    if (isSelectingPhotos) {
+                      togglePhotoSelection(photo.id);
+                      return;
+                    }
+
+                    router.push({
+                      pathname: '/photo/[id]',
+                      params: { id: photo.id },
+                    });
+                  }}
+                >
+                  {failedPhotoIds[photo.id] ? (
+                    <View style={styles.photoError}>
+                      <Text style={styles.photoErrorText}>
+                        画像を表示できません
+                      </Text>
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: photo.uri }}
+                      style={styles.photo}
+                      contentFit="cover"
+                      allowDownscaling
+                      enforceEarlyResizing
+                      cachePolicy="disk"
+                      onError={(error) => {
+                        console.log(
+                          '画像表示エラー:',
+                          error.error
+                        );
+
+                        setFailedPhotoIds(
+                          (currentIds) => ({
+                            ...currentIds,
+                            [photo.id]: true,
+                          })
+                        );
+                      }}
+                    />
+                  )}
+
+                  {isSelectingPhotos ? (
+                    <View
+                      style={[
+                        styles.photoSelectionIndicator,
+                        isSelected &&
+                          styles.photoSelectionIndicatorSelected,
+                      ]}
+                    >
+                      <Text style={styles.photoSelectionIndicatorText}>
+                        {isSelected ? '✓' : ''}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
           </View>
         )}
         renderSectionFooter={() => (
           <View style={styles.lectureFooter} />
         )}
       />
+
+      <Modal
+        visible={reorderingLectureSection !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!savingPhotoOrder) {
+            setReorderingLectureSection(null);
+            setReorderedPhotoIds([]);
+          }
+        }}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.photoOrderModalContent}>
+            <Text style={styles.modalTitle}>
+              {reorderingLectureSection?.title ?? ''}
+              の写真を並び替え
+            </Text>
+
+            <Text style={styles.lectureTargetDescription}>
+              「前へ」と「後ろへ」で表示順を変更し、最後に保存してください。
+            </Text>
+
+            <ScrollView
+              style={styles.photoOrderList}
+              contentContainerStyle={styles.photoOrderListContent}
+            >
+              {reorderedPhotos.map((photo, index) => (
+                <View
+                  key={photo.id}
+                  style={styles.photoOrderRow}
+                >
+                  <Image
+                    source={{ uri: photo.uri }}
+                    style={styles.photoOrderThumbnail}
+                    contentFit="cover"
+                    allowDownscaling
+                    cachePolicy="disk"
+                  />
+
+                  <Text style={styles.photoOrderPosition}>
+                    {index + 1}
+                  </Text>
+
+                  <View style={styles.photoOrderControls}>
+                    <Pressable
+                      style={[
+                        styles.photoOrderMoveButton,
+                        index === 0 &&
+                          styles.summaryButtonDisabled,
+                      ]}
+                      disabled={
+                        index === 0 || savingPhotoOrder
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`写真${index + 1}を前へ移動`}
+                      onPress={() => {
+                        movePhotoOrder(photo.id, -1);
+                      }}
+                    >
+                      <Text style={styles.photoOrderMoveButtonText}>
+                        ↑ 前へ
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[
+                        styles.photoOrderMoveButton,
+                        index === reorderedPhotos.length - 1 &&
+                          styles.summaryButtonDisabled,
+                      ]}
+                      disabled={
+                        index === reorderedPhotos.length - 1 ||
+                        savingPhotoOrder
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`写真${index + 1}を後ろへ移動`}
+                      onPress={() => {
+                        movePhotoOrder(photo.id, 1);
+                      }}
+                    >
+                      <Text style={styles.photoOrderMoveButtonText}>
+                        ↓ 後ろへ
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            <Pressable
+              style={[
+                styles.photoOrderSaveButton,
+                savingPhotoOrder &&
+                  styles.summaryButtonDisabled,
+              ]}
+              disabled={savingPhotoOrder}
+              accessibilityRole="button"
+              onPress={() => {
+                void savePhotoOrder();
+              }}
+            >
+              {savingPhotoOrder ? (
+                <ActivityIndicator
+                  size="small"
+                  color="white"
+                />
+              ) : null}
+
+              <Text style={styles.photoOrderSaveButtonText}>
+                {savingPhotoOrder
+                  ? '保存中...'
+                  : 'この順番で保存'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.bulkModalCancelButton}
+              disabled={savingPhotoOrder}
+              onPress={() => {
+                setReorderingLectureSection(null);
+                setReorderedPhotoIds([]);
+              }}
+            >
+              <Text style={styles.bulkModalCancelButtonText}>
+                キャンセル
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={bulkLectureModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (bulkOperation === null) {
+            setBulkLectureModalVisible(false);
+          }
+        }}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.lectureTargetModalContent}>
+            <Text style={styles.modalTitle}>
+              授業回を一括変更
+            </Text>
+
+            <Text style={styles.lectureTargetDescription}>
+              選択した{selectedPhotoCount}枚の移動先を選んでください。
+            </Text>
+
+            <ScrollView
+              style={styles.lectureTargetList}
+              contentContainerStyle={styles.lectureTargetListContent}
+            >
+              {sections.map((section) => (
+                <Pressable
+                  key={section.dateKey}
+                  style={styles.lectureTargetButton}
+                  disabled={bulkOperation !== null}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    void moveSelectedPhotos(section);
+                  }}
+                >
+                  <Text style={styles.lectureTargetButtonTitle}>
+                    {section.title}
+                  </Text>
+
+                  <Text style={styles.lectureTargetButtonDetail}>
+                    {section.dateLabel}・{section.photos.length}枚
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            {bulkOperation === 'lecture' ? (
+              <View style={styles.bulkModalProgress}>
+                <ActivityIndicator
+                  size="small"
+                  color="#31518f"
+                />
+                <Text style={styles.bulkModalProgressText}>
+                  授業回を変更中...
+                </Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              style={styles.closeButton}
+              disabled={bulkOperation !== null}
+              onPress={() => {
+                setBulkLectureModalVisible(false);
+              }}
+            >
+              <Text style={styles.closeButtonText}>
+                キャンセル
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={bulkClassificationModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (bulkOperation === null) {
+            setBulkClassificationModalVisible(false);
+          }
+        }}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.bulkClassificationModalContent}>
+            <Text style={styles.modalTitle}>
+              分類を一括変更
+            </Text>
+
+            <Text style={styles.lectureTargetDescription}>
+              選択した{selectedPhotoCount}枚に設定する授業名を選ぶか、入力してください。
+            </Text>
+
+            {bulkTimetableSubjects.length > 0 ? (
+              <ScrollView
+                horizontal
+                keyboardShouldPersistTaps="handled"
+                showsHorizontalScrollIndicator={false}
+                style={styles.bulkSubjectCandidates}
+                contentContainerStyle={styles.bulkSubjectCandidatesContent}
+              >
+                {bulkTimetableSubjects.map((candidate) => (
+                  <Pressable
+                    key={candidate}
+                    style={styles.bulkSubjectCandidateButton}
+                    disabled={bulkOperation !== null}
+                    onPress={() => {
+                      void saveBulkClassification(candidate);
+                    }}
+                  >
+                    <Text style={styles.bulkSubjectCandidateText}>
+                      {candidate}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : null}
+
+            {bulkClassificationLoadError !== '' ? (
+              <Text style={styles.lecturePhotoImportError}>
+                {bulkClassificationLoadError}
+              </Text>
+            ) : null}
+
+            <TextInput
+              style={styles.bulkSubjectInput}
+              value={bulkSubjectInput}
+              onChangeText={setBulkSubjectInput}
+              placeholder="例：高分子化学"
+              editable={bulkOperation === null}
+            />
+
+            <Pressable
+              style={[
+                styles.bulkClassificationSaveButton,
+                bulkOperation !== null &&
+                  styles.summaryButtonDisabled,
+              ]}
+              disabled={bulkOperation !== null}
+              onPress={() => {
+                void saveBulkClassification();
+              }}
+            >
+              <Text style={styles.bulkClassificationSaveButtonText}>
+                {bulkOperation === 'classification'
+                  ? '保存中...'
+                  : '保存'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.bulkUnclassifiedButton}
+              disabled={bulkOperation !== null}
+              onPress={() => {
+                void saveBulkClassification('');
+              }}
+            >
+              <Text style={styles.bulkUnclassifiedButtonText}>
+                未分類にする
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.bulkModalCancelButton}
+              disabled={bulkOperation !== null}
+              onPress={() => {
+                setBulkClassificationModalVisible(false);
+              }}
+            >
+              <Text style={styles.bulkModalCancelButtonText}>
+                キャンセル
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={isLecturePhotoTargetVisible}
@@ -1526,6 +2425,74 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
+  bulkSelectionBar: {
+    backgroundColor: '#f3f6ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#d4dcf1',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
+
+  bulkSelectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  bulkSelectionCountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  bulkSelectionCount: {
+    color: '#111',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  bulkSelectionDone: {
+    color: '#31518f',
+    fontSize: 16,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+  },
+
+  bulkActionList: {
+    gap: 8,
+    paddingTop: 10,
+  },
+
+  bulkActionButton: {
+    backgroundColor: '#31518f',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+
+  bulkActionButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  bulkDeleteButton: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#b43c3c',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+
+  bulkDeleteButtonText: {
+    color: '#a72e2e',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
   title: {
     fontSize: 30,
     fontWeight: 'bold',
@@ -1586,6 +2553,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  photoOrderButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#f3f6ff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+
+  photoOrderButtonText: {
+    color: '#31518f',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
   addLecturePhotoButton: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -1634,11 +2618,107 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  startBulkSelectionButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#31518f',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+
+  startBulkSelectionButtonText: {
+    color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
   lectureTargetModalContent: {
     maxHeight: '78%',
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 20,
+  },
+
+  photoOrderModalContent: {
+    maxHeight: '84%',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+  },
+
+  photoOrderList: {
+    flexShrink: 1,
+    marginTop: 14,
+  },
+
+  photoOrderListContent: {
+    gap: 9,
+  },
+
+  photoOrderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#f7f7f7',
+    borderRadius: 10,
+    padding: 8,
+  },
+
+  photoOrderThumbnail: {
+    width: 58,
+    height: 58,
+    borderRadius: 7,
+    backgroundColor: '#e5e5e5',
+  },
+
+  photoOrderPosition: {
+    width: 22,
+    color: '#111',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  photoOrderControls: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 7,
+  },
+
+  photoOrderMoveButton: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 9,
+  },
+
+  photoOrderMoveButtonText: {
+    color: '#31518f',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  photoOrderSaveButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#31518f',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 14,
+  },
+
+  photoOrderSaveButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 
   lectureTargetDescription: {
@@ -1722,6 +2802,39 @@ const styles = StyleSheet.create({
   photoButton: {
     width: '31.5%',
     aspectRatio: 1,
+    position: 'relative',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+
+  selectedPhotoButton: {
+    borderWidth: 3,
+    borderColor: '#31518f',
+  },
+
+  photoSelectionIndicator: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    width: 25,
+    height: 25,
+    borderWidth: 2,
+    borderColor: 'white',
+    borderRadius: 13,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  photoSelectionIndicatorSelected: {
+    backgroundColor: '#31518f',
+  },
+
+  photoSelectionIndicatorText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    lineHeight: 18,
   },
 
   photo: {
@@ -1760,6 +2873,108 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 20,
+  },
+
+  bulkModalProgress: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+
+  bulkModalProgressText: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  bulkClassificationModalContent: {
+    maxHeight: '84%',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+  },
+
+  bulkSubjectCandidates: {
+    flexGrow: 0,
+    marginTop: 14,
+  },
+
+  bulkSubjectCandidatesContent: {
+    gap: 8,
+    paddingRight: 4,
+  },
+
+  bulkSubjectCandidateButton: {
+    backgroundColor: '#f3f6ff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 18,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+  },
+
+  bulkSubjectCandidateText: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  bulkSubjectInput: {
+    color: '#111',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#bbb',
+    borderRadius: 9,
+    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginTop: 14,
+  },
+
+  bulkClassificationSaveButton: {
+    backgroundColor: '#31518f',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 12,
+  },
+
+  bulkClassificationSaveButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  bulkUnclassifiedButton: {
+    borderWidth: 1,
+    borderColor: '#9b2c2c',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginTop: 9,
+  },
+
+  bulkUnclassifiedButtonText: {
+    color: '#9b2c2c',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  bulkModalCancelButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginTop: 4,
+  },
+
+  bulkModalCancelButtonText: {
+    color: '#444',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 
   modalTitle: {

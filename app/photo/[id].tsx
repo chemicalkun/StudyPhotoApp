@@ -56,6 +56,7 @@ import {
   recognizeText,
 } from '@/modules/study-photo-vision';
 import { assignPhotoToLecture } from '@/utils/photo-lecture';
+import { comparePhotosByLectureOrder } from '@/utils/photo-order';
 
 
 const swipeDistance = 60;
@@ -184,15 +185,7 @@ export default function PhotoScreen() {
           .filter((item) => {
             return getPhotoLabel(item) === selectedLabel;
           })
-          .sort((a, b) => {
-            const dateA =
-              new Date(a.takenAt).getTime();
-
-            const dateB =
-              new Date(b.takenAt).getTime();
-
-            return dateA - dateB;
-          });
+          .sort(comparePhotosByLectureOrder);
 
         setLecturePhotos(relatedPhotos);
         setPhoto(selectedPhoto);
@@ -789,11 +782,7 @@ export default function PhotoScreen() {
         .map((item) =>
           item.id === movedPhoto.id ? movedPhoto : item
         )
-        .sort(
-          (a, b) =>
-            new Date(a.takenAt).getTime() -
-            new Date(b.takenAt).getTime()
-        );
+        .sort(comparePhotosByLectureOrder);
 
       setPhoto(movedPhoto);
       setLecturePhotos(updatedLecturePhotos);
@@ -912,7 +901,9 @@ export default function PhotoScreen() {
             </Text>
 
             <Text style={styles.dateText}>
-              {getTakenAtLabel(photo.takenAt)}
+              {getTakenAtLabel(
+                photo.originalTakenAt ?? photo.takenAt
+              )}
             </Text>
 
             {getPhotoAcademicTerm(photo) !== null ? (

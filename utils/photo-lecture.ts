@@ -25,9 +25,12 @@ export const assignPhotoToLecture = (
   return {
     ...photo,
     takenAt: targetDate.toISOString(),
+    originalTakenAt:
+      photo.originalTakenAt ?? photo.takenAt,
     day: targetLecturePhoto.day,
     period: targetLecturePhoto.period,
     subject: targetLecturePhoto.subject,
     takenAtEstimated: true,
+    lectureOrder: undefined,
   };
 };

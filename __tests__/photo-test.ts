@@ -129,6 +129,30 @@ describe('写真の授業分類', () => {
     ).toBe(true);
   });
 
+  test('授業回移動前の撮影日時を読み込む', () => {
+    const photo = {
+      ...createPhoto('moved-photo', '化学'),
+      originalTakenAt: '2026-09-23T09:30:00.000Z',
+    };
+
+    expect(
+      parsePhotoRecords(JSON.stringify([photo]))[0]
+        .originalTakenAt
+    ).toBe('2026-09-23T09:30:00.000Z');
+  });
+
+  test('授業回内の写真の並び順を読み込む', () => {
+    const photo = {
+      ...createPhoto('ordered-photo', '化学'),
+      lectureOrder: 2,
+    };
+
+    expect(
+      parsePhotoRecords(JSON.stringify([photo]))[0]
+        .lectureOrder
+    ).toBe(2);
+  });
+
   test('旧い写真は撮影日から学期を補完する', () => {
     expect(
       getPhotoAcademicTerm(createPhoto('old-photo', '化学'))

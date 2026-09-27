@@ -42,6 +42,34 @@ describe('assignPhotoToLecture', () => {
     expect(movedPhoto.period).toBe(3);
     expect(movedPhoto.subject).toBe('有機化学');
     expect(movedPhoto.takenAtEstimated).toBe(true);
+    expect(movedPhoto.originalTakenAt).toBe(
+      photo.takenAt
+    );
+  });
+
+  it('何度移動しても最初の撮影日時を保持する', () => {
+    const originalTakenAt = new Date(
+      2026,
+      8,
+      28,
+      14,
+      32
+    ).toISOString();
+    const photo = createPhoto({
+      takenAt: new Date(2026, 8, 21, 14, 32)
+        .toISOString(),
+      originalTakenAt,
+    });
+    const targetPhoto = createPhoto({
+      id: 'target-photo',
+      takenAt: new Date(2026, 8, 14, 9, 0)
+        .toISOString(),
+    });
+
+    expect(
+      assignPhotoToLecture(photo, targetPhoto)
+        .originalTakenAt
+    ).toBe(originalTakenAt);
   });
 
   it('不正な日付は移動しない', () => {
