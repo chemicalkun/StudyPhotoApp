@@ -24,12 +24,20 @@ import {
   parsePhotoRecords,
   PhotoRecord,
 } from '@/types/photo';
+import {
+  parseTimetable,
+  type Timetable,
+} from '@/utils/classification';
+import { getTimetableSubjectSlots } from '@/utils/timetable-subject';
+import { timetableDays } from '@/utils/timetable-recognition';
 
 
 export default function HomeScreen() {
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
   const [academicTerm, setAcademicTerm] =
     useState<AcademicTerm>(getDefaultAcademicTerm());
+  const [timetable, setTimetable] =
+    useState<Timetable>({});
   const [loadError, setLoadError] = useState('');
   const [loadRevision, setLoadRevision] = useState(0);
 
@@ -71,9 +79,14 @@ export default function HomeScreen() {
         try {
           setLoadError('');
 
-          const [savedPhotos, savedAcademicTerm] =
+          const [
+            savedPhotos,
+            savedTimetable,
+            savedAcademicTerm,
+          ] =
             await Promise.all([
               AsyncStorage.getItem('photos'),
+              AsyncStorage.getItem('timetable'),
               loadAcademicTerm(),
             ]);
 
@@ -87,6 +100,9 @@ export default function HomeScreen() {
               : parsePhotoRecords(savedPhotos)
           );
           setAcademicTerm(savedAcademicTerm);
+          setTimetable(
+            parseTimetable(savedTimetable) ?? {}
+          );
         } catch (error) {
           console.log(
             'ホーム写真読み込みエラー:',
@@ -95,8 +111,9 @@ export default function HomeScreen() {
 
           if (active) {
             setPhotos([]);
+            setTimetable({});
             setLoadError(
-              '写真データを読み込めませんでした。データは削除されていません。'
+              'ホームのデータを読み込めませんでした。データは削除されていません。'
             );
           }
         }
@@ -118,7 +135,37 @@ export default function HomeScreen() {
 
   const subjectGroups = Object.entries(
     groupPhotosBySubject(photos)
-  );
+  ).sort(([firstSubject], [secondSubject]) => {
+    const firstSlot = getTimetableSubjectSlots(
+      timetable,
+      firstSubject
+    )[0];
+    const secondSlot = getTimetableSubjectSlots(
+      timetable,
+      secondSubject
+    )[0];
+
+    if (firstSlot === undefined) {
+      return secondSlot === undefined
+        ? firstSubject.localeCompare(secondSubject, 'ja')
+        : 1;
+    }
+
+    if (secondSlot === undefined) {
+      return -1;
+    }
+
+    const firstDayIndex = timetableDays.indexOf(
+      firstSlot.day
+    );
+    const secondDayIndex = timetableDays.indexOf(
+      secondSlot.day
+    );
+
+    return firstDayIndex !== secondDayIndex
+      ? firstDayIndex - secondDayIndex
+      : firstSlot.period - secondSlot.period;
+  });
 
 
   return (
@@ -268,8 +315,24 @@ export default function HomeScreen() {
       ) : (
         <View style={styles.subjectList}>
           {subjectGroups.map(
-            ([subject, subjectPhotos]) => (
-              <Pressable
+            ([subject, subjectPhotos]) => {
+              const subjectSlots =
+                getTimetableSubjectSlots(
+                  timetable,
+                  subject
+                );
+              const firstSubjectSlot = subjectSlots[0];
+              const subjectSlotLabel =
+                firstSubjectSlot === undefined
+                  ? ''
+                  : `${firstSubjectSlot.day}曜${firstSubjectSlot.period}限${
+                      subjectSlots.length > 1
+                        ? `・ほか${subjectSlots.length - 1}コマ`
+                        : ''
+                    } / `;
+
+              return (
+                <Pressable
                   key={subject}
                   style={styles.subjectCard}
                   onPress={() =>
@@ -285,6 +348,7 @@ export default function HomeScreen() {
                   </Text>
 
                   <Text style={styles.subjectCount}>
+                    {subjectSlotLabel}
                     {subjectPhotos.length}枚
                   </Text>
                 </View>
@@ -292,8 +356,9 @@ export default function HomeScreen() {
                 <Text style={styles.arrow}>
                   ›
                 </Text>
-              </Pressable>
-            )
+                </Pressable>
+              );
+            }
           )}
         </View>
       )}

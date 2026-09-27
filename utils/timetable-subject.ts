@@ -1,3 +1,13 @@
+import {
+  timetableDays,
+  type TimetableDay,
+} from '@/utils/timetable-recognition';
+import {
+  periodNumbers,
+  type PeriodNumber,
+} from '@/utils/period-times';
+
+
 export const normalizeSubjectName = (
   subject: string
 ) => subject.trim().normalize('NFKC');
@@ -45,6 +55,52 @@ export const getUniqueTimetableSubjects = (
       firstSubject.localeCompare(secondSubject, 'ja')
   );
 };
+
+
+export type TimetableSubjectSlot = {
+  day: TimetableDay;
+  period: PeriodNumber;
+};
+
+
+export const getTimetableSubjectSlots = (
+  timetable: Record<string, string>,
+  targetSubject: string
+): TimetableSubjectSlot[] =>
+  Object.entries(timetable)
+    .flatMap(([key, subject]) => {
+      if (!areSameSubjectNames(subject, targetSubject)) {
+        return [];
+      }
+
+      const [day, savedPeriod] = key.split('-');
+      const period = Number(savedPeriod);
+
+      if (
+        !timetableDays.some(
+          (timetableDay) => timetableDay === day
+        ) ||
+        !periodNumbers.some(
+          (periodNumber) => periodNumber === period
+        )
+      ) {
+        return [];
+      }
+
+      return [{
+        day: day as TimetableDay,
+        period: period as PeriodNumber,
+      }];
+    })
+    .sort((firstSlot, secondSlot) => {
+      const dayDifference =
+        timetableDays.indexOf(firstSlot.day) -
+        timetableDays.indexOf(secondSlot.day);
+
+      return dayDifference !== 0
+        ? dayDifference
+        : firstSlot.period - secondSlot.period;
+    });
 
 
 export type TimetableSubjectRename = {
