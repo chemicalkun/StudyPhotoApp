@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
+  getBackupOverview,
   loadLastBackupExportedAt,
   restoreBackup,
   saveLastBackupExportedAt,
@@ -55,6 +56,60 @@ describe('StudyPhoto backup', () => {
     expect(await loadLastBackupExportedAt()).toBe(
       '2026-09-26T06:30:00.000Z'
     );
+  });
+
+  test('復元前にバックアップの主要データ件数を確認する', () => {
+    const currentTermId = JSON.stringify([2026, '前期']);
+    const previousTermId = JSON.stringify([2025, '後期']);
+    const summaryId = JSON.stringify(['有機化学', '2026-04-10']);
+    const examPreparationId = JSON.stringify(['有機化学']);
+    const backup = createStudyPhotoBackup([
+      [
+        'academicTerm',
+        JSON.stringify({
+          academicYear: 2026,
+          term: '前期',
+        }),
+      ],
+      [
+        'academicTimetables',
+        JSON.stringify({
+          [currentTermId]: { '月-1': '有機化学' },
+          [previousTermId]: { '火-2': '英語' },
+        }),
+      ],
+      [
+        'lectureSummaryRecords',
+        JSON.stringify({
+          [summaryId]: {
+            id: summaryId,
+            subject: '有機化学',
+            dateKey: '2026-04-10',
+            text: '授業まとめ',
+            sourceOcrSignature: '[]',
+            createdAt: '2026-04-10T03:00:00.000Z',
+          },
+        }),
+      ],
+      [
+        'examPreparationRecords',
+        JSON.stringify({
+          [examPreparationId]: {
+            id: examPreparationId,
+            subject: '有機化学',
+            text: '試験対策',
+            sourceSummarySignature: '[]',
+            createdAt: '2026-04-11T03:00:00.000Z',
+          },
+        }),
+      ],
+    ]);
+
+    expect(getBackupOverview(backup)).toEqual({
+      academicTermCount: 2,
+      lectureSummaryCount: 1,
+      examPreparationCount: 1,
+    });
   });
 
   test('新しい保存項目がない旧バックアップも読み込める', () => {

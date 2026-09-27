@@ -20,6 +20,7 @@ import {
 
 import {
   createBackupFile,
+  getBackupOverview,
   loadLastBackupExportedAt,
   restoreBackup,
   saveLastBackupExportedAt,
@@ -173,6 +174,7 @@ export default function BackupScreen() {
       const selectedFile = new File(selectedAsset.uri);
       const savedBackup = await selectedFile.text();
       const backup = parseStudyPhotoBackup(savedBackup);
+      const backupOverview = getBackupOverview(backup);
       const exportedAt = new Date(
         backup.exportedAt
       ).toLocaleString('ja-JP');
@@ -187,7 +189,7 @@ export default function BackupScreen() {
 
       Alert.alert(
         'バックアップを復元しますか？',
-        `ファイル：${selectedAsset.name}\n作成日時：${exportedAt}\n選択中の学期：${academicTermLabel}\n\n現在の時間割と学習データは上書きされます。写真画像・写真情報・写真OCRは変更しません。`,
+        `ファイル：${selectedAsset.name}\n作成日時：${exportedAt}\n保存学期：${backupOverview.academicTermCount}学期\n選択中の学期：${academicTermLabel}\n授業まとめ：${backupOverview.lectureSummaryCount}件\n試験対策：${backupOverview.examPreparationCount}件\n\n現在の時間割と学習データは上書きされます。写真画像・写真情報・写真OCRは変更しません。`,
         [
           { text: 'キャンセル', style: 'cancel' },
           {

@@ -7,7 +7,10 @@ import {
   parseStudyPhotoBackup,
   restorableBackupStorageKeys,
 } from '@/types/backup';
-import { parseAcademicTerm } from '@/types/academic-term';
+import {
+  createAcademicTermId,
+  parseAcademicTerm,
+} from '@/types/academic-term';
 import {
   parseAcademicTimetables,
 } from '@/types/academic-timetable';
@@ -27,6 +30,7 @@ import {
   type PeriodTimes,
 } from '@/utils/period-times';
 import { parseTimetableDisplayOptions } from '@/utils/timetable-display-options';
+import type { StudyPhotoBackup } from '@/types/backup';
 
 
 const lastBackupExportedAtStorageKey =
@@ -177,6 +181,58 @@ const validateRestorableData = (
       storage.subjectQuestionRecords
     );
   }
+};
+
+
+export const getBackupOverview = (
+  backup: StudyPhotoBackup
+) => {
+  validateRestorableData(backup.storage);
+
+  const academicTerm = backup.storage.academicTerm === null
+    ? null
+    : parseAcademicTerm(backup.storage.academicTerm);
+  const academicTimetables =
+    backup.storage.academicTimetables === null
+      ? {}
+      : parseAcademicTimetables(
+          backup.storage.academicTimetables
+        );
+  const academicTermData =
+    backup.storage.academicTermData === null
+      ? {}
+      : parseAcademicTermData(
+          backup.storage.academicTermData
+        );
+  const academicTermIds = new Set([
+    ...(academicTerm === null
+      ? []
+      : [createAcademicTermId(academicTerm)]),
+    ...Object.keys(academicTimetables),
+    ...Object.keys(academicTermData),
+  ]);
+  const lectureSummaryCount =
+    backup.storage.lectureSummaryRecords === null
+      ? 0
+      : Object.keys(
+          parseLectureSummaryRecords(
+            backup.storage.lectureSummaryRecords
+          )
+        ).length;
+  const examPreparationCount =
+    backup.storage.examPreparationRecords === null
+      ? 0
+      : Object.keys(
+          parseExamPreparationRecords(
+            backup.storage.examPreparationRecords
+          )
+        ).length;
+
+  return {
+    academicTermCount: academicTermIds.size,
+    lectureSummaryCount,
+    examPreparationCount,
+  };
 };
 
 
