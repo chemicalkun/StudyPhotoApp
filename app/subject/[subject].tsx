@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import {
   router,
   Stack,
@@ -37,7 +39,10 @@ import {
   loadPhotoOcrRecords,
   savePhotoOcrRecord,
 } from '@/services/photo-ocr-storage';
-import { loadPhotoRecords } from '@/services/photo-storage';
+import {
+  loadPhotoRecords,
+  savePhotoFromUri,
+} from '@/services/photo-storage';
 import {
   isStudyPhotoVisionAvailable,
   recognizeText,
@@ -89,6 +94,12 @@ type LectureOcrItem = {
 };
 
 
+type LecturePhotoImportFeedback = {
+  message: string;
+  isError: boolean;
+};
+
+
 const getLectureOcrItems = (
   photos: PhotoRecord[],
   records: PhotoOcrRecords
@@ -103,6 +114,45 @@ const getLectureOcrItems = (
           record,
         }];
   });
+
+
+const getPhotoLabel = (photo: PhotoRecord) => {
+  if (photo.subject) {
+    return photo.subject;
+  }
+
+  if (
+    photo.period !== null &&
+    photo.day !== ''
+  ) {
+    return `${photo.day}曜${photo.period}限`;
+  }
+
+  return '未分類';
+};
+
+
+const getDateKeyFromDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+
+  return `${year}-${month}-${day}`;
+};
+
+
+const getDateKey = (photo: PhotoRecord) =>
+  getDateKeyFromDate(new Date(photo.takenAt));
+
+
+const getDateLabel = (photo: PhotoRecord) => {
+  const date = new Date(photo.takenAt);
+
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+
+  return `${month}/${day}`;
+};
 
 
 export default function SubjectScreen() {
@@ -156,43 +206,14 @@ export default function SubjectScreen() {
     useState('');
   const [lectureProcessingWarning, setLectureProcessingWarning] =
     useState('');
-
-
-  const getPhotoLabel = (photo: PhotoRecord) => {
-    if (photo.subject) {
-      return photo.subject;
-    }
-
-    if (
-      photo.period !== null &&
-      photo.day !== ''
-    ) {
-      return `${photo.day}曜${photo.period}限`;
-    }
-
-    return '未分類';
-  };
-
-
-  const getDateKey = (photo: PhotoRecord) => {
-    const date = new Date(photo.takenAt);
-
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-
-    return `${year}-${month}-${day}`;
-  };
-
-
-  const getDateLabel = (photo: PhotoRecord) => {
-    const date = new Date(photo.takenAt);
-
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-
-    return `${month}/${day}`;
-  };
+  const [importingLectureNumber, setImportingLectureNumber] =
+    useState<number | null>(null);
+  const [isLecturePhotoTargetVisible, setIsLecturePhotoTargetVisible] =
+    useState(false);
+  const [lecturePhotoImportFeedback, setLecturePhotoImportFeedback] =
+    useState<LecturePhotoImportFeedback | null>(null);
+  const [photoLibrarySettingsRequired, setPhotoLibrarySettingsRequired] =
+    useState(false);
 
 
   useFocusEffect(
@@ -676,6 +697,155 @@ export default function SubjectScreen() {
   };
 
 
+  const addLibraryPhotosToLecture = async (
+    section: LectureSection | null,
+    lectureNumber: number
+  ) => {
+    if (importingLectureNumber !== null) {
+      return;
+    }
+
+    setIsLecturePhotoTargetVisible(false);
+    setImportingLectureNumber(lectureNumber);
+    setLecturePhotoImportFeedback(null);
+    setPhotoLibrarySettingsRequired(false);
+
+    try {
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        setPhotoLibrarySettingsRequired(
+          !permissionResult.canAskAgain
+        );
+        setLecturePhotoImportFeedback({
+          message: permissionResult.canAskAgain
+            ? '写真ライブラリへのアクセスが必要です。'
+            : 'iPhoneの設定から写真ライブラリへのアクセスを許可してください。',
+          isError: true,
+        });
+        return;
+      }
+
+      const result =
+        await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsMultipleSelection: true,
+          selectionLimit: 20,
+          quality: 1,
+        });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const referencePhoto = section?.photos[0];
+      const latestLectureTimestamp = Math.max(
+        ...lectureGroups.flatMap((group) =>
+          group.photos.map((photo) =>
+            new Date(photo.takenAt).getTime()
+          )
+        )
+      );
+      const referenceDate = referencePhoto === undefined
+        ? new Date()
+        : new Date(referencePhoto.takenAt);
+
+      if (
+        referencePhoto === undefined &&
+        Number.isFinite(latestLectureTimestamp) &&
+        referenceDate.getTime() <= latestLectureTimestamp
+      ) {
+        referenceDate.setTime(latestLectureTimestamp);
+      }
+
+      if (referencePhoto === undefined) {
+        const existingDateKeys = new Set(
+          lectureGroups.map((group) => group.dateKey)
+        );
+
+        while (
+          existingDateKeys.has(
+            getDateKeyFromDate(referenceDate)
+          )
+        ) {
+          referenceDate.setDate(referenceDate.getDate() + 1);
+        }
+      }
+
+      if (Number.isNaN(referenceDate.getTime())) {
+        throw new Error('授業回の日付が不正です');
+      }
+
+      let savedCount = 0;
+      let failedCount = 0;
+
+      for (
+        let assetIndex = 0;
+        assetIndex < result.assets.length;
+        assetIndex += 1
+      ) {
+        const asset = result.assets[assetIndex];
+        const lectureDate = new Date(referenceDate);
+
+        // Keep all selected photos in one date group. A new group uses
+        // an estimated date after the latest imported lecture so the
+        // lecture list remains in the order in which groups were added.
+        lectureDate.setHours(23, 0, assetIndex, 0);
+
+        try {
+          await savePhotoFromUri({
+            sourceUri: asset.uri,
+            takenAt: lectureDate,
+            day: referencePhoto?.day ?? '',
+            period: referencePhoto?.period ?? null,
+            subject,
+            takenAtEstimated: true,
+          });
+          savedCount += 1;
+        } catch (error) {
+          failedCount += 1;
+          console.log(
+            '授業回へのライブラリ写真追加エラー:',
+            error
+          );
+        }
+      }
+
+      const messages = [
+        `第${lectureNumber}回に${savedCount}枚追加しました。`,
+      ];
+
+      if (failedCount > 0) {
+        messages.push(
+          `${failedCount}枚は追加できませんでした。`
+        );
+      }
+
+      setLecturePhotoImportFeedback({
+        message: messages.join('\n'),
+        isError: savedCount === 0,
+      });
+
+      if (savedCount > 0) {
+        setLoadRevision((revision) => revision + 1);
+      }
+    } catch (error) {
+      console.log(
+        '授業回への写真追加処理エラー:',
+        error
+      );
+      setLecturePhotoImportFeedback({
+        message:
+          '写真を追加できませんでした。もう一度お試しください。',
+        isError: true,
+      });
+    } finally {
+      setImportingLectureNumber(null);
+    }
+  };
+
+
   const sections: LectureSection[] =
     lectureGroups.map((group, index) => {
       const rows: PhotoRow[] = [];
@@ -787,6 +957,65 @@ export default function SubjectScreen() {
               {status}
             </Text>
 
+            {!isUnclassified ? (
+              <Pressable
+                style={[
+                  styles.addLecturePhotoButton,
+                  importingLectureNumber !== null &&
+                    styles.summaryButtonDisabled,
+                ]}
+                disabled={importingLectureNumber !== null}
+                accessibilityRole="button"
+                onPress={() => {
+                  setIsLecturePhotoTargetVisible(true);
+                  setLecturePhotoImportFeedback(null);
+                  setPhotoLibrarySettingsRequired(false);
+                }}
+              >
+                {importingLectureNumber !== null ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="white"
+                  />
+                ) : null}
+
+                <Text style={styles.addLecturePhotoButtonText}>
+                  {importingLectureNumber !== null
+                    ? `第${importingLectureNumber}回に追加中...`
+                    : '授業回を選んで写真を追加'}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {lecturePhotoImportFeedback !== null ? (
+              <View>
+                <Text
+                  style={
+                    lecturePhotoImportFeedback.isError
+                      ? styles.lecturePhotoImportError
+                      : styles.lecturePhotoImportSuccess
+                  }
+                >
+                  {lecturePhotoImportFeedback.message}
+                </Text>
+
+                {photoLibrarySettingsRequired ? (
+                  <Pressable
+                    style={styles.photoLibrarySettingsButton}
+                    onPress={() => {
+                      void Linking.openSettings();
+                    }}
+                  >
+                    <Text
+                      style={styles.photoLibrarySettingsButtonText}
+                    >
+                      iPhoneの設定を開く
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
             {loadError !== '' ? (
               <LoadErrorCard
                 message={loadError}
@@ -885,6 +1114,7 @@ export default function SubjectScreen() {
                     : 'まとめを作成'}
               </Text>
             </Pressable>
+
           </View>
         )}
         renderItem={({ item: row }) => (
@@ -939,6 +1169,88 @@ export default function SubjectScreen() {
           <View style={styles.lectureFooter} />
         )}
       />
+
+      <Modal
+        visible={isLecturePhotoTargetVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setIsLecturePhotoTargetVisible(false);
+        }}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.lectureTargetModalContent}>
+            <Text style={styles.modalTitle}>
+              追加先の授業回
+            </Text>
+
+            <Text style={styles.lectureTargetDescription}>
+              写真を追加する回を選んでください。まだ写真がない場合は、一番下の新しい回を選べます。
+            </Text>
+
+            <ScrollView
+              style={styles.lectureTargetList}
+              contentContainerStyle={styles.lectureTargetListContent}
+            >
+              {sections.map((section, index) => (
+                <Pressable
+                  key={section.dateKey}
+                  style={styles.lectureTargetButton}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    void addLibraryPhotosToLecture(
+                      section,
+                      index + 1
+                    );
+                  }}
+                >
+                  <Text style={styles.lectureTargetButtonTitle}>
+                    第{index + 1}回
+                  </Text>
+
+                  <Text style={styles.lectureTargetButtonDetail}>
+                    {section.dateLabel}・{section.photos.length}枚
+                  </Text>
+                </Pressable>
+              ))}
+
+              <Pressable
+                style={[
+                  styles.lectureTargetButton,
+                  styles.newLectureTargetButton,
+                ]}
+                accessibilityRole="button"
+                onPress={() => {
+                  void addLibraryPhotosToLecture(
+                    null,
+                    sections.length + 1
+                  );
+                }}
+              >
+                <Text style={styles.lectureTargetButtonTitle}>
+                  第{sections.length + 1}回
+                </Text>
+
+                <Text style={styles.newLectureTargetDetail}>
+                  写真未追加・新しい回
+                </Text>
+              </Pressable>
+            </ScrollView>
+
+            <Pressable
+              style={styles.closeButton}
+              accessibilityRole="button"
+              onPress={() => {
+                setIsLecturePhotoTargetVisible(false);
+              }}
+            >
+              <Text style={styles.closeButtonText}>
+                キャンセル
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={selectedLectureSection !== null}
@@ -1271,6 +1583,111 @@ const styles = StyleSheet.create({
   lectureOcrButtonText: {
     color: '#28794c',
     fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  addLecturePhotoButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#31518f',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: 12,
+  },
+
+  addLecturePhotoButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  lecturePhotoImportSuccess: {
+    color: '#28794c',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+
+  lecturePhotoImportError: {
+    color: '#9b2c2c',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+
+  photoLibrarySettingsButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#555',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+
+  photoLibrarySettingsButtonText: {
+    color: '#333',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  lectureTargetModalContent: {
+    maxHeight: '78%',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+  },
+
+  lectureTargetDescription: {
+    color: '#555',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+
+  lectureTargetList: {
+    flexShrink: 1,
+    marginTop: 14,
+  },
+
+  lectureTargetListContent: {
+    gap: 8,
+  },
+
+  lectureTargetButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f3f6ff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+
+  newLectureTargetButton: {
+    backgroundColor: '#eef8f2',
+    borderColor: '#9bc9aa',
+  },
+
+  lectureTargetButtonTitle: {
+    color: '#111',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  lectureTargetButtonDetail: {
+    color: '#555',
+    fontSize: 13,
+  },
+
+  newLectureTargetDetail: {
+    color: '#28794c',
+    fontSize: 13,
     fontWeight: 'bold',
   },
 

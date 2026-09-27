@@ -30,7 +30,10 @@ import {
   parseTimetable,
   type Timetable,
 } from '@/utils/classification';
-import { getTimetableSubjectSlots } from '@/utils/timetable-subject';
+import {
+  getTimetableSubjectSlots,
+  getUniqueTimetableSubjects,
+} from '@/utils/timetable-subject';
 import { timetableDays } from '@/utils/timetable-recognition';
 
 
@@ -146,9 +149,16 @@ export default function HomeScreen() {
         });
 
 
-  const subjectGroups = Object.entries(
-    groupPhotosBySubject(photos)
-  ).sort(([firstSubject], [secondSubject]) => {
+  const photosBySubject = groupPhotosBySubject(photos);
+  const subjectGroups = [
+    ...new Set([
+      ...getUniqueTimetableSubjects(timetable),
+      ...Object.keys(photosBySubject),
+    ]),
+  ].map((subject) => [
+    subject,
+    photosBySubject[subject] ?? [],
+  ] as const).sort(([firstSubject], [secondSubject]) => {
     const firstSlot = getTimetableSubjectSlots(
       timetable,
       firstSubject
