@@ -7,6 +7,7 @@ import {
   parsePhotoRecords,
   type PhotoRecord,
 } from '@/types/photo';
+import { summarizePhotoClassifications } from '@/utils/photo-import-summary';
 
 
 const createPhoto = (
@@ -23,6 +24,17 @@ const createPhoto = (
 
 
 describe('写真の授業分類', () => {
+  test('複数写真の分類結果を授業ごとにまとめる', () => {
+    expect(summarizePhotoClassifications([
+      '月曜日 2限：有機化学',
+      '月曜日 2限：有機化学',
+      '火曜日 1限：英語',
+    ])).toEqual([
+      '月曜日 2限：有機化学（2枚）',
+      '火曜日 1限：英語（1枚）',
+    ]);
+  });
+
   test('授業名がない写真を未分類と判定する', () => {
     expect(isUnclassifiedPhoto(
       createPhoto('photo-1', null)

@@ -9,6 +9,7 @@ import {
 
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
+import { router } from 'expo-router';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -22,10 +23,13 @@ import {
 } from '@/utils/classification';
 import { savePhotoFromUri } from '@/services/photo-storage';
 import { loadTimetableDisplayOptions } from '@/utils/timetable-display-options';
+import { summarizePhotoClassifications } from '@/utils/photo-import-summary';
 
 export default function LibraryScreen() {
   const [message, setMessage] = useState('');
   const [importing, setImporting] = useState(false);
+  const [importedPhotoCount, setImportedPhotoCount] =
+    useState(0);
   const [settingsRequired, setSettingsRequired] =
     useState(false);
 
@@ -35,6 +39,8 @@ export default function LibraryScreen() {
     }
 
     setImporting(true);
+    setImportedPhotoCount(0);
+    setMessage('');
 
     try {
       const permissionResult =
@@ -96,9 +102,6 @@ export default function LibraryScreen() {
 
         if (!selectedPhoto.assetId) {
           failedCount += 1;
-          classificationResults.push(
-            '撮影日時を取得できず、保存できませんでした'
-          );
           continue;
         }
 
@@ -140,9 +143,6 @@ export default function LibraryScreen() {
           console.log('保存した写真:', savedPhoto);
         } catch (photoError) {
           failedCount += 1;
-          classificationResults.push(
-            '1枚の写真を保存できませんでした'
-          );
 
           console.log(
             'ライブラリ写真保存エラー:',
@@ -161,8 +161,14 @@ export default function LibraryScreen() {
         );
       }
 
+      setImportedPhotoCount(savedCount);
       setMessage(
-        [...summary, ...classificationResults]
+        [
+          ...summary,
+          ...summarizePhotoClassifications(
+            classificationResults
+          ),
+        ]
           .join('\n')
       );
     } catch (error) {
@@ -205,6 +211,25 @@ export default function LibraryScreen() {
       <Text style={styles.message}>
         {message}
       </Text>
+
+      {importedPhotoCount > 0 ? (
+        <Pressable
+          style={styles.confirmButton}
+          accessibilityRole="button"
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+              return;
+            }
+
+            router.replace('/(tabs)');
+          }}
+        >
+          <Text style={styles.confirmButtonText}>
+            ホームで保存結果を確認
+          </Text>
+        </Pressable>
+      ) : null}
 
       {settingsRequired ? (
         <Pressable
@@ -280,6 +305,19 @@ const styles = StyleSheet.create({
 
   settingsButtonText: {
     color: '#333',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  confirmButton: {
+    alignSelf: 'center',
+    backgroundColor: '#31518f',
+    borderRadius: 9,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    marginTop: 16,
+  },
+  confirmButtonText: {
+    color: 'white',
     fontSize: 14,
     fontWeight: 'bold',
   },

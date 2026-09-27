@@ -14,6 +14,7 @@ import {
 } from 'expo-camera';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 
 import {
   loadPeriodTimes,
@@ -38,6 +39,7 @@ export default function CameraScreen() {
 
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [savedPhotoCount, setSavedPhotoCount] = useState(0);
 
 
   useEffect(() => {
@@ -105,10 +107,12 @@ export default function CameraScreen() {
         period: classInfo.period,
         subject: classInfo.subject,
       });
+      const nextSavedPhotoCount = savedPhotoCount + 1;
 
       setMessage(
-        `写真を保存しました\n${classInfo.label}`
+        `写真を保存しました（${nextSavedPhotoCount}枚目）\n${classInfo.label}`
       );
+      setSavedPhotoCount(nextSavedPhotoCount);
 
       console.log('保存した写真:', savedPhoto);
     } catch (error) {
@@ -182,6 +186,25 @@ export default function CameraScreen() {
         >
           <View style={styles.shutterInner} />
         </Pressable>
+
+        {savedPhotoCount > 0 ? (
+          <Pressable
+            style={styles.confirmButton}
+            accessibilityRole="button"
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+                return;
+              }
+
+              router.replace('/(tabs)');
+            }}
+          >
+            <Text style={styles.confirmButtonText}>
+              ホームで保存結果を確認
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -221,6 +244,21 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     backgroundColor: 'white',
+  },
+
+  confirmButton: {
+    borderWidth: 1,
+    borderColor: 'white',
+    borderRadius: 9,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 16,
+  },
+
+  confirmButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 
   disabledButton: {
