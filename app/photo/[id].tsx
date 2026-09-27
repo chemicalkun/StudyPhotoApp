@@ -55,6 +55,7 @@ import {
   isStudyPhotoVisionAvailable,
   recognizeText,
 } from '@/modules/study-photo-vision';
+import { assignPhotoToLecture } from '@/utils/photo-lecture';
 
 
 const swipeDistance = 60;
@@ -129,6 +130,9 @@ export default function PhotoScreen() {
     savingClassification,
     setSavingClassification,
   ] = useState(false);
+  const [lectureMoveModalVisible, setLectureMoveModalVisible] =
+    useState(false);
+  const [movingLecture, setMovingLecture] = useState(false);
   const [errorMessage, setErrorMessage] =
     useState('');
   const [loadFailed, setLoadFailed] =
@@ -727,6 +731,91 @@ export default function PhotoScreen() {
   };
 
 
+  const movePhotoToLecture = async (
+    targetLectureDateKey: string
+  ) => {
+    if (!photo || movingLecture) {
+      return;
+    }
+
+    const targetLecturePhoto = lecturePhotos.find(
+      (item) =>
+        getDateKey(item.takenAt) === targetLectureDateKey
+    );
+
+    if (targetLecturePhoto === undefined) {
+      Alert.alert(
+        '授業回を変更できませんでした',
+        '移動先の授業回が見つかりません。'
+      );
+      return;
+    }
+
+    setMovingLecture(true);
+
+    try {
+      const savedPhotos =
+        await AsyncStorage.getItem('photos');
+
+      if (savedPhotos === null) {
+        throw new Error('写真データがありません');
+      }
+
+      const photos = parsePhotoRecords(savedPhotos);
+      const movedPhoto = assignPhotoToLecture(
+        photo,
+        targetLecturePhoto
+      );
+      let photoFound = false;
+      const updatedPhotos = photos.map((item) => {
+        if (item.id !== photo.id) {
+          return item;
+        }
+
+        photoFound = true;
+        return movedPhoto;
+      });
+
+      if (!photoFound) {
+        throw new Error('移動する写真が見つかりません');
+      }
+
+      await AsyncStorage.setItem(
+        'photos',
+        JSON.stringify(updatedPhotos)
+      );
+
+      const updatedLecturePhotos = lecturePhotos
+        .map((item) =>
+          item.id === movedPhoto.id ? movedPhoto : item
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.takenAt).getTime() -
+            new Date(b.takenAt).getTime()
+        );
+
+      setPhoto(movedPhoto);
+      setLecturePhotos(updatedLecturePhotos);
+      setLectureMoveModalVisible(false);
+      translateX.setValue(0);
+
+      Alert.alert(
+        '授業回を変更しました',
+        'まとめ作成後の回に写真を移動した場合は、対象のまとめが更新必要として扱われます。'
+      );
+    } catch (error) {
+      console.log('授業回変更エラー:', error);
+      Alert.alert(
+        '授業回を変更できませんでした',
+        '写真の移動を保存する際にエラーが発生しました。'
+      );
+    } finally {
+      setMovingLecture(false);
+    }
+  };
+
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -948,6 +1037,20 @@ export default function PhotoScreen() {
               </Text>
             </Pressable>
 
+            {!isUnclassifiedPhoto(photo) &&
+            lectureDateKeys.length > 1 ? (
+              <Pressable
+                style={styles.lectureMoveButton}
+                onPress={() => {
+                  setLectureMoveModalVisible(true);
+                }}
+              >
+                <Text style={styles.lectureMoveButtonText}>
+                  授業回を変更
+                </Text>
+              </Pressable>
+            ) : null}
+
             <Pressable
               style={[
                 styles.deleteButton,
@@ -965,6 +1068,112 @@ export default function PhotoScreen() {
           </View>
         </>
       ) : null}
+
+      <Modal
+        visible={lectureMoveModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!movingLecture) {
+            setLectureMoveModalVisible(false);
+          }
+        }}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.lectureMoveModalContent}>
+            <Text style={styles.modalTitle}>
+              授業回を変更
+            </Text>
+
+            <Text style={styles.modalDescription}>
+              この写真を移動する授業回を選んでください。
+            </Text>
+
+            <ScrollView style={styles.lectureMoveList}>
+              {lectureDateKeys.map((dateKey, index) => {
+                const representativePhoto =
+                  lecturePhotos.find(
+                    (item) =>
+                      getDateKey(item.takenAt) === dateKey
+                  );
+                const isCurrent =
+                  dateKey === currentLectureDateKey;
+                const lecturePhotoCount =
+                  lecturePhotos.filter(
+                    (item) =>
+                      getDateKey(item.takenAt) === dateKey
+                  ).length;
+
+                return (
+                  <Pressable
+                    key={dateKey}
+                    style={[
+                      styles.lectureMoveTarget,
+                      isCurrent &&
+                        styles.lectureMoveTargetCurrent,
+                    ]}
+                    disabled={isCurrent || movingLecture}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isCurrent }}
+                    onPress={() => {
+                      void movePhotoToLecture(dateKey);
+                    }}
+                  >
+                    <View>
+                      <Text style={styles.lectureMoveTargetTitle}>
+                        第{index + 1}回
+                      </Text>
+
+                      <Text style={styles.lectureMoveTargetDetail}>
+                        {representativePhoto === undefined
+                          ? dateKey
+                          : new Date(
+                              representativePhoto.takenAt
+                            ).toLocaleDateString('ja-JP', {
+                              month: 'numeric',
+                              day: 'numeric',
+                            })}
+                        ・{lecturePhotoCount}枚
+                      </Text>
+                    </View>
+
+                    <Text style={styles.lectureMoveTargetStatus}>
+                      {isCurrent
+                        ? '現在の回'
+                        : 'ここへ移動'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {movingLecture ? (
+              <View style={styles.lectureMoveProgress}>
+                <ActivityIndicator
+                  size="small"
+                  color="#3478f6"
+                />
+
+                <Text style={styles.lectureMoveProgressText}>
+                  授業回を変更中...
+                </Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              style={styles.cancelButton}
+              disabled={movingLecture}
+              onPress={() => {
+                setLectureMoveModalVisible(false);
+              }}
+            >
+              <Text style={styles.cancelButtonText}>
+                キャンセル
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={classificationModalVisible}
@@ -1333,6 +1542,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  lectureMoveButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#8ba8e5',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    marginTop: 10,
+  },
+
+  lectureMoveButtonText: {
+    color: '#a9c0f0',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
   deleteButton: {
     alignSelf: 'flex-start',
     borderWidth: 1,
@@ -1364,6 +1589,67 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 22,
+  },
+
+  lectureMoveModalContent: {
+    maxHeight: '78%',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 22,
+  },
+
+  lectureMoveList: {
+    flexShrink: 1,
+    marginTop: 16,
+  },
+
+  lectureMoveTarget: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f3f6ff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+
+  lectureMoveTargetCurrent: {
+    backgroundColor: '#eee',
+    borderColor: '#ccc',
+  },
+
+  lectureMoveTargetTitle: {
+    color: '#111',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  lectureMoveTargetDetail: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 3,
+  },
+
+  lectureMoveTargetStatus: {
+    color: '#31518f',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  lectureMoveProgress: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
+
+  lectureMoveProgressText: {
+    color: '#555',
+    fontSize: 13,
   },
 
   textRecognitionModalContent: {
