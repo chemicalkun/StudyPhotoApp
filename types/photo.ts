@@ -13,6 +13,7 @@ export type PhotoRecord = {
   period: number | null;
   subject: string | null;
   academicTerm?: AcademicTerm;
+  takenAtEstimated?: boolean;
 };
 
 
@@ -123,6 +124,10 @@ export const isPhotoRecord = (
     (
       photo.academicTerm === undefined ||
       isAcademicTerm(photo.academicTerm)
+    ) &&
+    (
+      photo.takenAtEstimated === undefined ||
+      typeof photo.takenAtEstimated === 'boolean'
     )
   );
 };

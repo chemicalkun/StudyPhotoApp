@@ -23,6 +23,10 @@ export const reclassifyPhotosForSchedule = (
   let updatedCount = 0;
 
   const updatedPhotos = photos.map((photo) => {
+    if (photo.takenAtEstimated === true) {
+      return photo;
+    }
+
     const timetableSubject = photo.period === null
       ? null
       : timetable[

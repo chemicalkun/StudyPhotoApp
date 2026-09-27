@@ -82,6 +82,7 @@ type SavePhotoFromUriInput = {
   day: string;
   period: number | null;
   subject: string | null;
+  takenAtEstimated?: boolean;
 };
 
 
@@ -91,6 +92,7 @@ export const savePhotoFromUri = async ({
   day,
   period,
   subject,
+  takenAtEstimated = false,
 }: SavePhotoFromUriInput) => {
   if (Number.isNaN(takenAt.getTime())) {
     throw new Error('撮影日時が不正です');
@@ -117,6 +119,9 @@ export const savePhotoFromUri = async ({
       period,
       subject,
       academicTerm: await loadAcademicTerm(),
+      ...(takenAtEstimated
+        ? { takenAtEstimated: true }
+        : {}),
     };
 
     const photos = await loadPhotoRecords();

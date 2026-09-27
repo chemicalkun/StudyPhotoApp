@@ -8,6 +8,7 @@ import {
   type PhotoRecord,
 } from '@/types/photo';
 import { summarizePhotoClassifications } from '@/utils/photo-import-summary';
+import { getExifTakenAt } from '@/utils/photo-metadata';
 
 
 const createPhoto = (
@@ -33,6 +34,21 @@ describe('写真の授業分類', () => {
       '月曜日 2限：有機化学（2枚）',
       '火曜日 1限：英語（1枚）',
     ]);
+  });
+
+  test('EXIFの撮影日時を読み取る', () => {
+    const takenAt = getExifTakenAt({
+      DateTimeOriginal: '2026:09:27 10:45:30',
+    });
+
+    expect(takenAt).not.toBeNull();
+    expect(takenAt?.getFullYear()).toBe(2026);
+    expect(takenAt?.getMonth()).toBe(8);
+    expect(takenAt?.getDate()).toBe(27);
+    expect(takenAt?.getHours()).toBe(10);
+    expect(getExifTakenAt({
+      DateTimeOriginal: 'invalid',
+    })).toBeNull();
   });
 
   test('授業名がない写真を未分類と判定する', () => {
@@ -99,6 +115,18 @@ describe('写真の授業分類', () => {
       parsePhotoRecords(JSON.stringify([photo]))[0]
         .academicTerm
     ).toEqual({ academicYear: 2026, term: '通年' });
+  });
+
+  test('撮影日時を推定した写真を読み込む', () => {
+    const photo = {
+      ...createPhoto('estimated-photo', null),
+      takenAtEstimated: true,
+    };
+
+    expect(
+      parsePhotoRecords(JSON.stringify([photo]))[0]
+        .takenAtEstimated
+    ).toBe(true);
   });
 
   test('旧い写真は撮影日から学期を補完する', () => {

@@ -24,6 +24,7 @@ import {
 import { savePhotoFromUri } from '@/services/photo-storage';
 import { loadTimetableDisplayOptions } from '@/utils/timetable-display-options';
 import { summarizePhotoClassifications } from '@/utils/photo-import-summary';
+import { getExifTakenAt } from '@/utils/photo-metadata';
 
 export default function LibraryScreen() {
   const [message, setMessage] = useState('');
@@ -100,46 +101,63 @@ export default function LibraryScreen() {
           `${index + 1}/${result.assets.length}枚を処理中...`
         );
 
-        if (!selectedPhoto.assetId) {
-          failedCount += 1;
-          continue;
-        }
-
         try {
-          const assetInfo =
-            await MediaLibrary.getAssetInfoAsync(
-              selectedPhoto.assetId
-            );
-
-          const takenAt = new Date(
-            assetInfo.creationTime
+          let takenAt = getExifTakenAt(
+            selectedPhoto.exif
           );
 
-          if (Number.isNaN(takenAt.getTime())) {
-            throw new Error('撮影日時が不正です');
+          if (selectedPhoto.assetId) {
+            try {
+              const assetInfo =
+                await MediaLibrary.getAssetInfoAsync(
+                  selectedPhoto.assetId
+                );
+              const assetTakenAt = new Date(
+                assetInfo.creationTime
+              );
+
+              if (!Number.isNaN(assetTakenAt.getTime())) {
+                takenAt = assetTakenAt;
+              }
+            } catch (metadataError) {
+              console.log(
+                '写真メタデータ取得エラー:',
+                metadataError
+              );
+            }
           }
 
-          const classInfo = classifyClassTime(
-            getDayName(takenAt),
-            takenAt.getHours(),
-            takenAt.getMinutes(),
-            configuredPeriodTimes,
-            timetable,
-            displayOptions
-          );
+          const hasOriginalTakenAt = takenAt !== null;
+          const savedTakenAt = takenAt ?? new Date();
+          const classInfo = hasOriginalTakenAt
+            ? classifyClassTime(
+                getDayName(savedTakenAt),
+                savedTakenAt.getHours(),
+                savedTakenAt.getMinutes(),
+                configuredPeriodTimes,
+                timetable,
+                displayOptions
+              )
+            : {
+                day: '',
+                period: null,
+                subject: null,
+                label: '撮影日時不明：未分類',
+              };
 
           const savedPhoto = await savePhotoFromUri({
             sourceUri: selectedPhoto.uri,
-            takenAt,
+            takenAt: savedTakenAt,
             day: classInfo.day,
             period: classInfo.period,
             subject: classInfo.subject,
+            takenAtEstimated: !hasOriginalTakenAt,
           });
 
           savedCount += 1;
           classificationResults.push(classInfo.label);
 
-          console.log('撮影日時:', takenAt);
+          console.log('撮影日時:', savedTakenAt);
           console.log('保存した写真:', savedPhoto);
         } catch (photoError) {
           failedCount += 1;
