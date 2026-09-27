@@ -50,6 +50,21 @@ export const groupPhotosBySubject = (
   );
 
 
+export const getPhotoLectureCount = (
+  photos: PhotoRecord[]
+) => new Set(
+  photos.map((photo) => {
+    const date = new Date(photo.takenAt);
+
+    return [
+      date.getFullYear(),
+      date.getMonth() + 1,
+      date.getDate(),
+    ].join('-');
+  })
+).size;
+
+
 export const getPhotoAcademicTerm = (
   photo: PhotoRecord
 ): AcademicTerm | null => {

@@ -1,5 +1,6 @@
 import {
   groupPhotosBySubject,
+  getPhotoLectureCount,
   getPhotoAcademicTerm,
   isUnclassifiedPhoto,
   parsePhotoRecords,
@@ -41,6 +42,20 @@ describe('写真の授業分類', () => {
 
     expect(Object.keys(groups)).toEqual(['高分子化学']);
     expect(groups['高分子化学']).toHaveLength(1);
+  });
+
+  test('同じ日の写真を1回分の授業として数える', () => {
+    expect(getPhotoLectureCount([
+      createPhoto('first', '高分子化学'),
+      {
+        ...createPhoto('same-day', '高分子化学'),
+        takenAt: '2026-09-23T10:30:00.000Z',
+      },
+      {
+        ...createPhoto('next-week', '高分子化学'),
+        takenAt: '2026-09-30T09:30:00.000Z',
+      },
+    ])).toBe(2);
   });
 
   test('新しい写真の学期情報を読み込む', () => {

@@ -20,6 +20,7 @@ import {
 } from '@/types/academic-term';
 import {
   groupPhotosBySubject,
+  getPhotoLectureCount,
   isUnclassifiedPhoto,
   parsePhotoRecords,
   PhotoRecord,
@@ -349,6 +350,7 @@ export default function HomeScreen() {
 
                   <Text style={styles.subjectCount}>
                     {subjectSlotLabel}
+                    {getPhotoLectureCount(subjectPhotos)}回分・
                     {subjectPhotos.length}枚
                   </Text>
                 </View>
