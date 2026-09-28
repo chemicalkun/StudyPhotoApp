@@ -2,6 +2,7 @@ import type { PhotoRecord } from '@/types/photo';
 import {
   countSelectedPhotosToMove,
   getFullySelectedLectureSummaryIds,
+  getPhotosForBulkRecognition,
   moveSelectedPhotosToLecture,
   removeSelectedPhotos,
   updateSelectedPhotoSubjects,
@@ -140,5 +141,29 @@ describe('photo bulk actions', () => {
         '統計学'
       )
     ).toEqual([firstSummaryId]);
+  });
+
+  it('一括文字認識で認識済みの写真を上書きしない', () => {
+    const ocrRecords = {
+      'photo-1': {
+        photoId: 'photo-1',
+        text: '手動修正済み',
+        blocks: [],
+        recognizedAt: '2026-09-07T01:00:00.000Z',
+        manuallyEdited: true,
+      },
+    };
+
+    expect(
+      getPhotosForBulkRecognition(photos, ocrRecords)
+        .map((photo) => photo.id)
+    ).toEqual(['photo-2', 'photo-3']);
+    expect(
+      getPhotosForBulkRecognition(
+        photos,
+        ocrRecords,
+        true
+      ).map((photo) => photo.id)
+    ).toEqual(['photo-1', 'photo-2', 'photo-3']);
   });
 });

@@ -1,4 +1,5 @@
 import type { PhotoRecord } from '@/types/photo';
+import type { PhotoOcrRecords } from '@/types/photo-ocr';
 import {
   getLectureSummarySourcePhotoIds,
   type LectureSummaryRecords,
@@ -108,3 +109,14 @@ export const getFullySelectedLectureSummaryIds = (
       : [];
   });
 };
+
+
+export const getPhotosForBulkRecognition = (
+  selectedPhotos: PhotoRecord[],
+  ocrRecords: PhotoOcrRecords,
+  overwriteRecognized = false
+) => overwriteRecognized
+  ? selectedPhotos
+  : selectedPhotos.filter(
+      (photo) => ocrRecords[photo.id] === undefined
+    );

@@ -7,6 +7,7 @@ import {
   PanResponder,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -580,6 +581,36 @@ export default function PhotoScreen() {
       );
     } finally {
       setSavingRecognitionEdit(false);
+    }
+  };
+
+
+  const shareRecognitionResult = async () => {
+    if (
+      photo === null ||
+      currentPhotoOcrRecord === null
+    ) {
+      return;
+    }
+
+    try {
+      await Share.share({
+        title: `${getPhotoLabel(photo)} 写真の認識結果`,
+        message: [
+          getPhotoLabel(photo),
+          getTakenAtLabel(
+            photo.originalTakenAt ?? photo.takenAt
+          ),
+          '',
+          currentPhotoOcrRecord.text,
+        ].join('\n'),
+      });
+    } catch (error) {
+      console.log('OCR結果共有エラー:', error);
+      Alert.alert(
+        '共有できませんでした',
+        '認識結果を共有する際にエラーが発生しました。'
+      );
     }
   };
 
@@ -1498,14 +1529,29 @@ export default function PhotoScreen() {
                   )}
                 </ScrollView>
 
-                <Pressable
-                  style={styles.editRecognitionButton}
-                  onPress={startEditingRecognition}
-                >
-                  <Text style={styles.editRecognitionButtonText}>
-                    認識結果を編集
-                  </Text>
-                </Pressable>
+                <View style={styles.recognitionResultActions}>
+                  <Pressable
+                    style={styles.editRecognitionButton}
+                    accessibilityRole="button"
+                    onPress={startEditingRecognition}
+                  >
+                    <Text style={styles.editRecognitionButtonText}>
+                      認識結果を編集
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.shareRecognitionButton}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      void shareRecognitionResult();
+                    }}
+                  >
+                    <Text style={styles.shareRecognitionButtonText}>
+                      認識結果を共有
+                    </Text>
+                  </Pressable>
+                </View>
               </>
             ) : null}
 
@@ -1879,18 +1925,43 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
+  recognitionResultActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+
   editRecognitionButton: {
+    flex: 1,
     backgroundColor: '#eef3ff',
     borderWidth: 1,
     borderColor: '#aebee6',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginTop: 8,
+    justifyContent: 'center',
   },
 
   editRecognitionButtonText: {
     color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  shareRecognitionButton: {
+    flex: 1,
+    backgroundColor: '#eef8f2',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: 'center',
+  },
+
+  shareRecognitionButtonText: {
+    color: '#28794c',
     fontSize: 14,
     fontWeight: 'bold',
     textAlign: 'center',

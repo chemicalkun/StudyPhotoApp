@@ -77,6 +77,7 @@ import { getUniqueTimetableSubjects } from '@/utils/timetable-subject';
 import {
   countSelectedPhotosToMove,
   getFullySelectedLectureSummaryIds,
+  getPhotosForBulkRecognition,
   moveSelectedPhotosToLecture,
   removeSelectedPhotos,
   updateSelectedPhotoSubjects,
@@ -124,6 +125,12 @@ type BulkOperation =
   | 'classification'
   | 'lecture'
   | 'delete';
+
+
+type BulkOcrProgress = {
+  completed: number;
+  total: number;
+};
 
 
 const getLectureOcrItems = (
@@ -246,6 +253,8 @@ export default function SubjectScreen() {
     useState<Set<string>>(new Set());
   const [bulkOperation, setBulkOperation] =
     useState<BulkOperation | null>(null);
+  const [bulkOcrProgress, setBulkOcrProgress] =
+    useState<BulkOcrProgress | null>(null);
   const [bulkLectureModalVisible, setBulkLectureModalVisible] =
     useState(false);
   const [bulkClassificationModalVisible, setBulkClassificationModalVisible] =
@@ -1090,7 +1099,9 @@ export default function SubjectScreen() {
   };
 
 
-  const recognizeSelectedPhotos = async () => {
+  const recognizeSelectedPhotos = async (
+    overwriteRecognized = false
+  ) => {
     if (
       selectedPhotoCount === 0 ||
       bulkOperation !== null
@@ -1106,13 +1117,43 @@ export default function SubjectScreen() {
       return;
     }
 
+    const photosToRecognize = getPhotosForBulkRecognition(
+      selectedPhotos,
+      photoOcrRecords,
+      overwriteRecognized
+    );
+    const skippedCount =
+      selectedPhotoCount - photosToRecognize.length;
+
+    if (photosToRecognize.length === 0) {
+      Alert.alert(
+        '選択した写真はすべて認識済みです',
+        '保存済みの認識結果を上書きして、文字認識をやり直しますか？',
+        [
+          { text: 'キャンセル', style: 'cancel' },
+          {
+            text: 'やり直す',
+            onPress: () => {
+              void recognizeSelectedPhotos(true);
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setBulkOperation('ocr');
+    setBulkOcrProgress({
+      completed: 0,
+      total: photosToRecognize.length,
+    });
     let recognizedCount = 0;
     let failedCount = 0;
+    let completedCount = 0;
     const updatedOcrRecords = { ...photoOcrRecords };
 
     try {
-      for (const selectedPhoto of selectedPhotos) {
+      for (const selectedPhoto of photosToRecognize) {
         try {
           const blocks = await recognizeText(
             selectedPhoto.uri
@@ -1134,18 +1175,39 @@ export default function SubjectScreen() {
         } catch (error) {
           failedCount += 1;
           console.log('一括文字認識エラー:', error);
+        } finally {
+          completedCount += 1;
+          setBulkOcrProgress({
+            completed: completedCount,
+            total: photosToRecognize.length,
+          });
         }
       }
 
       finishPhotoSelection();
+      const resultMessages = [
+        `${recognizedCount}枚の写真を認識しました。`,
+      ];
+
+      if (skippedCount > 0) {
+        resultMessages.push(
+          `認識済みの${skippedCount}枚は上書きせず保持しました。`
+        );
+      }
+
+      if (failedCount > 0) {
+        resultMessages.push(
+          `${failedCount}枚は認識できませんでした。`
+        );
+      }
+
       Alert.alert(
         '文字認識が完了しました',
-        failedCount === 0
-          ? `${recognizedCount}枚の写真を認識しました。`
-          : `${recognizedCount}枚を認識し、${failedCount}枚は認識できませんでした。`
+        resultMessages.join('\n')
       );
     } finally {
       setBulkOperation(null);
+      setBulkOcrProgress(null);
     }
   };
 
@@ -1492,7 +1554,10 @@ export default function SubjectScreen() {
               }}
             >
               <Text style={styles.bulkActionButtonText}>
-                文字認識
+                {bulkOperation === 'ocr' &&
+                bulkOcrProgress !== null
+                  ? `文字認識 ${bulkOcrProgress.completed}/${bulkOcrProgress.total}`
+                  : '文字認識'}
               </Text>
             </Pressable>
 
@@ -1857,6 +1922,17 @@ export default function SubjectScreen() {
                       }}
                     />
                   )}
+
+                  {photoOcrRecords[photo.id] !== undefined ? (
+                    <View style={styles.photoOcrBadge}>
+                      <Text style={styles.photoOcrBadgeText}>
+                        {photoOcrRecords[photo.id]
+                          .manuallyEdited
+                          ? '編集済'
+                          : 'OCR'}
+                      </Text>
+                    </View>
+                  ) : null}
 
                   {isSelectingPhotos ? (
                     <View
@@ -3009,6 +3085,22 @@ const styles = StyleSheet.create({
   selectedPhotoButton: {
     borderWidth: 3,
     borderColor: '#31518f',
+  },
+
+  photoOcrBadge: {
+    position: 'absolute',
+    left: 6,
+    bottom: 6,
+    backgroundColor: 'rgba(40, 121, 76, 0.9)',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+
+  photoOcrBadgeText: {
+    color: 'white',
+    fontSize: 9,
+    fontWeight: 'bold',
   },
 
   photoSelectionIndicator: {
