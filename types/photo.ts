@@ -16,6 +16,7 @@ export type PhotoRecord = {
   takenAtEstimated?: boolean;
   originalTakenAt?: string;
   lectureOrder?: number;
+  isImportant?: boolean;
 };
 
 
@@ -141,6 +142,10 @@ export const isPhotoRecord = (
         Number.isInteger(photo.lectureOrder) &&
         photo.lectureOrder >= 0
       )
+    ) &&
+    (
+      photo.isImportant === undefined ||
+      typeof photo.isImportant === 'boolean'
     )
   );
 };

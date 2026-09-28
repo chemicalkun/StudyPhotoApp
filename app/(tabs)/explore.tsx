@@ -64,7 +64,11 @@ import type {
   LectureSummaryRecord,
 } from '@/types/lecture-summary';
 import type { PhotoOcrRecords } from '@/types/photo-ocr';
-import { searchRecognizedPhotos } from '@/types/photo-search';
+import {
+  matchesStudySearchText,
+  normalizeStudySearchText,
+  searchRecognizedPhotos,
+} from '@/types/photo-search';
 import {
   isUnclassifiedPhoto,
   type PhotoRecord,
@@ -97,6 +101,9 @@ type SubjectClassSlot = {
   day: TimetableDay;
   period: number;
 };
+
+
+const photoSearchPageSize = 20;
 
 
 const getDateLabel = (dateKey: string) => {
@@ -190,6 +197,8 @@ export default function ReviewScreen() {
   const [selectedLectureSubject, setSelectedLectureSubject] =
     useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [photoSearchLimit, setPhotoSearchLimit] =
+    useState(photoSearchPageSize);
   const [examPreparationRecords, setExamPreparationRecords] =
     useState<ExamPreparationRecords>({});
   const [practiceQuestionRecords, setPracticeQuestionRecords] =
@@ -327,13 +336,19 @@ export default function ReviewScreen() {
       )
       .map((photo) => getPhotoDateKey(photo.takenAt))
   ).size;
-  const normalizedSearchQuery = searchQuery
-    .trim()
-    .toLocaleLowerCase('ja-JP');
-  const photoSearchResults = searchRecognizedPhotos(
+  const normalizedSearchQuery =
+    normalizeStudySearchText(searchQuery);
+  const photoSearchMatches = searchRecognizedPhotos(
     photos,
     photoOcrRecords,
-    searchQuery
+    searchQuery,
+    photoSearchLimit + 1
+  );
+  const hasMorePhotoSearchResults =
+    photoSearchMatches.length > photoSearchLimit;
+  const photoSearchResults = photoSearchMatches.slice(
+    0,
+    photoSearchLimit
   );
   const summaryMatchesSearch = (
     summary: LectureSummaryRecord
@@ -342,16 +357,13 @@ export default function ReviewScreen() {
       return true;
     }
 
-    return (
-      summary.subject
-        .toLocaleLowerCase('ja-JP')
-        .includes(normalizedSearchQuery) ||
-      summary.text
-        .toLocaleLowerCase('ja-JP')
-        .includes(normalizedSearchQuery) ||
-      getDateLabel(summary.dateKey)
-        .toLocaleLowerCase('ja-JP')
-        .includes(normalizedSearchQuery)
+    return matchesStudySearchText(
+      [
+        summary.subject,
+        summary.text,
+        getDateLabel(summary.dateKey),
+      ].join('\n'),
+      searchQuery
     );
   };
   const subjectMatchesSelectedDay = (
@@ -369,11 +381,15 @@ export default function ReviewScreen() {
     .filter(
       ([groupSubject, subjectSummaries]) =>
         subjectMatchesSelectedDay(groupSubject) &&
-        (
-          groupSubject
-            .toLocaleLowerCase('ja-JP')
-            .includes(normalizedSearchQuery) ||
-          subjectSummaries.some(summaryMatchesSearch)
+        matchesStudySearchText(
+          [
+            groupSubject,
+            ...subjectSummaries.flatMap((summary) => [
+              summary.text,
+              getDateLabel(summary.dateKey),
+            ]),
+          ].join('\n'),
+          searchQuery
         )
     )
     .sort(([subjectA], [subjectB]) => {
@@ -931,7 +947,10 @@ export default function ReviewScreen() {
               <TextInput
                 style={styles.searchInput}
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(value) => {
+                  setSearchQuery(value);
+                  setPhotoSearchLimit(photoSearchPageSize);
+                }}
                 placeholder="授業名・まとめ・写真内文字を検索"
                 placeholderTextColor="#888"
                 returnKeyType="search"
@@ -944,7 +963,9 @@ export default function ReviewScreen() {
             {normalizedSearchQuery !== '' ? (
               <View style={styles.photoSearchSection}>
                 <Text style={styles.photoSearchTitle}>
-                  写真内の文字
+                  写真内の文字（
+                  {photoSearchResults.length}件
+                  {hasMorePhotoSearchResults ? '以上' : ''}）
                 </Text>
 
                 {photoSearchResults.length > 0 ? (
@@ -989,6 +1010,26 @@ export default function ReviewScreen() {
                         </Text>
                       </Pressable>
                     ))}
+
+                    {hasMorePhotoSearchResults ? (
+                      <Pressable
+                        style={styles.photoSearchMoreButton}
+                        accessibilityRole="button"
+                        accessibilityLabel="写真の検索結果をさらに表示"
+                        onPress={() => {
+                          setPhotoSearchLimit(
+                            (currentLimit) =>
+                              currentLimit + photoSearchPageSize
+                          );
+                        }}
+                      >
+                        <Text
+                          style={styles.photoSearchMoreButtonText}
+                        >
+                          さらに表示
+                        </Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 ) : (
                   <Text style={styles.photoSearchEmptyText}>
@@ -1809,6 +1850,21 @@ const styles = StyleSheet.create({
     color: '#777',
     fontSize: 13,
     marginTop: 8,
+  },
+
+  photoSearchMoreButton: {
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#9d7dbc',
+    borderRadius: 9,
+    paddingVertical: 10,
+  },
+
+  photoSearchMoreButtonText: {
+    color: '#6b3ca0',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 
   dayFilterContainer: {

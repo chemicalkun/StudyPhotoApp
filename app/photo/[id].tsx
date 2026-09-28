@@ -52,7 +52,10 @@ import {
   savePhotoOcrRecord,
   updatePhotoOcrText,
 } from '@/services/photo-ocr-storage';
-import { loadPhotoRecords } from '@/services/photo-storage';
+import {
+  loadPhotoRecords,
+  updatePhotoImportance,
+} from '@/services/photo-storage';
 import {
   isStudyPhotoVisionAvailable,
   recognizeText,
@@ -112,6 +115,8 @@ export default function PhotoScreen() {
   const [imageLoadFailed, setImageLoadFailed] =
     useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savingImportance, setSavingImportance] =
+    useState(false);
   const [recognizingText, setRecognizingText] =
     useState(false);
   const [photoOcrRecord, setPhotoOcrRecord] =
@@ -475,6 +480,45 @@ export default function PhotoScreen() {
         },
       ]
     );
+  };
+
+
+  const togglePhotoImportance = async () => {
+    if (photo === null || savingImportance) {
+      return;
+    }
+
+    const nextIsImportant = photo.isImportant !== true;
+
+    try {
+      setSavingImportance(true);
+
+      const updatedPhoto = await updatePhotoImportance(
+        photo.id,
+        nextIsImportant
+      );
+
+      setPhoto((currentPhoto) =>
+        currentPhoto?.id === updatedPhoto.id
+          ? updatedPhoto
+          : currentPhoto
+      );
+      setLecturePhotos((currentPhotos) =>
+        currentPhotos.map((currentPhoto) =>
+          currentPhoto.id === updatedPhoto.id
+            ? updatedPhoto
+            : currentPhoto
+        )
+      );
+    } catch (error) {
+      console.log('重要マーク保存エラー:', error);
+      Alert.alert(
+        '重要マークを保存できませんでした',
+        '少し待ってからもう一度お試しください。'
+      );
+    } finally {
+      setSavingImportance(false);
+    }
   };
 
 
@@ -1026,6 +1070,37 @@ export default function PhotoScreen() {
                 {lecturePhotos.length}枚
               </Text>
             ) : null}
+
+            <Pressable
+              style={[
+                styles.importanceButton,
+                photo.isImportant === true &&
+                  styles.importanceButtonSelected,
+                savingImportance && styles.disabledButton,
+              ]}
+              disabled={savingImportance}
+              accessibilityRole="button"
+              accessibilityState={{
+                selected: photo.isImportant === true,
+              }}
+              onPress={() => {
+                void togglePhotoImportance();
+              }}
+            >
+              <Text
+                style={[
+                  styles.importanceButtonText,
+                  photo.isImportant === true &&
+                    styles.importanceButtonTextSelected,
+                ]}
+              >
+                {savingImportance
+                  ? '保存中...'
+                  : photo.isImportant === true
+                    ? '重要な写真に設定済み'
+                    : '重要な写真にする'}
+              </Text>
+            </Pressable>
 
             {lecturePhotos.length > 1 ? (
               <>
@@ -1664,6 +1739,31 @@ const styles = StyleSheet.create({
     color: '#777',
     fontSize: 12,
     marginTop: 3,
+  },
+
+  importanceButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#8b8b8b',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 10,
+  },
+
+  importanceButtonSelected: {
+    backgroundColor: '#5a4617',
+    borderColor: '#d6a83d',
+  },
+
+  importanceButtonText: {
+    color: '#ddd',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  importanceButtonTextSelected: {
+    color: '#ffdc81',
   },
 
   swipeHint: {

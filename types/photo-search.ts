@@ -8,22 +8,97 @@ export type PhotoTextSearchResult = {
 };
 
 
+export const normalizeStudySearchText = (
+  value: string
+) => value
+  .normalize('NFKC')
+  .toLocaleLowerCase('ja-JP')
+  .replace(/\s+/g, '');
+
+
+export const getStudySearchTerms = (
+  query: string
+) => query
+  .normalize('NFKC')
+  .toLocaleLowerCase('ja-JP')
+  .trim()
+  .split(/\s+/)
+  .map(normalizeStudySearchText)
+  .filter(Boolean);
+
+
+export const matchesStudySearchText = (
+  text: string,
+  query: string
+) => {
+  const searchTerms = getStudySearchTerms(query);
+
+  if (searchTerms.length === 0) {
+    return true;
+  }
+
+  const normalizedText = normalizeStudySearchText(text);
+
+  return searchTerms.every((searchTerm) =>
+    normalizedText.includes(searchTerm)
+  );
+};
+
+
+const createNormalizedIndex = (text: string) => {
+  let normalizedText = '';
+  const sourceIndexes: number[] = [];
+  let sourceIndex = 0;
+
+  for (const character of text) {
+    const normalizedCharacter =
+      normalizeStudySearchText(character);
+
+    normalizedText += normalizedCharacter;
+    sourceIndexes.push(
+      ...Array.from(normalizedCharacter).map(
+        () => sourceIndex
+      )
+    );
+    sourceIndex += character.length;
+  }
+
+  return { normalizedText, sourceIndexes };
+};
+
+
 const createPreview = (
   text: string,
-  normalizedQuery: string
+  searchTerms: string[]
 ) => {
   const flattenedText = text.replace(/\s+/g, ' ').trim();
-  const normalizedText = flattenedText.toLocaleLowerCase('ja-JP');
-  const matchIndex = normalizedText.indexOf(normalizedQuery);
+  const { normalizedText, sourceIndexes } =
+    createNormalizedIndex(flattenedText);
+  const firstMatch = searchTerms
+    .map((searchTerm) => ({
+      searchTerm,
+      index: normalizedText.indexOf(searchTerm),
+    }))
+    .filter((match) => match.index >= 0)
+    .sort((a, b) => a.index - b.index)[0];
 
-  if (matchIndex < 0 || flattenedText.length <= 100) {
+  if (firstMatch === undefined || flattenedText.length <= 100) {
     return flattenedText;
   }
 
-  const start = Math.max(0, matchIndex - 35);
+  const matchIndex = firstMatch.index;
+  const matchSourceStart =
+    sourceIndexes[matchIndex] ?? 0;
+  const nextSourceIndex =
+    sourceIndexes[
+      matchIndex + firstMatch.searchTerm.length
+    ];
+  const matchSourceEnd = nextSourceIndex ??
+    flattenedText.length;
+  const start = Math.max(0, matchSourceStart - 35);
   const end = Math.min(
     flattenedText.length,
-    matchIndex + normalizedQuery.length + 55
+    matchSourceEnd + 55
   );
 
   return [
@@ -40,11 +115,9 @@ export const searchRecognizedPhotos = (
   query: string,
   limit = 20
 ): PhotoTextSearchResult[] => {
-  const normalizedQuery = query
-    .trim()
-    .toLocaleLowerCase('ja-JP');
+  const searchTerms = getStudySearchTerms(query);
 
-  if (normalizedQuery === '' || limit <= 0) {
+  if (searchTerms.length === 0 || limit <= 0) {
     return [];
   }
 
@@ -59,9 +132,7 @@ export const searchRecognizedPhotos = (
 
       if (
         ocrRecord === undefined ||
-        !ocrRecord.text
-          .toLocaleLowerCase('ja-JP')
-          .includes(normalizedQuery)
+        !matchesStudySearchText(ocrRecord.text, query)
       ) {
         return [];
       }
@@ -70,7 +141,7 @@ export const searchRecognizedPhotos = (
         photo,
         preview: createPreview(
           ocrRecord.text,
-          normalizedQuery
+          searchTerms
         ),
       }];
     })

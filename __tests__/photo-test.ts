@@ -153,6 +153,18 @@ describe('写真の授業分類', () => {
     ).toBe(2);
   });
 
+  test('重要な写真のマークを読み込む', () => {
+    const photo = {
+      ...createPhoto('important-photo', '化学'),
+      isImportant: true,
+    };
+
+    expect(
+      parsePhotoRecords(JSON.stringify([photo]))[0]
+        .isImportant
+    ).toBe(true);
+  });
+
   test('旧い写真は撮影日から学期を補完する', () => {
     expect(
       getPhotoAcademicTerm(createPhoto('old-photo', '化学'))

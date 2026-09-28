@@ -1,4 +1,8 @@
-import { searchRecognizedPhotos } from '@/types/photo-search';
+import {
+  matchesStudySearchText,
+  normalizeStudySearchText,
+  searchRecognizedPhotos,
+} from '@/types/photo-search';
 
 
 describe('recognized photo search', () => {
@@ -56,5 +60,53 @@ describe('recognized photo search', () => {
     expect(
       searchRecognizedPhotos(photos, ocrRecords, '物理')
     ).toEqual([]);
+  });
+
+  test('OCRの不要な空白と全角半角の違いを吸収する', () => {
+    const spacedOcrRecords = {
+      ...ocrRecords,
+      'photo-new': {
+        ...ocrRecords['photo-new'],
+        text: '有機化学 演 \n習 ２',
+      },
+    };
+
+    const results = searchRecognizedPhotos(
+      photos,
+      spacedOcrRecords,
+      '演習2'
+    );
+
+    expect(results.map((result) => result.photo.id)).toEqual([
+      'photo-new',
+    ]);
+    expect(results[0].preview).toContain('演 習 ２');
+    expect(normalizeStudySearchText(' Ａ Ｂ c ')).toBe(
+      'abc'
+    );
+  });
+
+  test('離れた位置にある複数の検索語すべてに一致する', () => {
+    const results = searchRecognizedPhotos(
+      photos,
+      ocrRecords,
+      '付加 比較'
+    );
+
+    expect(results.map((result) => result.photo.id)).toEqual([
+      'photo-new',
+    ]);
+    expect(
+      matchesStudySearchText(
+        '有機化学\n付加重合の反応を学ぶ',
+        '有機 反応'
+      )
+    ).toBe(true);
+    expect(
+      matchesStudySearchText(
+        '有機化学\n付加重合の反応を学ぶ',
+        '有機 物理'
+      )
+    ).toBe(false);
   });
 });
