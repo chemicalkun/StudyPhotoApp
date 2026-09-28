@@ -14,6 +14,7 @@ export type PhotoOcrRecord = {
   text: string;
   blocks: PhotoOcrBlock[];
   recognizedAt: string;
+  manuallyEdited?: boolean;
 };
 
 export type PhotoOcrRecords = Record<
@@ -64,7 +65,11 @@ const isPhotoOcrRecord = (
     Array.isArray(record.blocks) &&
     record.blocks.every(isPhotoOcrBlock) &&
     typeof record.recognizedAt === 'string' &&
-    !Number.isNaN(new Date(record.recognizedAt).getTime())
+    !Number.isNaN(new Date(record.recognizedAt).getTime()) &&
+    (
+      record.manuallyEdited === undefined ||
+      typeof record.manuallyEdited === 'boolean'
+    )
   );
 };
 

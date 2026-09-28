@@ -4,6 +4,7 @@ import {
   deleteLectureSummaryRecord,
   loadLectureSummaryRecords,
   moveLectureSummaryRecord,
+  moveLectureSummaryRecords,
   saveLectureSummaryRecord,
   updateLectureSummaryText,
 } from '@/services/lecture-summary-storage';
@@ -172,6 +173,86 @@ describe('lecture summary storage', () => {
 
     expect(records[saved.id]?.text).toBe(
       '未分類のまとめ'
+    );
+  });
+
+  test('複数回の授業まとめを一括移動する', async () => {
+    const first = await saveLectureSummaryRecord(
+      '未分類',
+      '2026-9-21',
+      '第1回のまとめ',
+      'source-1'
+    );
+    const second = await saveLectureSummaryRecord(
+      '未分類',
+      '2026-9-28',
+      '第2回のまとめ',
+      'source-2'
+    );
+
+    const moved = await moveLectureSummaryRecords(
+      [first.id, second.id],
+      '高分子化学'
+    );
+    const records = await loadLectureSummaryRecords();
+
+    expect(moved).toHaveLength(2);
+    expect(records[first.id]).toBeUndefined();
+    expect(records[second.id]).toBeUndefined();
+    expect(
+      records[
+        createLectureSummaryId(
+          '高分子化学',
+          '2026-9-21'
+        )
+      ]?.text
+    ).toBe('第1回のまとめ');
+    expect(
+      records[
+        createLectureSummaryId(
+          '高分子化学',
+          '2026-9-28'
+        )
+      ]?.text
+    ).toBe('第2回のまとめ');
+  });
+
+  test('一括移動で衝突する場合はどのまとめも移動しない', async () => {
+    const first = await saveLectureSummaryRecord(
+      '未分類',
+      '2026-9-21',
+      '第1回のまとめ',
+      'source-1'
+    );
+    const second = await saveLectureSummaryRecord(
+      '未分類',
+      '2026-9-28',
+      '第2回のまとめ',
+      'source-2'
+    );
+    await saveLectureSummaryRecord(
+      '高分子化学',
+      '2026-9-28',
+      '既存のまとめ',
+      'source-3'
+    );
+
+    await expect(
+      moveLectureSummaryRecords(
+        [first.id, second.id],
+        '高分子化学'
+      )
+    ).rejects.toThrow(
+      '移動先に同じ日の授業まとめがあります'
+    );
+
+    const records = await loadLectureSummaryRecords();
+
+    expect(records[first.id]?.text).toBe(
+      '第1回のまとめ'
+    );
+    expect(records[second.id]?.text).toBe(
+      '第2回のまとめ'
     );
   });
 

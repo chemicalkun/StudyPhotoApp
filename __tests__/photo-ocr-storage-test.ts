@@ -5,6 +5,7 @@ import {
   loadPhotoOcrRecord,
   loadPhotoOcrRecords,
   savePhotoOcrRecord,
+  updatePhotoOcrText,
 } from '@/services/photo-ocr-storage';
 import { parsePhotoOcrRecords } from '@/types/photo-ocr';
 
@@ -60,6 +61,35 @@ describe('photo OCR storage', () => {
       'photo-1',
       'photo-2',
     ]);
+  });
+
+  test('OCR結果の文字を手動修正する', async () => {
+    const saved = await savePhotoOcrRecord(
+      'photo-1',
+      blocks
+    );
+    const updated = await updatePhotoOcrText(
+      'photo-1',
+      ' 修正後の高分子化学 '
+    );
+
+    expect(updated.text).toBe('修正後の高分子化学');
+    expect(updated.manuallyEdited).toBe(true);
+    expect(updated.blocks).toEqual(blocks);
+    expect(updated.recognizedAt).not.toBe(
+      saved.recognizedAt
+    );
+    expect(
+      (await loadPhotoOcrRecord('photo-1'))?.text
+    ).toBe('修正後の高分子化学');
+  });
+
+  test('空のOCR修正結果は保存しない', async () => {
+    await savePhotoOcrRecord('photo-1', blocks);
+
+    await expect(
+      updatePhotoOcrText('photo-1', '   ')
+    ).rejects.toThrow('保存するOCR結果がありません');
   });
 });
 

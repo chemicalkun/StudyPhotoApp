@@ -62,6 +62,7 @@ import type {
 } from '@/modules/study-photo-intelligence';
 import {
   loadLectureSummaryRecords,
+  moveLectureSummaryRecords,
   saveLectureSummaryRecord,
 } from '@/services/lecture-summary-storage';
 import {
@@ -74,6 +75,8 @@ import type {
 import { parseTimetable } from '@/utils/classification';
 import { getUniqueTimetableSubjects } from '@/utils/timetable-subject';
 import {
+  countSelectedPhotosToMove,
+  getFullySelectedLectureSummaryIds,
   moveSelectedPhotosToLecture,
   removeSelectedPhotos,
   updateSelectedPhotoSubjects,
@@ -944,6 +947,14 @@ export default function SubjectScreen() {
     .flatMap((section) => section.photos)
     .filter((photo) => selectedPhotoIds.has(photo.id));
   const selectedPhotoCount = selectedPhotos.length;
+  const allPhotoIds = sections.flatMap((section) =>
+    section.photos.map((photo) => photo.id)
+  );
+  const allPhotosSelected =
+    allPhotoIds.length > 0 &&
+    allPhotoIds.every((photoId) =>
+      selectedPhotoIds.has(photoId)
+    );
   const reorderedPhotos = reorderedPhotoIds.flatMap(
     (photoId) => {
       const photo = reorderingLectureSection?.photos.find(
@@ -1041,6 +1052,38 @@ export default function SubjectScreen() {
       } else {
         nextIds.add(photoId);
       }
+
+      return nextIds;
+    });
+  };
+
+
+  const toggleAllPhotoSelection = () => {
+    setSelectedPhotoIds(
+      allPhotosSelected
+        ? new Set()
+        : new Set(allPhotoIds)
+    );
+  };
+
+
+  const toggleLecturePhotoSelection = (
+    lecturePhotos: PhotoRecord[]
+  ) => {
+    setSelectedPhotoIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+      const allLecturePhotosSelected =
+        lecturePhotos.every((photo) =>
+          nextIds.has(photo.id)
+        );
+
+      lecturePhotos.forEach((photo) => {
+        if (allLecturePhotosSelected) {
+          nextIds.delete(photo.id);
+        } else {
+          nextIds.add(photo.id);
+        }
+      });
 
       return nextIds;
     });
@@ -1153,6 +1196,15 @@ export default function SubjectScreen() {
       const photos = await loadPhotoRecords();
       const normalizedSubject =
         selectedSubject.trim() || null;
+      const nextSummarySubject =
+        normalizedSubject ?? '未分類';
+      const summaryIdsToMove =
+        getFullySelectedLectureSummaryIds(
+          lectureSummaryRecords,
+          selectedPhotoIds,
+          isUnclassified ? '未分類' : subject,
+          nextSummarySubject
+        );
       const updatedPhotos = updateSelectedPhotoSubjects(
         photos,
         selectedPhotoIds,
@@ -1160,6 +1212,25 @@ export default function SubjectScreen() {
       );
 
       await savePhotoRecords(updatedPhotos);
+
+      try {
+        await moveLectureSummaryRecords(
+          summaryIdsToMove,
+          nextSummarySubject
+        );
+      } catch (summaryMoveError) {
+        try {
+          await savePhotoRecords(photos);
+        } catch (rollbackError) {
+          console.log(
+            '写真一括分類の復元エラー:',
+            rollbackError
+          );
+        }
+
+        throw summaryMoveError;
+      }
+
       finishPhotoSelection();
       setLoadRevision((revision) => revision + 1);
 
@@ -1167,13 +1238,21 @@ export default function SubjectScreen() {
         '分類を変更しました',
         `${selectedPhotoCount}枚の写真を${
           normalizedSubject ?? '未分類'
-        }に変更しました。`
+        }に変更しました。${
+          summaryIdsToMove.length > 0
+            ? `\n${summaryIdsToMove.length}件の授業まとめも移動しました。`
+            : ''
+        }`
       );
     } catch (error) {
       console.log('一括分類変更エラー:', error);
       Alert.alert(
         '分類を変更できませんでした',
-        '写真の分類を保存する際にエラーが発生しました。'
+        error instanceof Error &&
+        error.message ===
+          '移動先に同じ日の授業まとめがあります'
+          ? '移動先に同じ日のまとめがあるため、上書きせず中止しました。'
+          : '写真の分類を保存する際にエラーが発生しました。'
       );
     } finally {
       setBulkOperation(null);
@@ -1201,6 +1280,17 @@ export default function SubjectScreen() {
 
     try {
       const photos = await loadPhotoRecords();
+      const photosToMoveCount = countSelectedPhotosToMove(
+        photos,
+        selectedPhotoIds,
+        targetLecturePhoto
+      );
+
+      if (photosToMoveCount === 0) {
+        setBulkLectureModalVisible(false);
+        return;
+      }
+
       const updatedPhotos = moveSelectedPhotosToLecture(
         photos,
         selectedPhotoIds,
@@ -1213,7 +1303,7 @@ export default function SubjectScreen() {
 
       Alert.alert(
         '授業回を変更しました',
-        `${selectedPhotoCount}枚の写真を${targetSection.title}へ移動しました。必要なまとめは更新状態になります。`
+        `${photosToMoveCount}枚の写真を${targetSection.title}へ移動しました。必要なまとめは更新状態になります。`
       );
     } catch (error) {
       console.log('一括授業回変更エラー:', error);
@@ -1356,15 +1446,29 @@ export default function SubjectScreen() {
               </Text>
             </View>
 
-            <Pressable
-              disabled={bulkOperation !== null}
-              accessibilityRole="button"
-              onPress={finishPhotoSelection}
-            >
-              <Text style={styles.bulkSelectionDone}>
-                完了
-              </Text>
-            </Pressable>
+            <View style={styles.bulkSelectionHeaderActions}>
+              <Pressable
+                disabled={bulkOperation !== null}
+                accessibilityRole="button"
+                onPress={toggleAllPhotoSelection}
+              >
+                <Text style={styles.bulkSelectionToggleAll}>
+                  {allPhotosSelected
+                    ? 'すべて解除'
+                    : 'すべて選択'}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={bulkOperation !== null}
+                accessibilityRole="button"
+                onPress={finishPhotoSelection}
+              >
+                <Text style={styles.bulkSelectionDone}>
+                  完了
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView
@@ -1615,52 +1719,67 @@ export default function SubjectScreen() {
               </Text>
             </View>
 
-            <Pressable
-              style={[
-                styles.lectureOcrButton,
-                (processingLectureDateKey !== null ||
-                  isSelectingPhotos) &&
-                  styles.summaryButtonDisabled,
-              ]}
-              disabled={
-                processingLectureDateKey !== null ||
-                isSelectingPhotos
-              }
-              onPress={() => {
-                if (hasCurrentLectureSummary(section)) {
-                  void openLectureOcr(section);
-                  return;
-                }
+            {isSelectingPhotos ? (
+              <Pressable
+                style={styles.lectureSelectionButton}
+                disabled={bulkOperation !== null}
+                accessibilityRole="button"
+                onPress={() => {
+                  toggleLecturePhotoSelection(
+                    section.photos
+                  );
+                }}
+              >
+                <Text style={styles.lectureSelectionButtonText}>
+                  {section.photos.every((photo) =>
+                    selectedPhotoIds.has(photo.id)
+                  )
+                    ? 'この回を解除'
+                    : 'この回を選択'}
+                </Text>
+              </Pressable>
+            ) : null}
 
-                void createCompleteLectureSummary(section);
-              }}
-            >
-              {processingLectureDateKey ===
-              section.dateKey ? (
-                <ActivityIndicator
-                  size="small"
-                  color="#28794c"
-                />
-              ) : null}
-
-              <Text style={styles.lectureOcrButtonText}>
-                {processingLectureDateKey === section.dateKey
-                  ? lectureProcessingStatus ||
-                    '準備中...'
-                  : hasCurrentLectureSummary(section)
-                    ? 'まとめを見る'
-                    : 'まとめを作成'}
-              </Text>
-            </Pressable>
-
-            {section.photos.length > 1 ? (
+            {!isSelectingPhotos ? (
               <Pressable
                 style={[
-                  styles.photoOrderButton,
-                  isSelectingPhotos &&
+                  styles.lectureOcrButton,
+                  processingLectureDateKey !== null &&
                     styles.summaryButtonDisabled,
                 ]}
-                disabled={isSelectingPhotos}
+                disabled={processingLectureDateKey !== null}
+                onPress={() => {
+                  if (hasCurrentLectureSummary(section)) {
+                    void openLectureOcr(section);
+                    return;
+                  }
+
+                  void createCompleteLectureSummary(section);
+                }}
+              >
+                {processingLectureDateKey ===
+                section.dateKey ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#28794c"
+                  />
+                ) : null}
+
+                <Text style={styles.lectureOcrButtonText}>
+                  {processingLectureDateKey === section.dateKey
+                    ? lectureProcessingStatus ||
+                      '準備中...'
+                    : hasCurrentLectureSummary(section)
+                      ? 'まとめを見る'
+                      : 'まとめを作成'}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {section.photos.length > 1 &&
+            !isSelectingPhotos ? (
+              <Pressable
+                style={styles.photoOrderButton}
                 accessibilityRole="button"
                 onPress={() => openPhotoOrder(section)}
               >
@@ -1917,25 +2036,60 @@ export default function SubjectScreen() {
               style={styles.lectureTargetList}
               contentContainerStyle={styles.lectureTargetListContent}
             >
-              {sections.map((section) => (
-                <Pressable
-                  key={section.dateKey}
-                  style={styles.lectureTargetButton}
-                  disabled={bulkOperation !== null}
-                  accessibilityRole="button"
-                  onPress={() => {
-                    void moveSelectedPhotos(section);
-                  }}
-                >
-                  <Text style={styles.lectureTargetButtonTitle}>
-                    {section.title}
-                  </Text>
+              {sections.map((section) => {
+                const targetLecturePhoto =
+                  section.photos[0];
+                const photosToMoveCount =
+                  targetLecturePhoto === undefined
+                    ? 0
+                    : countSelectedPhotosToMove(
+                        selectedPhotos,
+                        selectedPhotoIds,
+                        targetLecturePhoto
+                      );
+                const cannotMove =
+                  photosToMoveCount === 0 ||
+                  bulkOperation !== null;
 
-                  <Text style={styles.lectureTargetButtonDetail}>
-                    {section.dateLabel}・{section.photos.length}枚
-                  </Text>
-                </Pressable>
-              ))}
+                return (
+                  <Pressable
+                    key={section.dateKey}
+                    style={[
+                      styles.lectureTargetButton,
+                      cannotMove &&
+                        styles.summaryButtonDisabled,
+                    ]}
+                    disabled={cannotMove}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      void moveSelectedPhotos(section);
+                    }}
+                  >
+                    <Text style={styles.lectureTargetButtonTitle}>
+                      {section.title}
+                    </Text>
+
+                    <View style={styles.bulkLectureTargetDetail}>
+                      <Text style={styles.lectureTargetButtonDetail}>
+                        {section.dateLabel}・
+                        {section.photos.length}枚
+                      </Text>
+
+                      <Text
+                        style={
+                          photosToMoveCount === 0
+                            ? styles.bulkLectureAlreadyThere
+                            : styles.bulkLectureMoveCount
+                        }
+                      >
+                        {photosToMoveCount === 0
+                          ? '移動済み'
+                          : `${photosToMoveCount}枚を移動`}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
 
             {bulkOperation === 'lecture' ? (
@@ -2452,6 +2606,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  bulkSelectionHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+
+  bulkSelectionToggleAll: {
+    color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+
   bulkSelectionDone: {
     color: '#31518f',
     fontSize: 16,
@@ -2545,6 +2713,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 7,
     marginTop: 9,
+  },
+
+  lectureSelectionButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#31518f',
+    borderRadius: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    marginTop: 9,
+  },
+
+  lectureSelectionButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   lectureOcrButtonText: {
@@ -2763,6 +2946,22 @@ const styles = StyleSheet.create({
   lectureTargetButtonDetail: {
     color: '#555',
     fontSize: 13,
+  },
+
+  bulkLectureTargetDetail: {
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+
+  bulkLectureMoveCount: {
+    color: '#31518f',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+
+  bulkLectureAlreadyThere: {
+    color: '#666',
+    fontSize: 11,
   },
 
   newLectureTargetDetail: {

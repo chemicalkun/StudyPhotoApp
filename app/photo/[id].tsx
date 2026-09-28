@@ -49,6 +49,7 @@ import {
   deletePhotoOcrRecord,
   loadPhotoOcrRecord,
   savePhotoOcrRecord,
+  updatePhotoOcrText,
 } from '@/services/photo-ocr-storage';
 import { loadPhotoRecords } from '@/services/photo-storage';
 import {
@@ -118,6 +119,12 @@ export default function PhotoScreen() {
     useState('');
   const [textRecognitionModalVisible, setTextRecognitionModalVisible] =
     useState(false);
+  const [isEditingRecognition, setIsEditingRecognition] =
+    useState(false);
+  const [savingRecognitionEdit, setSavingRecognitionEdit] =
+    useState(false);
+  const [recognitionEditError, setRecognitionEditError] =
+    useState('');
   const [
     classificationModalVisible,
     setClassificationModalVisible,
@@ -142,6 +149,7 @@ export default function PhotoScreen() {
     useState(0);
 
   const zoomScale = useRef(1);
+  const editedRecognitionTextRef = useRef('');
   const translateX = useRef(
     new Animated.Value(0)
   ).current;
@@ -159,6 +167,8 @@ export default function PhotoScreen() {
         setPhotoOcrRecord(null);
         setTextRecognitionError('');
         setTextRecognitionModalVisible(false);
+        setIsEditingRecognition(false);
+        setRecognitionEditError('');
         zoomScale.current = 1;
 
         const photos = await loadPhotoRecords();
@@ -482,6 +492,8 @@ export default function PhotoScreen() {
 
     setRecognizingText(true);
     setTextRecognitionError('');
+    setIsEditingRecognition(false);
+    setRecognitionEditError('');
     setTextRecognitionModalVisible(true);
 
     try {
@@ -516,6 +528,60 @@ export default function PhotoScreen() {
     photo !== null && photoOcrRecord?.photoId === photo.id
       ? photoOcrRecord
       : null;
+
+
+  const startEditingRecognition = () => {
+    if (currentPhotoOcrRecord === null) {
+      return;
+    }
+
+    editedRecognitionTextRef.current =
+      currentPhotoOcrRecord.text;
+    setRecognitionEditError('');
+    setIsEditingRecognition(true);
+  };
+
+
+  const saveEditedRecognition = async () => {
+    if (
+      currentPhotoOcrRecord === null ||
+      savingRecognitionEdit
+    ) {
+      return;
+    }
+
+    const editedText =
+      editedRecognitionTextRef.current.trim();
+
+    if (editedText === '') {
+      setRecognitionEditError(
+        '認識結果の文字を入力してください。'
+      );
+      return;
+    }
+
+    try {
+      setSavingRecognitionEdit(true);
+      setRecognitionEditError('');
+
+      const updatedRecord = await updatePhotoOcrText(
+        currentPhotoOcrRecord.photoId,
+        editedText
+      );
+
+      setPhotoOcrRecord(updatedRecord);
+      editedRecognitionTextRef.current =
+        updatedRecord.text;
+      setIsEditingRecognition(false);
+    } catch (error) {
+      console.log('OCR結果編集エラー:', error);
+      setRecognitionEditError(
+        '認識結果を保存できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setSavingRecognitionEdit(false);
+    }
+  };
 
 
   const openClassificationModal = async () => {
@@ -1008,6 +1074,8 @@ export default function PhotoScreen() {
                 disabled={recognizingText}
                 onPress={() => {
                   setTextRecognitionError('');
+                  setIsEditingRecognition(false);
+                  setRecognitionEditError('');
                   setTextRecognitionModalVisible(true);
                 }}
               >
@@ -1278,7 +1346,12 @@ export default function PhotoScreen() {
         transparent
         animationType="fade"
         onRequestClose={() => {
-          if (!recognizingText) {
+          if (
+            !recognizingText &&
+            !savingRecognitionEdit
+          ) {
+            setIsEditingRecognition(false);
+            setRecognitionEditError('');
             setTextRecognitionModalVisible(false);
           }
         }}
@@ -1308,56 +1381,148 @@ export default function PhotoScreen() {
               <Text style={styles.recognitionErrorText}>
                 {textRecognitionError}
               </Text>
-            ) : currentPhotoOcrRecord !== null ? (
-              <ScrollView
-                style={styles.recognitionResults}
-                contentContainerStyle={
-                  styles.recognitionResultsContent
-                }
-              >
-                <Text style={styles.recognitionCountText}>
-                  {currentPhotoOcrRecord.blocks.length}件の文字領域を認識しました
+            ) : currentPhotoOcrRecord !== null &&
+              isEditingRecognition ? (
+              <View style={styles.recognitionEditContainer}>
+                <Text style={styles.recognitionEditDescription}>
+                  修正した文字は検索や次回のまとめ作成に使われます。
                 </Text>
 
-                <Text style={styles.recognizedAtText}>
-                  認識日時：
-                  {getTakenAtLabel(
-                    currentPhotoOcrRecord.recognizedAt
-                  )}
-                </Text>
+                <TextInput
+                  style={styles.recognitionEditInput}
+                  defaultValue={editedRecognitionTextRef.current}
+                  multiline
+                  autoCorrect
+                  editable={!savingRecognitionEdit}
+                  textAlignVertical="top"
+                  onChangeText={(text) => {
+                    editedRecognitionTextRef.current = text;
+                  }}
+                />
 
-                {currentPhotoOcrRecord.blocks.map((block, index) => (
-                  <View
-                    style={styles.recognitionResultRow}
-                    key={`${block.text}-${index}`}
+                {recognitionEditError !== '' ? (
+                  <Text style={styles.recognitionErrorText}>
+                    {recognitionEditError}
+                  </Text>
+                ) : null}
+
+                <View style={styles.recognitionEditActions}>
+                  <Pressable
+                    style={styles.recognitionEditCancelButton}
+                    disabled={savingRecognitionEdit}
+                    onPress={() => {
+                      setIsEditingRecognition(false);
+                      setRecognitionEditError('');
+                    }}
                   >
-                    <Text
-                      style={styles.recognitionResultText}
-                      selectable
-                    >
-                      {block.text}
+                    <Text style={styles.recognitionEditCancelText}>
+                      キャンセル
                     </Text>
+                  </Pressable>
 
-                    <Text style={styles.recognitionConfidenceText}>
-                      OCR参考値{' '}
-                      {Math.round(block.confidence * 100)}%
+                  <Pressable
+                    style={[
+                      styles.recognitionEditSaveButton,
+                      savingRecognitionEdit &&
+                        styles.disabledButton,
+                    ]}
+                    disabled={savingRecognitionEdit}
+                    onPress={() => {
+                      void saveEditedRecognition();
+                    }}
+                  >
+                    {savingRecognitionEdit ? (
+                      <ActivityIndicator
+                        size="small"
+                        color="white"
+                      />
+                    ) : null}
+
+                    <Text style={styles.recognitionEditSaveText}>
+                      {savingRecognitionEdit
+                        ? '保存中...'
+                        : '保存'}
                     </Text>
-                  </View>
-                ))}
-              </ScrollView>
+                  </Pressable>
+                </View>
+              </View>
+            ) : currentPhotoOcrRecord !== null ? (
+              <>
+                <ScrollView
+                  style={styles.recognitionResults}
+                  contentContainerStyle={
+                    styles.recognitionResultsContent
+                  }
+                >
+                  <Text style={styles.recognitionCountText}>
+                    {currentPhotoOcrRecord.manuallyEdited
+                      ? '認識結果を手動修正済み'
+                      : `${currentPhotoOcrRecord.blocks.length}件の文字領域を認識しました`}
+                  </Text>
+
+                  <Text style={styles.recognizedAtText}>
+                    最終更新：
+                    {getTakenAtLabel(
+                      currentPhotoOcrRecord.recognizedAt
+                    )}
+                  </Text>
+
+                  {currentPhotoOcrRecord.manuallyEdited ? (
+                    <View style={styles.recognitionResultRow}>
+                      <Text
+                        style={styles.recognitionResultText}
+                        selectable
+                      >
+                        {currentPhotoOcrRecord.text}
+                      </Text>
+                    </View>
+                  ) : (
+                    currentPhotoOcrRecord.blocks.map((block, index) => (
+                      <View
+                        style={styles.recognitionResultRow}
+                        key={`${block.text}-${index}`}
+                      >
+                        <Text
+                          style={styles.recognitionResultText}
+                          selectable
+                        >
+                          {block.text}
+                        </Text>
+
+                        <Text style={styles.recognitionConfidenceText}>
+                          OCR参考値{' '}
+                          {Math.round(block.confidence * 100)}%
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+
+                <Pressable
+                  style={styles.editRecognitionButton}
+                  onPress={startEditingRecognition}
+                >
+                  <Text style={styles.editRecognitionButtonText}>
+                    認識結果を編集
+                  </Text>
+                </Pressable>
+              </>
             ) : null}
 
-            <Pressable
-              style={styles.cancelButton}
-              disabled={recognizingText}
-              onPress={() =>
-                setTextRecognitionModalVisible(false)
-              }
-            >
-              <Text style={styles.cancelButtonText}>
-                閉じる
-              </Text>
-            </Pressable>
+            {!isEditingRecognition ? (
+              <Pressable
+                style={styles.cancelButton}
+                disabled={recognizingText}
+                onPress={() => {
+                  setRecognitionEditError('');
+                  setTextRecognitionModalVisible(false);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>
+                  閉じる
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -1712,6 +1877,89 @@ const styles = StyleSheet.create({
     color: '#777',
     fontSize: 11,
     marginTop: 3,
+  },
+
+  editRecognitionButton: {
+    backgroundColor: '#eef3ff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+
+  editRecognitionButtonText: {
+    color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  recognitionEditContainer: {
+    flexShrink: 1,
+    marginTop: 14,
+  },
+
+  recognitionEditDescription: {
+    color: '#555',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  recognitionEditInput: {
+    minHeight: 220,
+    maxHeight: 360,
+    color: '#111',
+    backgroundColor: '#fafafa',
+    borderWidth: 1,
+    borderColor: '#aaa',
+    borderRadius: 9,
+    fontSize: 15,
+    lineHeight: 22,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginTop: 10,
+  },
+
+  recognitionEditActions: {
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 12,
+  },
+
+  recognitionEditCancelButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#aaa',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+
+  recognitionEditCancelText: {
+    color: '#444',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  recognitionEditSaveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#31518f',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+
+  recognitionEditSaveText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 
   modalTitle: {

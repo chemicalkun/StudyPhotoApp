@@ -108,47 +108,91 @@ export const moveLectureSummaryRecord = async (
   summaryId: string,
   nextSubject: string
 ): Promise<LectureSummaryRecord> => {
+  const [movedRecord] = await moveLectureSummaryRecords(
+    [summaryId],
+    nextSubject
+  );
+
+  return movedRecord;
+};
+
+
+export const moveLectureSummaryRecords = async (
+  summaryIds: string[],
+  nextSubject: string
+): Promise<LectureSummaryRecord[]> => {
   const normalizedNextSubject = nextSubject.trim();
 
-  if (summaryId === '' || normalizedNextSubject === '') {
+  if (
+    summaryIds.some((summaryId) => summaryId === '') ||
+    normalizedNextSubject === ''
+  ) {
     throw new Error('移動先の授業名が不正です');
   }
 
+  if (new Set(summaryIds).size !== summaryIds.length) {
+    throw new Error('移動する授業まとめが重複しています');
+  }
+
+  if (summaryIds.length === 0) {
+    return [];
+  }
+
   const records = await loadLectureSummaryRecords();
-  const currentRecord = records[summaryId];
+  const currentRecords = summaryIds.map((summaryId) => {
+    const currentRecord = records[summaryId];
 
-  if (currentRecord === undefined) {
-    throw new Error('移動する授業まとめが見つかりません');
-  }
+    if (currentRecord === undefined) {
+      throw new Error('移動する授業まとめが見つかりません');
+    }
 
-  const nextId = createLectureSummaryId(
-    normalizedNextSubject,
-    currentRecord.dateKey
-  );
-
-  if (nextId === summaryId) {
     return currentRecord;
-  }
+  });
+  const movedRecords = currentRecords.map(
+    (currentRecord) => {
+      const nextId = createLectureSummaryId(
+        normalizedNextSubject,
+        currentRecord.dateKey
+      );
 
-  if (records[nextId] !== undefined) {
+      if (
+        nextId !== currentRecord.id &&
+        records[nextId] !== undefined
+      ) {
+        throw new Error(
+          '移動先に同じ日の授業まとめがあります'
+        );
+      }
+
+      return nextId === currentRecord.id
+        ? currentRecord
+        : {
+            ...currentRecord,
+            id: nextId,
+            subject: normalizedNextSubject,
+          };
+    }
+  );
+  const nextIds = movedRecords.map((record) => record.id);
+
+  if (new Set(nextIds).size !== nextIds.length) {
     throw new Error(
       '移動先に同じ日の授業まとめがあります'
     );
   }
 
-  const movedRecord: LectureSummaryRecord = {
-    ...currentRecord,
-    id: nextId,
-    subject: normalizedNextSubject,
-  };
   const nextRecords = { ...records };
 
-  delete nextRecords[summaryId];
-  nextRecords[nextId] = movedRecord;
+  currentRecords.forEach((record) => {
+    delete nextRecords[record.id];
+  });
+  movedRecords.forEach((record) => {
+    nextRecords[record.id] = record;
+  });
 
   await saveLectureSummaryRecords(nextRecords);
 
-  return movedRecord;
+  return movedRecords;
 };
 
 

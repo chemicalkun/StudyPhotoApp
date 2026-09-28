@@ -1,9 +1,16 @@
 import type { PhotoRecord } from '@/types/photo';
 import {
+  countSelectedPhotosToMove,
+  getFullySelectedLectureSummaryIds,
   moveSelectedPhotosToLecture,
   removeSelectedPhotos,
   updateSelectedPhotoSubjects,
 } from '@/utils/photo-bulk-actions';
+import {
+  createLectureSummaryId,
+  createLectureSummarySourceSignature,
+  type LectureSummaryRecords,
+} from '@/types/lecture-summary';
 
 
 const createPhoto = (
@@ -60,10 +67,78 @@ describe('photo bulk actions', () => {
     expect(updated[0].takenAtEstimated).toBe(true);
   });
 
+  it('移動先に既にある写真は更新しない', () => {
+    const allSelectedIds = new Set([
+      'photo-1',
+      'photo-2',
+      'photo-3',
+    ]);
+    const updated = moveSelectedPhotosToLecture(
+      photos,
+      allSelectedIds,
+      photos[2]
+    );
+
+    expect(updated[2]).toBe(photos[2]);
+    expect(updated[2].takenAtEstimated).toBeUndefined();
+    expect(
+      countSelectedPhotosToMove(
+        photos,
+        allSelectedIds,
+        photos[2]
+      )
+    ).toBe(2);
+  });
+
   it('選択した写真だけ削除する', () => {
     expect(
       removeSelectedPhotos(photos, selectedIds)
         .map((photo) => photo.id)
     ).toEqual(['photo-3']);
+  });
+
+  it('使用写真をすべて選択したまとめだけ移動対象にする', () => {
+    const firstSummaryId = createLectureSummaryId(
+      '有機化学',
+      '2026-9-7'
+    );
+    const secondSummaryId = createLectureSummaryId(
+      '有機化学',
+      '2026-9-14'
+    );
+    const summaryRecords: LectureSummaryRecords = {
+      [firstSummaryId]: {
+        id: firstSummaryId,
+        subject: '有機化学',
+        dateKey: '2026-9-7',
+        text: '第1回',
+        sourceOcrSignature:
+          createLectureSummarySourceSignature([
+            { photoId: 'photo-1', recognizedAt: '2026-09-07T01:00:00.000Z' },
+            { photoId: 'photo-2', recognizedAt: '2026-09-07T01:01:00.000Z' },
+          ]),
+        createdAt: '2026-09-07T02:00:00.000Z',
+      },
+      [secondSummaryId]: {
+        id: secondSummaryId,
+        subject: '有機化学',
+        dateKey: '2026-9-14',
+        text: '第2回',
+        sourceOcrSignature:
+          createLectureSummarySourceSignature([
+            { photoId: 'photo-3', recognizedAt: '2026-09-14T01:00:00.000Z' },
+          ]),
+        createdAt: '2026-09-14T02:00:00.000Z',
+      },
+    };
+
+    expect(
+      getFullySelectedLectureSummaryIds(
+        summaryRecords,
+        selectedIds,
+        '有機化学',
+        '統計学'
+      )
+    ).toEqual([firstSummaryId]);
   });
 });
