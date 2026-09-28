@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import {
   ActivityIndicator,
@@ -68,6 +68,7 @@ import {
 import {
   createLectureSummaryId,
   createLectureSummarySourceSignature,
+  getLectureSummaryUpdateReason,
 } from '@/types/lecture-summary';
 import type {
   LectureSummaryRecords,
@@ -130,6 +131,32 @@ type BulkOperation =
 type BulkOcrProgress = {
   completed: number;
   total: number;
+};
+
+
+type BulkSummaryProgress = {
+  completed: number;
+  total: number;
+  failed: number;
+};
+
+
+type LectureSummaryStatus =
+  | 'current'
+  | 'outdated'
+  | 'missing';
+
+
+type CreateLectureSummaryOptions = {
+  showModal?: boolean;
+  requireCompleteOcr?: boolean;
+  sourceOcrRecords?: PhotoOcrRecords;
+};
+
+
+type CreateLectureSummaryResult = {
+  wasSaved: boolean;
+  ocrRecords: PhotoOcrRecords;
 };
 
 
@@ -255,6 +282,12 @@ export default function SubjectScreen() {
     useState<BulkOperation | null>(null);
   const [bulkOcrProgress, setBulkOcrProgress] =
     useState<BulkOcrProgress | null>(null);
+  const [bulkSummaryProgress, setBulkSummaryProgress] =
+    useState<BulkSummaryProgress | null>(null);
+  const [isBulkSummaryCancellationRequested,
+    setIsBulkSummaryCancellationRequested] = useState(false);
+  const bulkSummaryCancellationRequestedRef =
+    useRef(false);
   const [bulkLectureModalVisible, setBulkLectureModalVisible] =
     useState(false);
   const [bulkClassificationModalVisible, setBulkClassificationModalVisible] =
@@ -269,6 +302,8 @@ export default function SubjectScreen() {
   const [reorderedPhotoIds, setReorderedPhotoIds] =
     useState<string[]>([]);
   const [savingPhotoOrder, setSavingPhotoOrder] =
+    useState(false);
+  const [showSummaryAttentionOnly, setShowSummaryAttentionOnly] =
     useState(false);
 
 
@@ -436,7 +471,8 @@ export default function SubjectScreen() {
 
 
   const openLectureOcr = async (
-    section: LectureSection
+    section: LectureSection,
+    includeOutdatedSummary = false
   ) => {
     setSelectedLectureSection(section);
     const summaryId = createLectureSummaryId(
@@ -450,8 +486,9 @@ export default function SubjectScreen() {
     const savedSummary = lectureSummaryRecords[summaryId];
     const canUseSavedSummary =
       savedSummary !== undefined &&
-      savedSummary.sourceOcrSignature ===
-        sourceOcrSignature;
+      (includeOutdatedSummary ||
+        savedSummary.sourceOcrSignature ===
+          sourceOcrSignature);
 
     setLectureSummary(
       canUseSavedSummary ? savedSummary.text : ''
@@ -466,7 +503,14 @@ export default function SubjectScreen() {
     setQuestionError('');
     setIsAnsweringQuestion(false);
     setLectureProcessingStatus('');
-    setLectureProcessingWarning('');
+    setLectureProcessingWarning(
+      includeOutdatedSummary &&
+        savedSummary !== undefined &&
+        savedSummary.sourceOcrSignature !==
+          sourceOcrSignature
+        ? 'このまとめには、最新の写真や認識文字の変更が反映されていません。'
+        : ''
+    );
 
     try {
       const availability =
@@ -482,7 +526,7 @@ export default function SubjectScreen() {
 
   const generateAndSaveLectureSummary = async (
     section: LectureSection
-  ) => {
+  ): Promise<boolean> => {
     const combinedOcrText =
       section.ocrItems
         .map(
@@ -526,6 +570,7 @@ export default function SubjectScreen() {
           [savedRecord.id]: savedRecord,
         }));
         setIsLectureSummarySaved(true);
+        return true;
       } catch (saveError) {
         console.log(
           '授業まとめ保存エラー:',
@@ -535,6 +580,7 @@ export default function SubjectScreen() {
         setSummarySaveError(
           'まとめは表示できましたが、端末に保存できませんでした。'
         );
+        return false;
       }
     } catch (error) {
       console.log('授業まとめ作成エラー:', error);
@@ -542,6 +588,7 @@ export default function SubjectScreen() {
       setSummaryError(
         'まとめを作成できませんでした。少し待ってから再試行してください。'
       );
+      return false;
     } finally {
       setIsGeneratingSummary(false);
     }
@@ -549,13 +596,28 @@ export default function SubjectScreen() {
 
 
   const createCompleteLectureSummary = async (
-    section: LectureSection
-  ) => {
+    section: LectureSection,
+    options: CreateLectureSummaryOptions = {}
+  ): Promise<CreateLectureSummaryResult> => {
+    const {
+      showModal = true,
+      requireCompleteOcr = false,
+      sourceOcrRecords = photoOcrRecords,
+    } = options;
+    let updatedOcrRecords = {
+      ...sourceOcrRecords,
+    };
+
     if (processingLectureDateKey !== null) {
-      return;
+      return {
+        wasSaved: false,
+        ocrRecords: updatedOcrRecords,
+      };
     }
 
-    setSelectedLectureSection(section);
+    if (showModal) {
+      setSelectedLectureSection(section);
+    }
     setLectureSummary('');
     setIsLectureSummarySaved(false);
     setSummaryError('');
@@ -574,11 +636,15 @@ export default function SubjectScreen() {
       setSummaryAvailability(availability);
 
       if (availability !== 'available') {
-        return;
+        return {
+          wasSaved: false,
+          ocrRecords: updatedOcrRecords,
+        };
       }
 
       const missingPhotos = section.photos.filter(
-        (photo) => photoOcrRecords[photo.id] === undefined
+        (photo) =>
+          sourceOcrRecords[photo.id] === undefined
       );
 
       if (
@@ -588,12 +654,12 @@ export default function SubjectScreen() {
         setSummaryError(
           '写真の文字認識を利用するには、開発ビルドの再インストールが必要です。'
         );
-        return;
+        return {
+          wasSaved: false,
+          ocrRecords: updatedOcrRecords,
+        };
       }
 
-      const updatedOcrRecords = {
-        ...photoOcrRecords,
-      };
       const failedPhotoNumbers: number[] = [];
 
       for (
@@ -643,13 +709,32 @@ export default function SubjectScreen() {
         ),
       };
 
-      setSelectedLectureSection(updatedSection);
+      if (showModal) {
+        setSelectedLectureSection(updatedSection);
+      }
 
       if (updatedSection.ocrItems.length === 0) {
         setSummaryError(
           '写真から文字を認識できなかったため、まとめを作成できませんでした。'
         );
-        return;
+        return {
+          wasSaved: false,
+          ocrRecords: updatedOcrRecords,
+        };
+      }
+
+      if (
+        requireCompleteOcr &&
+        updatedSection.ocrItems.length !==
+          updatedSection.photos.length
+      ) {
+        setSummaryError(
+          '文字認識できなかった写真があるため、この回のまとめは作成しませんでした。'
+        );
+        return {
+          wasSaved: false,
+          ocrRecords: updatedOcrRecords,
+        };
       }
 
       if (failedPhotoNumbers.length > 0) {
@@ -659,7 +744,14 @@ export default function SubjectScreen() {
       }
 
       setLectureProcessingStatus('まとめを作成中...');
-      await generateAndSaveLectureSummary(updatedSection);
+      const wasSaved = await generateAndSaveLectureSummary(
+        updatedSection
+      );
+
+      return {
+        wasSaved,
+        ocrRecords: updatedOcrRecords,
+      };
     } catch (error) {
       console.log('授業まとめ一括作成エラー:', error);
       setSummaryAvailability((availability) =>
@@ -668,6 +760,10 @@ export default function SubjectScreen() {
       setSummaryError(
         'まとめを作成できませんでした。少し待ってから再試行してください。'
       );
+      return {
+        wasSaved: false,
+        ocrRecords: updatedOcrRecords,
+      };
     } finally {
       setLectureProcessingStatus('');
       setProcessingLectureDateKey(null);
@@ -927,28 +1023,68 @@ export default function SubjectScreen() {
     });
 
 
-  const hasCurrentLectureSummary = (
+  const getLectureSummaryStatus = (
     section: LectureSection
-  ) => {
-    if (
-      section.ocrItems.length !== section.photos.length
-    ) {
-      return false;
-    }
-
+  ): LectureSummaryStatus => {
     const summaryId = createLectureSummaryId(
       subject,
       section.dateKey
     );
     const savedSummary = lectureSummaryRecords[summaryId];
 
-    return (
-      savedSummary !== undefined &&
+    if (savedSummary === undefined) {
+      return 'missing';
+    }
+
+    if (
+      section.ocrItems.length === section.photos.length &&
       savedSummary.sourceOcrSignature ===
         createLectureSummarySourceSignature(
           section.ocrItems.map((item) => item.record)
         )
+    ) {
+      return 'current';
+    }
+
+    return 'outdated';
+  };
+
+
+  const getLectureSummaryUpdateMessage = (
+    section: LectureSection
+  ) => {
+    const summaryId = createLectureSummaryId(
+      subject,
+      section.dateKey
     );
+    const savedSummary = lectureSummaryRecords[summaryId];
+
+    if (savedSummary === undefined) {
+      return '';
+    }
+
+    const reason = getLectureSummaryUpdateReason(
+      savedSummary.sourceOcrSignature,
+      section.photos.map((photo) => photo.id),
+      section.ocrItems.map((item) => item.record)
+    );
+
+    switch (reason) {
+      case 'photosChanged':
+        return '写真の追加・移動がまとめに未反映です';
+      case 'photoOrderChanged':
+        return '写真の表示順がまとめに未反映です';
+      case 'ocrMissing':
+        return '文字認識されていない写真があります';
+      case 'ocrEdited':
+        return '編集した認識文字がまとめに未反映です';
+      case 'ocrUpdated':
+        return '新しい文字認識結果がまとめに未反映です';
+      case 'unknown':
+        return 'まとめの元データが更新されています';
+      default:
+        return '';
+    }
   };
 
 
@@ -958,6 +1094,36 @@ export default function SubjectScreen() {
   const selectedPhotoCount = selectedPhotos.length;
   const allPhotoIds = sections.flatMap((section) =>
     section.photos.map((photo) => photo.id)
+  );
+  const unrecognizedPhotoIds = allPhotoIds.filter(
+    (photoId) => photoOcrRecords[photoId] === undefined
+  );
+  const recognizedPhotoCount =
+    allPhotoIds.length - unrecognizedPhotoIds.length;
+  const lectureSummaryStatuses = sections.map(
+    getLectureSummaryStatus
+  );
+  const currentLectureSummaryCount =
+    lectureSummaryStatuses.filter(
+      (summaryStatus) => summaryStatus === 'current'
+    ).length;
+  const outdatedLectureSummaryCount =
+    lectureSummaryStatuses.filter(
+      (summaryStatus) => summaryStatus === 'outdated'
+    ).length;
+  const missingLectureSummaryCount =
+    lectureSummaryStatuses.filter(
+      (summaryStatus) => summaryStatus === 'missing'
+    ).length;
+  const displayedSections = showSummaryAttentionOnly
+    ? sections.filter(
+        (section) =>
+          getLectureSummaryStatus(section) !== 'current'
+      )
+    : sections;
+  const pendingLectureSummarySections = sections.filter(
+    (section) =>
+      getLectureSummaryStatus(section) !== 'current'
   );
   const allPhotosSelected =
     allPhotoIds.length > 0 &&
@@ -973,6 +1139,143 @@ export default function SubjectScreen() {
       return photo === undefined ? [] : [photo];
     }
   );
+
+
+  const createPendingLectureSummaries = async (
+    targetSections: LectureSection[]
+  ) => {
+    if (
+      targetSections.length === 0 ||
+      bulkSummaryProgress !== null ||
+      processingLectureDateKey !== null
+    ) {
+      return;
+    }
+
+    setSelectedLectureSection(null);
+    bulkSummaryCancellationRequestedRef.current = false;
+    setIsBulkSummaryCancellationRequested(false);
+    setBulkSummaryProgress({
+      completed: 0,
+      total: targetSections.length,
+      failed: 0,
+    });
+
+    let failedCount = 0;
+    let completedCount = 0;
+    let wasCancelled = false;
+    let currentOcrRecords = photoOcrRecords;
+
+    try {
+      for (
+        let sectionIndex = 0;
+        sectionIndex < targetSections.length;
+        sectionIndex += 1
+      ) {
+        if (bulkSummaryCancellationRequestedRef.current) {
+          wasCancelled = true;
+          break;
+        }
+
+        const result =
+          await createCompleteLectureSummary(
+            targetSections[sectionIndex],
+            {
+              showModal: false,
+              requireCompleteOcr: true,
+              sourceOcrRecords: currentOcrRecords,
+            }
+          );
+        currentOcrRecords = result.ocrRecords;
+
+        if (!result.wasSaved) {
+          failedCount += 1;
+        }
+
+        completedCount = sectionIndex + 1;
+
+        setBulkSummaryProgress({
+          completed: completedCount,
+          total: targetSections.length,
+          failed: failedCount,
+        });
+      }
+
+      setPhotoOcrRecords(currentOcrRecords);
+    } finally {
+      wasCancelled =
+        wasCancelled ||
+        bulkSummaryCancellationRequestedRef.current;
+      bulkSummaryCancellationRequestedRef.current = false;
+      setIsBulkSummaryCancellationRequested(false);
+      setBulkSummaryProgress(null);
+    }
+
+    const savedCount = completedCount - failedCount;
+    const remainingCount =
+      targetSections.length - completedCount;
+
+    Alert.alert(
+      wasCancelled
+        ? 'まとめの一括作成を中止しました'
+        : 'まとめの一括作成が完了しました',
+      [
+        `${savedCount}回分を保存`,
+        failedCount > 0
+          ? `${failedCount}回分は作成失敗`
+          : '',
+        wasCancelled && remainingCount > 0
+          ? `${remainingCount}回分は未処理`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('・')
+    );
+  };
+
+
+  const cancelPendingLectureSummaries = () => {
+    bulkSummaryCancellationRequestedRef.current = true;
+    setIsBulkSummaryCancellationRequested(true);
+  };
+
+
+  const confirmCreatePendingLectureSummaries = () => {
+    const targetSections = pendingLectureSummarySections;
+
+    if (targetSections.length === 0) {
+      Alert.alert(
+        'まとめは最新です',
+        '作成または更新が必要な授業回はありません。'
+      );
+      return;
+    }
+
+    const ocrNeededCount = targetSections.filter(
+      (section) =>
+        section.ocrItems.length !== section.photos.length
+    ).length;
+    const ocrMessage =
+      ocrNeededCount > 0
+        ? `\n${ocrNeededCount}回分は、先に写真の文字認識も行います。`
+        : '';
+
+    Alert.alert(
+      'まとめを一括作成',
+      `${targetSections.length}回分のまとめを順番に作成します。完了まで少し時間がかかります。${ocrMessage}`,
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '作成する',
+          onPress: () => {
+            void createPendingLectureSummaries(
+              targetSections
+            );
+          },
+        },
+      ]
+    );
+  };
 
 
   const openPhotoOrder = (section: LectureSection) => {
@@ -1627,7 +1930,7 @@ export default function SubjectScreen() {
       <SectionList
         style={styles.list}
         contentContainerStyle={styles.contentContainer}
-        sections={sections}
+        sections={displayedSections}
         keyExtractor={(row) => row.id}
         stickySectionHeadersEnabled={false}
         initialNumToRender={3}
@@ -1644,6 +1947,211 @@ export default function SubjectScreen() {
             <Text style={styles.status}>
               {status}
             </Text>
+
+            {allPhotoIds.length > 0 &&
+            !isSelectingPhotos ? (
+              <View
+                style={[
+                  styles.subjectOcrProgressCard,
+                  unrecognizedPhotoIds.length === 0 &&
+                    styles.subjectOcrProgressCardComplete,
+                ]}
+              >
+                <View style={styles.subjectOcrProgressHeader}>
+                  <Text style={styles.subjectOcrProgressTitle}>
+                    文字認識の進捗
+                  </Text>
+
+                  <Text
+                    style={[
+                      styles.subjectOcrProgressCount,
+                      unrecognizedPhotoIds.length === 0 &&
+                        styles.subjectOcrProgressCountComplete,
+                    ]}
+                  >
+                    {recognizedPhotoCount}/
+                    {allPhotoIds.length}枚
+                  </Text>
+                </View>
+
+                <View style={styles.subjectOcrProgressTrack}>
+                  {recognizedPhotoCount > 0 ? (
+                    <View
+                      style={[
+                        styles.subjectOcrProgressFill,
+                        { flex: recognizedPhotoCount },
+                      ]}
+                    />
+                  ) : null}
+
+                  {unrecognizedPhotoIds.length > 0 ? (
+                    <View
+                      style={{
+                        flex: unrecognizedPhotoIds.length,
+                      }}
+                    />
+                  ) : null}
+                </View>
+
+                <Text style={styles.subjectOcrProgressMessage}>
+                  {unrecognizedPhotoIds.length === 0
+                    ? 'すべての写真を認識済みです'
+                    : `残り${unrecognizedPhotoIds.length}枚が未認識です`}
+                </Text>
+              </View>
+            ) : null}
+
+            {sections.length > 0 && !isSelectingPhotos ? (
+              <View
+                style={[
+                  styles.subjectOcrProgressCard,
+                  currentLectureSummaryCount ===
+                    sections.length &&
+                    styles.subjectOcrProgressCardComplete,
+                ]}
+              >
+                <View style={styles.subjectOcrProgressHeader}>
+                  <Text style={styles.subjectOcrProgressTitle}>
+                    まとめの進捗
+                  </Text>
+
+                  <Text
+                    style={[
+                      styles.subjectOcrProgressCount,
+                      currentLectureSummaryCount ===
+                        sections.length &&
+                        styles.subjectOcrProgressCountComplete,
+                    ]}
+                  >
+                    {currentLectureSummaryCount}/
+                    {sections.length}回
+                  </Text>
+                </View>
+
+                <View style={styles.subjectOcrProgressTrack}>
+                  {currentLectureSummaryCount > 0 ? (
+                    <View
+                      style={[
+                        styles.subjectOcrProgressFill,
+                        { flex: currentLectureSummaryCount },
+                      ]}
+                    />
+                  ) : null}
+
+                  {outdatedLectureSummaryCount > 0 ? (
+                    <View
+                      style={[
+                        styles.subjectSummaryOutdatedFill,
+                        { flex: outdatedLectureSummaryCount },
+                      ]}
+                    />
+                  ) : null}
+
+                  {missingLectureSummaryCount > 0 ? (
+                    <View
+                      style={{
+                        flex: missingLectureSummaryCount,
+                      }}
+                    />
+                  ) : null}
+                </View>
+
+                <Text style={styles.subjectOcrProgressMessage}>
+                  {currentLectureSummaryCount === sections.length
+                    ? 'すべての授業回で最新のまとめを保存済みです'
+                    : [
+                        outdatedLectureSummaryCount > 0
+                          ? `更新待ち${outdatedLectureSummaryCount}回`
+                          : '',
+                        missingLectureSummaryCount > 0
+                          ? `未作成${missingLectureSummaryCount}回`
+                          : '',
+                      ]
+                        .filter(Boolean)
+                        .join('・')}
+                </Text>
+
+                {showSummaryAttentionOnly ||
+                currentLectureSummaryCount < sections.length ? (
+                  <View style={styles.summaryProgressActions}>
+                    {pendingLectureSummarySections.length > 0 ? (
+                      <Pressable
+                        style={[
+                          styles.summaryProgressBulkButton,
+                          bulkSummaryProgress !== null &&
+                            styles.summaryButtonDisabled,
+                        ]}
+                        disabled={bulkSummaryProgress !== null}
+                        accessibilityRole="button"
+                        onPress={
+                          confirmCreatePendingLectureSummaries
+                        }
+                      >
+                        {bulkSummaryProgress !== null ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="white"
+                          />
+                        ) : null}
+
+                        <Text
+                          style={styles.summaryProgressBulkButtonText}
+                        >
+                          {bulkSummaryProgress !== null
+                            ? `作成中 ${bulkSummaryProgress.completed}/${bulkSummaryProgress.total}`
+                            : 'まとめて作成・更新'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+
+                    {bulkSummaryProgress !== null ? (
+                      <Pressable
+                        style={[
+                          styles.summaryProgressCancelButton,
+                          isBulkSummaryCancellationRequested &&
+                            styles.summaryButtonDisabled,
+                        ]}
+                        disabled={
+                          isBulkSummaryCancellationRequested
+                        }
+                        accessibilityRole="button"
+                        onPress={cancelPendingLectureSummaries}
+                      >
+                        <Text
+                          style={styles.summaryProgressCancelButtonText}
+                        >
+                          {isBulkSummaryCancellationRequested
+                            ? '現在の回が終わり次第、中止します'
+                            : '処理を中止'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+
+                    <Pressable
+                      style={styles.summaryProgressFilterButton}
+                      disabled={bulkSummaryProgress !== null}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        selected: showSummaryAttentionOnly,
+                      }}
+                      onPress={() => {
+                        setShowSummaryAttentionOnly(
+                          (currentValue) => !currentValue
+                        );
+                      }}
+                    >
+                      <Text
+                        style={styles.summaryProgressFilterButtonText}
+                      >
+                        {showSummaryAttentionOnly
+                          ? 'すべての回を表示'
+                          : '未作成・更新待ちのみ表示'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
 
             {!isUnclassified && !isSelectingPhotos ? (
               <Pressable
@@ -1705,18 +2213,40 @@ export default function SubjectScreen() {
             ) : null}
 
             {sections.length > 0 && !isSelectingPhotos ? (
-              <Pressable
-                style={styles.startBulkSelectionButton}
-                accessibilityRole="button"
-                onPress={() => {
-                  setSelectedPhotoIds(new Set());
-                  setIsSelectingPhotos(true);
-                }}
-              >
-                <Text style={styles.startBulkSelectionButtonText}>
-                  写真を複数選択
-                </Text>
-              </Pressable>
+              <View style={styles.photoSelectionEntryActions}>
+                <Pressable
+                  style={styles.startBulkSelectionButton}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setSelectedPhotoIds(new Set());
+                    setShowSummaryAttentionOnly(false);
+                    setIsSelectingPhotos(true);
+                  }}
+                >
+                  <Text style={styles.startBulkSelectionButtonText}>
+                    写真を複数選択
+                  </Text>
+                </Pressable>
+
+                {unrecognizedPhotoIds.length > 0 ? (
+                  <Pressable
+                    style={styles.selectUnrecognizedButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={`未認識の写真${unrecognizedPhotoIds.length}枚を選択`}
+                    onPress={() => {
+                      setSelectedPhotoIds(
+                        new Set(unrecognizedPhotoIds)
+                      );
+                      setIsSelectingPhotos(true);
+                    }}
+                  >
+                    <Text style={styles.selectUnrecognizedButtonText}>
+                      未認識の写真を選択（
+                      {unrecognizedPhotoIds.length}枚）
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
 
             {loadError !== '' ? (
@@ -1760,7 +2290,11 @@ export default function SubjectScreen() {
           </View>
         }
         ListEmptyComponent={
-          loadError !== '' ? null : (
+          loadError !== '' ? null : showSummaryAttentionOnly ? (
+            <Text style={styles.emptyText}>
+              未作成・更新待ちの授業回はありません
+            </Text>
+          ) : (
             <Text style={styles.emptyText}>
               {isUnclassified
                 ? '未分類の写真はありません'
@@ -1784,6 +2318,22 @@ export default function SubjectScreen() {
               </Text>
             </View>
 
+            <Text
+              style={[
+                styles.lectureOcrProgress,
+                section.ocrItems.length ===
+                  section.photos.length &&
+                  styles.lectureOcrProgressComplete,
+              ]}
+            >
+              OCR {section.ocrItems.length}/
+              {section.photos.length}枚
+              {section.ocrItems.length ===
+              section.photos.length
+                ? ' ・ 認識済み'
+                : ''}
+            </Text>
+
             {isSelectingPhotos ? (
               <Pressable
                 style={styles.lectureSelectionButton}
@@ -1806,39 +2356,86 @@ export default function SubjectScreen() {
             ) : null}
 
             {!isSelectingPhotos ? (
-              <Pressable
-                style={[
-                  styles.lectureOcrButton,
-                  processingLectureDateKey !== null &&
-                    styles.summaryButtonDisabled,
-                ]}
-                disabled={processingLectureDateKey !== null}
-                onPress={() => {
-                  if (hasCurrentLectureSummary(section)) {
-                    void openLectureOcr(section);
-                    return;
-                  }
-
-                  void createCompleteLectureSummary(section);
-                }}
-              >
-                {processingLectureDateKey ===
-                section.dateKey ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#28794c"
-                  />
+              <View style={styles.lectureSummaryActions}>
+                {getLectureSummaryStatus(section) ===
+                'outdated' ? (
+                  <Pressable
+                    style={styles.lectureOcrButton}
+                    disabled={
+                      processingLectureDateKey !== null
+                    }
+                    onPress={() => {
+                      void openLectureOcr(section, true);
+                    }}
+                  >
+                    <Text
+                      style={styles.lectureOcrButtonText}
+                    >
+                      まとめを見る
+                    </Text>
+                  </Pressable>
                 ) : null}
 
-                <Text style={styles.lectureOcrButtonText}>
-                  {processingLectureDateKey === section.dateKey
-                    ? lectureProcessingStatus ||
-                      '準備中...'
-                    : hasCurrentLectureSummary(section)
-                      ? 'まとめを見る'
-                      : 'まとめを作成'}
-                </Text>
-              </Pressable>
+                <Pressable
+                  style={[
+                    styles.lectureOcrButton,
+                    getLectureSummaryStatus(section) ===
+                      'outdated' &&
+                      styles.lectureOcrButtonOutdated,
+                    processingLectureDateKey !== null &&
+                      styles.summaryButtonDisabled,
+                  ]}
+                  disabled={processingLectureDateKey !== null}
+                  onPress={() => {
+                    if (
+                      getLectureSummaryStatus(section) ===
+                      'current'
+                    ) {
+                      void openLectureOcr(section);
+                      return;
+                    }
+
+                    void createCompleteLectureSummary(section);
+                  }}
+                >
+                  {processingLectureDateKey ===
+                  section.dateKey ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#28794c"
+                    />
+                  ) : null}
+
+                  <Text
+                    style={[
+                      styles.lectureOcrButtonText,
+                      getLectureSummaryStatus(section) ===
+                        'outdated' &&
+                        styles.lectureOcrButtonTextOutdated,
+                    ]}
+                  >
+                    {processingLectureDateKey ===
+                    section.dateKey
+                      ? lectureProcessingStatus ||
+                        '準備中...'
+                      : getLectureSummaryStatus(section) ===
+                          'current'
+                        ? 'まとめを見る'
+                        : getLectureSummaryStatus(section) ===
+                            'outdated'
+                          ? 'まとめを更新'
+                          : 'まとめを作成'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {!isSelectingPhotos &&
+            getLectureSummaryStatus(section) ===
+              'outdated' ? (
+              <Text style={styles.lectureSummaryUpdateReason}>
+                {getLectureSummaryUpdateMessage(section)}
+              </Text>
             ) : null}
 
             {section.photos.length > 1 &&
@@ -2751,6 +3348,119 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  subjectOcrProgressCard: {
+    backgroundColor: '#f3f6ff',
+    borderWidth: 1,
+    borderColor: '#d4dcf1',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+
+  subjectOcrProgressCardComplete: {
+    backgroundColor: '#eef8f2',
+    borderColor: '#9bc9aa',
+  },
+
+  subjectOcrProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  subjectOcrProgressTitle: {
+    color: '#333',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  subjectOcrProgressCount: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  subjectOcrProgressCountComplete: {
+    color: '#28794c',
+  },
+
+  subjectOcrProgressTrack: {
+    height: 7,
+    flexDirection: 'row',
+    backgroundColor: '#dce2ef',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginTop: 9,
+  },
+
+  subjectOcrProgressFill: {
+    backgroundColor: '#28794c',
+    borderRadius: 4,
+  },
+
+  subjectSummaryOutdatedFill: {
+    backgroundColor: '#d69b38',
+  },
+
+  subjectOcrProgressMessage: {
+    color: '#666',
+    fontSize: 11,
+    marginTop: 7,
+  },
+
+  summaryProgressFilterButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+
+  summaryProgressFilterButtonText: {
+    color: '#31518f',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+
+  summaryProgressActions: {
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 9,
+  },
+
+  summaryProgressBulkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#28794c',
+    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+
+  summaryProgressBulkButtonText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+
+  summaryProgressCancelButton: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#bd3838',
+    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+
+  summaryProgressCancelButtonText: {
+    color: '#a52f2f',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+
   unclassifiedHint: {
     fontSize: 14,
     color: '#725b24',
@@ -2777,6 +3487,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
+  lectureOcrProgress: {
+    color: '#777',
+    fontSize: 11,
+    marginTop: 5,
+  },
+
+  lectureOcrProgressComplete: {
+    color: '#28794c',
+    fontWeight: 'bold',
+  },
+
   lectureOcrButton: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -2788,7 +3509,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 11,
     paddingVertical: 7,
+  },
+
+  lectureSummaryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 9,
+  },
+
+  lectureSummaryUpdateReason: {
+    color: '#9a6414',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 5,
+  },
+
+  lectureOcrButtonOutdated: {
+    backgroundColor: '#fff7e8',
+    borderColor: '#d69b38',
   },
 
   lectureSelectionButton: {
@@ -2810,6 +3549,10 @@ const styles = StyleSheet.create({
     color: '#28794c',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+
+  lectureOcrButtonTextOutdated: {
+    color: '#9a6414',
   },
 
   photoOrderButton: {
@@ -2877,6 +3620,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  photoSelectionEntryActions: {
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 12,
+  },
+
   startBulkSelectionButton: {
     alignSelf: 'flex-start',
     borderWidth: 1,
@@ -2884,11 +3633,26 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    marginBottom: 12,
   },
 
   startBulkSelectionButtonText: {
     color: '#31518f',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  selectUnrecognizedButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#eef8f2',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+
+  selectUnrecognizedButtonText: {
+    color: '#28794c',
     fontSize: 14,
     fontWeight: 'bold',
   },

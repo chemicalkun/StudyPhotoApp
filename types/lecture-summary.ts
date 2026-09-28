@@ -17,6 +17,15 @@ export type LectureSummaryRecords = Record<
 >;
 
 
+export type LectureSummaryUpdateReason =
+  | 'photosChanged'
+  | 'photoOrderChanged'
+  | 'ocrMissing'
+  | 'ocrEdited'
+  | 'ocrUpdated'
+  | 'unknown';
+
+
 export const createLectureSummaryId = (
   subject: string,
   dateKey: string
@@ -36,9 +45,9 @@ export const createLectureSummarySourceSignature = (
 );
 
 
-export const getLectureSummarySourcePhotoIds = (
+const parseLectureSummarySourceSignature = (
   sourceOcrSignature: string
-): string[] | null => {
+): [string, string][] | null => {
   try {
     const parsedSignature: unknown =
       JSON.parse(sourceOcrSignature);
@@ -56,10 +65,86 @@ export const getLectureSummarySourcePhotoIds = (
       return null;
     }
 
-    return parsedSignature.map(([photoId]) => photoId);
+    return parsedSignature;
   } catch {
     return null;
   }
+};
+
+
+export const getLectureSummarySourcePhotoIds = (
+  sourceOcrSignature: string
+): string[] | null =>
+  parseLectureSummarySourceSignature(
+    sourceOcrSignature
+  )?.map(([photoId]) => photoId) ?? null;
+
+
+export const getLectureSummaryUpdateReason = (
+  sourceOcrSignature: string,
+  currentPhotoIds: string[],
+  currentOcrRecords: Pick<
+    PhotoOcrRecord,
+    'photoId' | 'recognizedAt' | 'manuallyEdited'
+  >[]
+): LectureSummaryUpdateReason | null => {
+  const sourceRecords =
+    parseLectureSummarySourceSignature(
+      sourceOcrSignature
+    );
+
+  if (sourceRecords === null) {
+    return 'unknown';
+  }
+
+  const sourcePhotoIds = sourceRecords.map(
+    ([photoId]) => photoId
+  );
+  const sourcePhotoIdSet = new Set(sourcePhotoIds);
+
+  if (
+    sourcePhotoIds.length !== currentPhotoIds.length ||
+    currentPhotoIds.some(
+      (photoId) => !sourcePhotoIdSet.has(photoId)
+    )
+  ) {
+    return 'photosChanged';
+  }
+
+  if (
+    sourcePhotoIds.some(
+      (photoId, index) => photoId !== currentPhotoIds[index]
+    )
+  ) {
+    return 'photoOrderChanged';
+  }
+
+  if (currentOcrRecords.length !== currentPhotoIds.length) {
+    return 'ocrMissing';
+  }
+
+  const sourceRecognizedAtByPhotoId = new Map(
+    sourceRecords
+  );
+  const changedOcrRecords = currentOcrRecords.filter(
+    (record) =>
+      sourceRecognizedAtByPhotoId.get(record.photoId) !==
+      record.recognizedAt
+  );
+
+  if (
+    changedOcrRecords.some(
+      (record) => record.manuallyEdited === true
+    )
+  ) {
+    return 'ocrEdited';
+  }
+
+  if (changedOcrRecords.length > 0) {
+    return 'ocrUpdated';
+  }
+
+  return null;
 };
 
 

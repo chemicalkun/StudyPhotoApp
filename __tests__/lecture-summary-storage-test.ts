@@ -12,6 +12,7 @@ import {
   createLectureSummaryId,
   createLectureSummarySourceSignature,
   getLectureSummarySourcePhotoIds,
+  getLectureSummaryUpdateReason,
   parseLectureSummaryRecords,
 } from '@/types/lecture-summary';
 
@@ -102,6 +103,80 @@ describe('lecture summary storage', () => {
     ).toEqual(['photo-1', 'photo-2']);
     expect(
       getLectureSummarySourcePhotoIds('legacy-signature')
+    ).toBeNull();
+  });
+
+  test('まとめの更新が必要になった理由を判定する', () => {
+    const recognizedAt =
+      '2026-09-21T01:00:00.000Z';
+    const signature = createLectureSummarySourceSignature([
+      { photoId: 'photo-1', recognizedAt },
+      { photoId: 'photo-2', recognizedAt },
+    ]);
+
+    expect(
+      getLectureSummaryUpdateReason(
+        signature,
+        ['photo-1', 'photo-2', 'photo-3'],
+        [
+          { photoId: 'photo-1', recognizedAt },
+          { photoId: 'photo-2', recognizedAt },
+        ]
+      )
+    ).toBe('photosChanged');
+    expect(
+      getLectureSummaryUpdateReason(
+        signature,
+        ['photo-2', 'photo-1'],
+        [
+          { photoId: 'photo-2', recognizedAt },
+          { photoId: 'photo-1', recognizedAt },
+        ]
+      )
+    ).toBe('photoOrderChanged');
+    expect(
+      getLectureSummaryUpdateReason(
+        signature,
+        ['photo-1', 'photo-2'],
+        [{ photoId: 'photo-1', recognizedAt }]
+      )
+    ).toBe('ocrMissing');
+    expect(
+      getLectureSummaryUpdateReason(
+        signature,
+        ['photo-1', 'photo-2'],
+        [
+          {
+            photoId: 'photo-1',
+            recognizedAt: '2026-09-21T02:00:00.000Z',
+            manuallyEdited: true,
+          },
+          { photoId: 'photo-2', recognizedAt },
+        ]
+      )
+    ).toBe('ocrEdited');
+    expect(
+      getLectureSummaryUpdateReason(
+        signature,
+        ['photo-1', 'photo-2'],
+        [
+          {
+            photoId: 'photo-1',
+            recognizedAt: '2026-09-21T02:00:00.000Z',
+          },
+          { photoId: 'photo-2', recognizedAt },
+        ]
+      )
+    ).toBe('ocrUpdated');
+    expect(
+      getLectureSummaryUpdateReason(
+        signature,
+        ['photo-1', 'photo-2'],
+        [
+          { photoId: 'photo-1', recognizedAt },
+          { photoId: 'photo-2', recognizedAt },
+        ]
+      )
     ).toBeNull();
   });
 
