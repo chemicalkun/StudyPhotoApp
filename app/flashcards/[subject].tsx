@@ -44,6 +44,7 @@ export default function FlashcardScreen() {
     typeof params.subject === 'string'
       ? params.subject
       : '';
+  const startInReviewMode = params.mode === 'review';
 
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
@@ -120,16 +121,26 @@ export default function FlashcardScreen() {
           const loadedCards = hasSavedRecord
             ? savedRecord.cards
             : [];
+          const loadedAssessments = hasSavedRecord
+            ? savedRecord.assessments ?? {}
+            : {};
+          const reviewCardIndexes = loadedCards.flatMap(
+            (_, index) =>
+              loadedAssessments[String(index)] === 'review'
+                ? [index]
+                : []
+          );
+          const shouldStartReviewRound =
+            startInReviewMode &&
+            reviewCardIndexes.length > 0;
 
           setCards(loadedCards);
           setCardOrder(
-            loadedCards.map((_, index) => index)
+            shouldStartReviewRound
+              ? reviewCardIndexes
+              : loadedCards.map((_, index) => index)
           );
-          setAssessments(
-            hasSavedRecord
-              ? savedRecord.assessments ?? {}
-              : {}
-          );
+          setAssessments(loadedAssessments);
           setIsSaved(hasSavedRecord);
           setIsOutdated(
             hasSavedRecord && !savedRecordIsCurrent
@@ -137,7 +148,7 @@ export default function FlashcardScreen() {
           setCurrentCardPosition(0);
           setShowDefinition(false);
           setIsFinished(false);
-          setIsReviewRound(false);
+          setIsReviewRound(shouldStartReviewRound);
         } catch (error) {
           console.log('フラッシュカード読み込みエラー:', error);
 
@@ -159,7 +170,7 @@ export default function FlashcardScreen() {
       return () => {
         active = false;
       };
-    }, [loadRevision, subject])
+    }, [loadRevision, startInReviewMode, subject])
   );
 
 
@@ -316,7 +327,9 @@ export default function FlashcardScreen() {
       <Stack.Screen
         options={{
           title: 'フラッシュカード',
-          headerBackTitle: '試験対策',
+          headerBackTitle: startInReviewMode
+            ? '復習'
+            : '試験対策',
         }}
       />
 

@@ -116,6 +116,61 @@ type LectureOcrItem = {
 };
 
 
+const getLectureSummarySourceRecords = (
+  section: LectureSection
+) => section.photos.map((photo) => {
+  const ocrRecord = section.ocrItems.find(
+    (item) => item.record.photoId === photo.id
+  )?.record;
+
+  return {
+    photoId: photo.id,
+    recognizedAt: ocrRecord?.recognizedAt ?? '',
+    note: photo.note,
+  };
+});
+
+
+const createLectureSummaryInput = (
+  section: LectureSection
+) => section.photos.flatMap((photo, photoIndex) => {
+  const ocrRecord = section.ocrItems.find(
+    (item) => item.record.photoId === photo.id
+  )?.record;
+  const parts = [`写真${photoIndex + 1}`];
+
+  if (ocrRecord !== undefined) {
+    parts.push(`認識文字\n${ocrRecord.text}`);
+  }
+
+  if (photo.note !== undefined && photo.note.trim() !== '') {
+    parts.push(`補足メモ\n${photo.note.trim()}`);
+  }
+
+  return parts.length > 1
+    ? [parts.join('\n')]
+    : [];
+}).join('\n\n');
+
+
+const hasCompleteLectureSummarySource = (
+  section: LectureSection
+) => {
+  const ocrPhotoIds = new Set(
+    section.ocrItems.map((item) => item.record.photoId)
+  );
+
+  return section.photos.every(
+    (photo) =>
+      ocrPhotoIds.has(photo.id) ||
+      (
+        photo.note !== undefined &&
+        photo.note.trim() !== ''
+      )
+  );
+};
+
+
 type LecturePhotoImportFeedback = {
   message: string;
   isError: boolean;
@@ -309,6 +364,8 @@ export default function SubjectScreen() {
     useState(false);
   const [showImportantPhotosOnly, setShowImportantPhotosOnly] =
     useState(false);
+  const [showNotedPhotosOnly, setShowNotedPhotosOnly] =
+    useState(false);
 
 
   useFocusEffect(
@@ -485,7 +542,7 @@ export default function SubjectScreen() {
     );
     const sourceOcrSignature =
       createLectureSummarySourceSignature(
-        section.ocrItems.map((item) => item.record)
+        getLectureSummarySourceRecords(section)
       );
     const savedSummary = lectureSummaryRecords[summaryId];
     const canUseSavedSummary =
@@ -512,7 +569,7 @@ export default function SubjectScreen() {
         savedSummary !== undefined &&
         savedSummary.sourceOcrSignature !==
           sourceOcrSignature
-        ? 'このまとめには、最新の写真や認識文字の変更が反映されていません。'
+        ? 'このまとめには、最新の写真・認識文字・メモの変更が反映されていません。'
         : ''
     );
 
@@ -531,13 +588,9 @@ export default function SubjectScreen() {
   const generateAndSaveLectureSummary = async (
     section: LectureSection
   ): Promise<boolean> => {
-    const combinedOcrText =
-      section.ocrItems
-        .map(
-          (item) =>
-            `写真${item.photoNumber}\n${item.record.text}`
-        )
-        .join('\n\n');
+    const combinedOcrText = createLectureSummaryInput(
+      section
+    );
 
     try {
       setIsGeneratingSummary(true);
@@ -563,9 +616,7 @@ export default function SubjectScreen() {
             section.dateKey,
             trimmedSummary,
             createLectureSummarySourceSignature(
-              section.ocrItems.map(
-                (item) => item.record
-              )
+              getLectureSummarySourceRecords(section)
             )
           );
 
@@ -650,9 +701,14 @@ export default function SubjectScreen() {
         (photo) =>
           sourceOcrRecords[photo.id] === undefined
       );
+      const missingPhotosWithoutNotes = missingPhotos.filter(
+        (photo) =>
+          photo.note === undefined ||
+          photo.note.trim() === ''
+      );
 
       if (
-        missingPhotos.length > 0 &&
+        missingPhotosWithoutNotes.length > 0 &&
         !isStudyPhotoVisionAvailable
       ) {
         setSummaryError(
@@ -678,6 +734,10 @@ export default function SubjectScreen() {
         );
 
         if (updatedOcrRecords[photo.id] !== undefined) {
+          continue;
+        }
+
+        if (!isStudyPhotoVisionAvailable) {
           continue;
         }
 
@@ -717,9 +777,26 @@ export default function SubjectScreen() {
         setSelectedLectureSection(updatedSection);
       }
 
-      if (updatedSection.ocrItems.length === 0) {
+      const photosWithoutSummaryText =
+        updatedSection.photos.filter(
+          (photo) =>
+            updatedOcrRecords[photo.id] === undefined &&
+            (
+              photo.note === undefined ||
+              photo.note.trim() === ''
+            )
+        );
+      const hasSummaryText =
+        updatedSection.ocrItems.length > 0 ||
+        updatedSection.photos.some(
+          (photo) =>
+            photo.note !== undefined &&
+            photo.note.trim() !== ''
+        );
+
+      if (!hasSummaryText) {
         setSummaryError(
-          '写真から文字を認識できなかったため、まとめを作成できませんでした。'
+          '写真から文字を認識できず、写真メモもないため、まとめを作成できませんでした。'
         );
         return {
           wasSaved: false,
@@ -729,11 +806,10 @@ export default function SubjectScreen() {
 
       if (
         requireCompleteOcr &&
-        updatedSection.ocrItems.length !==
-          updatedSection.photos.length
+        photosWithoutSummaryText.length > 0
       ) {
         setSummaryError(
-          '文字認識できなかった写真があるため、この回のまとめは作成しませんでした。'
+          '文字認識結果もメモもない写真があるため、この回のまとめは作成しませんでした。'
         );
         return {
           wasSaved: false,
@@ -743,7 +819,7 @@ export default function SubjectScreen() {
 
       if (failedPhotoNumbers.length > 0) {
         setLectureProcessingWarning(
-          `写真${failedPhotoNumbers.join('、')}は文字を認識できなかったため、認識できた写真だけでまとめました。`
+          `写真${failedPhotoNumbers.join('、')}は文字を認識できませんでした。メモがある写真はメモを含め、取得できた内容でまとめました。`
         );
       }
 
@@ -1041,10 +1117,10 @@ export default function SubjectScreen() {
     }
 
     if (
-      section.ocrItems.length === section.photos.length &&
+      hasCompleteLectureSummarySource(section) &&
       savedSummary.sourceOcrSignature ===
         createLectureSummarySourceSignature(
-          section.ocrItems.map((item) => item.record)
+          getLectureSummarySourceRecords(section)
         )
     ) {
       return 'current';
@@ -1070,7 +1146,11 @@ export default function SubjectScreen() {
     const reason = getLectureSummaryUpdateReason(
       savedSummary.sourceOcrSignature,
       section.photos.map((photo) => photo.id),
-      section.ocrItems.map((item) => item.record)
+      section.ocrItems.map((item) => item.record),
+      section.photos.map((photo) => ({
+        photoId: photo.id,
+        note: photo.note,
+      }))
     );
 
     switch (reason) {
@@ -1079,11 +1159,13 @@ export default function SubjectScreen() {
       case 'photoOrderChanged':
         return '写真の表示順がまとめに未反映です';
       case 'ocrMissing':
-        return '文字認識されていない写真があります';
+        return '認識文字もメモもない写真があります';
       case 'ocrEdited':
         return '編集した認識文字がまとめに未反映です';
       case 'ocrUpdated':
         return '新しい文字認識結果がまとめに未反映です';
+      case 'noteUpdated':
+        return '写真メモの変更がまとめに未反映です';
       case 'unknown':
         return 'まとめの元データが更新されています';
       default:
@@ -1130,13 +1212,26 @@ export default function SubjectScreen() {
           getLectureSummaryStatus(section) !== 'current'
       )
     : sections;
-  const displayedSections = showImportantPhotosOnly
+  const hasPhotoFilter =
+    showImportantPhotosOnly || showNotedPhotosOnly;
+  const displayedSections = hasPhotoFilter
     ? summaryFilteredSections.flatMap((section) => {
-        const importantPhotos = section.photos.filter(
-          (photo) => photo.isImportant === true
+        const filteredPhotos = section.photos.filter(
+          (photo) =>
+            (
+              !showImportantPhotosOnly ||
+              photo.isImportant === true
+            ) &&
+            (
+              !showNotedPhotosOnly ||
+              (
+                photo.note !== undefined &&
+                photo.note.trim() !== ''
+              )
+            )
         );
 
-        if (importantPhotos.length === 0) {
+        if (filteredPhotos.length === 0) {
           return [];
         }
 
@@ -1144,12 +1239,12 @@ export default function SubjectScreen() {
 
         for (
           let photoIndex = 0;
-          photoIndex < importantPhotos.length;
+          photoIndex < filteredPhotos.length;
           photoIndex += 3
         ) {
           rows.push({
-            id: `${section.dateKey}-important-${photoIndex}`,
-            photos: importantPhotos.slice(
+            id: `${section.dateKey}-filtered-${photoIndex}`,
+            photos: filteredPhotos.slice(
               photoIndex,
               photoIndex + 3
             ),
@@ -1171,6 +1266,14 @@ export default function SubjectScreen() {
   const importantPhotoCount = sections
     .flatMap((section) => section.photos)
     .filter((photo) => photo.isImportant === true)
+    .length;
+  const notedPhotoCount = sections
+    .flatMap((section) => section.photos)
+    .filter(
+      (photo) =>
+        photo.note !== undefined &&
+        photo.note.trim() !== ''
+    )
     .length;
   const reorderedPhotos = reorderedPhotoIds.flatMap(
     (photoId) => {
@@ -2350,8 +2453,40 @@ export default function SubjectScreen() {
                       ]}
                     >
                       {showImportantPhotosOnly
-                        ? 'すべての写真を表示'
+                        ? '重要フィルターを解除'
                         : `重要な写真のみ（${importantPhotoCount}枚）`}
+                    </Text>
+                  </Pressable>
+                ) : null}
+
+                {notedPhotoCount > 0 ||
+                showNotedPhotosOnly ? (
+                  <Pressable
+                    style={[
+                      styles.notedPhotoFilterButton,
+                      showNotedPhotosOnly &&
+                        styles.notedPhotoFilterButtonActive,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected: showNotedPhotosOnly,
+                    }}
+                    onPress={() => {
+                      setShowNotedPhotosOnly(
+                        (currentValue) => !currentValue
+                      );
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.notedPhotoFilterButtonText,
+                        showNotedPhotosOnly &&
+                          styles.notedPhotoFilterButtonTextActive,
+                      ]}
+                    >
+                      {showNotedPhotosOnly
+                        ? 'メモフィルターを解除'
+                        : `メモありのみ（${notedPhotoCount}枚）`}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -2363,6 +2498,7 @@ export default function SubjectScreen() {
                     setSelectedPhotoIds(new Set());
                     setShowSummaryAttentionOnly(false);
                     setShowImportantPhotosOnly(false);
+                    setShowNotedPhotosOnly(false);
                     setIsSelectingPhotos(true);
                   }}
                 >
@@ -2379,6 +2515,7 @@ export default function SubjectScreen() {
                     onPress={() => {
                       setShowSummaryAttentionOnly(false);
                       setShowImportantPhotosOnly(false);
+                      setShowNotedPhotosOnly(false);
                       setSelectedPhotoIds(
                         new Set(unrecognizedPhotoIds)
                       );
@@ -2435,14 +2572,9 @@ export default function SubjectScreen() {
           </View>
         }
         ListEmptyComponent={
-          loadError !== '' ? null : showImportantPhotosOnly &&
-            showSummaryAttentionOnly ? (
+          loadError !== '' ? null : hasPhotoFilter ? (
             <Text style={styles.emptyText}>
-              条件に一致する重要な写真はありません
-            </Text>
-          ) : showImportantPhotosOnly ? (
-            <Text style={styles.emptyText}>
-              重要な写真はありません
+              条件に一致する写真はありません
             </Text>
           ) : showSummaryAttentionOnly ? (
             <Text style={styles.emptyText}>
@@ -2468,7 +2600,7 @@ export default function SubjectScreen() {
               </Text>
 
               <Text style={styles.photoCount}>
-                {showImportantPhotosOnly
+                {hasPhotoFilter
                   ? `${section.data.reduce(
                       (count, row) =>
                         count + row.photos.length,
@@ -2599,7 +2731,7 @@ export default function SubjectScreen() {
             ) : null}
 
             {section.photos.length > 1 &&
-            !showImportantPhotosOnly &&
+            !hasPhotoFilter &&
             !isSelectingPhotos ? (
               <Pressable
                 style={styles.photoOrderButton}
@@ -2637,6 +2769,7 @@ export default function SubjectScreen() {
                     if (!isSelectingPhotos) {
                       setShowSummaryAttentionOnly(false);
                       setShowImportantPhotosOnly(false);
+                      setShowNotedPhotosOnly(false);
                       setIsSelectingPhotos(true);
                       setSelectedPhotoIds(new Set([photo.id]));
                     }
@@ -2699,6 +2832,16 @@ export default function SubjectScreen() {
                     <View style={styles.importantPhotoBadge}>
                       <Text style={styles.importantPhotoBadgeText}>
                         重要
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {photo.note !== undefined &&
+                  photo.note.trim() !== '' &&
+                  !isSelectingPhotos ? (
+                    <View style={styles.notedPhotoBadge}>
+                      <Text style={styles.notedPhotoBadgeText}>
+                        メモ
                       </Text>
                     </View>
                   ) : null}
@@ -3835,6 +3978,30 @@ const styles = StyleSheet.create({
     color: '#694b0d',
   },
 
+  notedPhotoFilterButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#6d75a8',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+
+  notedPhotoFilterButtonActive: {
+    backgroundColor: '#eef0ff',
+    borderColor: '#505b98',
+  },
+
+  notedPhotoFilterButtonText: {
+    color: '#505b98',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  notedPhotoFilterButtonTextActive: {
+    color: '#384277',
+  },
+
   startBulkSelectionButton: {
     alignSelf: 'flex-start',
     borderWidth: 1,
@@ -4087,6 +4254,22 @@ const styles = StyleSheet.create({
   },
 
   importantPhotoBadgeText: {
+    color: 'white',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+
+  notedPhotoBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: 'rgba(75, 86, 145, 0.94)',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+
+  notedPhotoBadgeText: {
     color: 'white',
     fontSize: 9,
     fontWeight: 'bold',

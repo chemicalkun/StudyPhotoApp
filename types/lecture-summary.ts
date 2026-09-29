@@ -23,6 +23,7 @@ export type LectureSummaryUpdateReason =
   | 'ocrMissing'
   | 'ocrEdited'
   | 'ocrUpdated'
+  | 'noteUpdated'
   | 'unknown';
 
 
@@ -33,21 +34,30 @@ export const createLectureSummaryId = (
 
 
 export const createLectureSummarySourceSignature = (
-  records: Pick<
-    PhotoOcrRecord,
-    'photoId' | 'recognizedAt'
-  >[]
+  records: Array<
+    Pick<PhotoOcrRecord, 'photoId' | 'recognizedAt'> & {
+      note?: string;
+    }
+  >
 ) => JSON.stringify(
-  records.map((record) => [
-    record.photoId,
-    record.recognizedAt,
-  ])
+  records.map((record) => {
+    const note = record.note?.trim() ?? '';
+
+    return note === ''
+      ? [record.photoId, record.recognizedAt]
+      : [record.photoId, record.recognizedAt, note];
+  })
 );
+
+
+type LectureSummarySourceRecord =
+  | [string, string]
+  | [string, string, string];
 
 
 const parseLectureSummarySourceSignature = (
   sourceOcrSignature: string
-): [string, string][] | null => {
+): LectureSummarySourceRecord[] | null => {
   try {
     const parsedSignature: unknown =
       JSON.parse(sourceOcrSignature);
@@ -57,15 +67,19 @@ const parseLectureSummarySourceSignature = (
       !parsedSignature.every(
         (item) =>
           Array.isArray(item) &&
-          item.length === 2 &&
+          (item.length === 2 || item.length === 3) &&
           typeof item[0] === 'string' &&
-          typeof item[1] === 'string'
+          typeof item[1] === 'string' &&
+          (
+            item.length === 2 ||
+            typeof item[2] === 'string'
+          )
       )
     ) {
       return null;
     }
 
-    return parsedSignature;
+    return parsedSignature as LectureSummarySourceRecord[];
   } catch {
     return null;
   }
@@ -86,7 +100,11 @@ export const getLectureSummaryUpdateReason = (
   currentOcrRecords: Pick<
     PhotoOcrRecord,
     'photoId' | 'recognizedAt' | 'manuallyEdited'
-  >[]
+  >[],
+  currentPhotoNotes: {
+    photoId: string;
+    note?: string;
+  }[] = []
 ): LectureSummaryUpdateReason | null => {
   const sourceRecords =
     parseLectureSummarySourceSignature(
@@ -119,12 +137,33 @@ export const getLectureSummaryUpdateReason = (
     return 'photoOrderChanged';
   }
 
-  if (currentOcrRecords.length !== currentPhotoIds.length) {
+  const currentNoteByPhotoId = new Map(
+    currentPhotoNotes.map(({ photoId, note }) => [
+      photoId,
+      note?.trim() ?? '',
+    ])
+  );
+  const currentOcrPhotoIds = new Set(
+    currentOcrRecords.map((record) => record.photoId)
+  );
+
+  if (
+    currentPhotoIds.some(
+      (photoId) =>
+        !currentOcrPhotoIds.has(photoId) &&
+        (currentNoteByPhotoId.get(photoId) ?? '') === ''
+    )
+  ) {
     return 'ocrMissing';
   }
 
   const sourceRecognizedAtByPhotoId = new Map(
-    sourceRecords
+    sourceRecords.map(
+      ([photoId, recognizedAt]) => [
+        photoId,
+        recognizedAt,
+      ] as const
+    )
   );
   const changedOcrRecords = currentOcrRecords.filter(
     (record) =>
@@ -142,6 +181,21 @@ export const getLectureSummaryUpdateReason = (
 
   if (changedOcrRecords.length > 0) {
     return 'ocrUpdated';
+  }
+
+  const sourceNoteByPhotoId = new Map(
+    sourceRecords.map(
+      ([photoId, , note]) => [photoId, note?.trim() ?? '']
+    )
+  );
+  if (
+    currentPhotoIds.some(
+      (photoId) =>
+        (sourceNoteByPhotoId.get(photoId) ?? '') !==
+        (currentNoteByPhotoId.get(photoId) ?? '')
+    )
+  ) {
+    return 'noteUpdated';
   }
 
   return null;

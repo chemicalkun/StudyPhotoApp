@@ -86,6 +86,28 @@ describe('lecture summary storage', () => {
     expect(updatedSignature).not.toBe(firstSignature);
   });
 
+  test('写真メモが変わると元データ署名も変わる', () => {
+    const recognizedAt =
+      '2026-09-21T01:00:00.000Z';
+    const firstSignature =
+      createLectureSummarySourceSignature([
+        { photoId: 'photo-1', recognizedAt },
+      ]);
+    const updatedSignature =
+      createLectureSummarySourceSignature([
+        {
+          photoId: 'photo-1',
+          recognizedAt,
+          note: '試験前に確認する',
+        },
+      ]);
+
+    expect(updatedSignature).not.toBe(firstSignature);
+    expect(
+      getLectureSummarySourcePhotoIds(updatedSignature)
+    ).toEqual(['photo-1']);
+  });
+
   test('元データ署名からまとめに使った写真IDを取得する', () => {
     const signature = createLectureSummarySourceSignature([
       {
@@ -175,6 +197,51 @@ describe('lecture summary storage', () => {
         [
           { photoId: 'photo-1', recognizedAt },
           { photoId: 'photo-2', recognizedAt },
+        ]
+      )
+    ).toBeNull();
+    expect(
+      getLectureSummaryUpdateReason(
+        signature,
+        ['photo-1', 'photo-2'],
+        [
+          { photoId: 'photo-1', recognizedAt },
+          { photoId: 'photo-2', recognizedAt },
+        ],
+        [
+          {
+            photoId: 'photo-1',
+            note: '補足メモを追加',
+          },
+          { photoId: 'photo-2' },
+        ]
+      )
+    ).toBe('noteUpdated');
+  });
+
+  test('OCRがなくても保存済みメモがあれば情報不足にしない', () => {
+    const recognizedAt =
+      '2026-09-21T01:00:00.000Z';
+    const signature = createLectureSummarySourceSignature([
+      { photoId: 'photo-1', recognizedAt },
+      {
+        photoId: 'photo-2',
+        recognizedAt: '',
+        note: '板書を見ながら反応式を確認する',
+      },
+    ]);
+
+    expect(
+      getLectureSummaryUpdateReason(
+        signature,
+        ['photo-1', 'photo-2'],
+        [{ photoId: 'photo-1', recognizedAt }],
+        [
+          { photoId: 'photo-1' },
+          {
+            photoId: 'photo-2',
+            note: '板書を見ながら反応式を確認する',
+          },
         ]
       )
     ).toBeNull();

@@ -46,6 +46,7 @@ export default function PracticeQuestionScreen() {
     typeof params.subject === 'string'
       ? params.subject
       : '';
+  const startInReviewMode = params.mode === 'review';
 
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
@@ -125,24 +126,34 @@ export default function PracticeQuestionScreen() {
           const loadedQuestions = hasSavedRecord
             ? savedRecord.questions
             : [];
+          const loadedAssessments = hasSavedRecord
+            ? savedRecord.assessments ?? {}
+            : {};
+          const reviewQuestionIndexes =
+            loadedQuestions.flatMap((_, index) =>
+              loadedAssessments[String(index)] === 'review'
+                ? [index]
+                : []
+            );
+          const shouldStartReviewRound =
+            startInReviewMode &&
+            reviewQuestionIndexes.length > 0;
 
           setQuestions(loadedQuestions);
           setQuestionOrder(
-            loadedQuestions.map((_, index) => index)
+            shouldStartReviewRound
+              ? reviewQuestionIndexes
+              : loadedQuestions.map((_, index) => index)
           );
           setIsSaved(hasSavedRecord);
           setIsOutdated(
             hasSavedRecord && !savedRecordIsCurrent
           );
-          setAssessments(
-            hasSavedRecord
-              ? savedRecord.assessments ?? {}
-              : {}
-          );
+          setAssessments(loadedAssessments);
           setCurrentQuestionPosition(0);
           setShowAnswer(false);
           setIsFinished(false);
-          setIsReviewRound(false);
+          setIsReviewRound(shouldStartReviewRound);
         } catch (error) {
           console.log('練習問題読み込みエラー:', error);
 
@@ -164,7 +175,7 @@ export default function PracticeQuestionScreen() {
       return () => {
         active = false;
       };
-    }, [loadRevision, subject])
+    }, [loadRevision, startInReviewMode, subject])
   );
 
 
@@ -328,7 +339,9 @@ export default function PracticeQuestionScreen() {
       <Stack.Screen
         options={{
           title: '練習問題',
-          headerBackTitle: '試験対策',
+          headerBackTitle: startInReviewMode
+            ? '復習'
+            : '試験対策',
         }}
       />
 
