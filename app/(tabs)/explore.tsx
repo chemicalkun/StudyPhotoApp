@@ -199,6 +199,12 @@ export default function ReviewScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [photoSearchLimit, setPhotoSearchLimit] =
     useState(photoSearchPageSize);
+  const [showImportantPhotos, setShowImportantPhotos] =
+    useState(false);
+  const [importantPhotoLimit, setImportantPhotoLimit] =
+    useState(photoSearchPageSize);
+  const [selectedImportantSubject, setSelectedImportantSubject] =
+    useState<string | null>(null);
   const [examPreparationRecords, setExamPreparationRecords] =
     useState<ExamPreparationRecords>({});
   const [practiceQuestionRecords, setPracticeQuestionRecords] =
@@ -350,6 +356,31 @@ export default function ReviewScreen() {
     0,
     photoSearchLimit
   );
+  const importantPhotos = photos
+    .filter((photo) => photo.isImportant === true)
+    .sort(
+      (photoA, photoB) =>
+        new Date(photoB.takenAt).getTime() -
+        new Date(photoA.takenAt).getTime()
+    );
+  const importantPhotoSubjects = [
+    ...new Set(importantPhotos.map(getPhotoLabel)),
+  ].sort((subjectA, subjectB) =>
+    subjectA.localeCompare(subjectB, 'ja')
+  );
+  const filteredImportantPhotos =
+    selectedImportantSubject === null
+      ? importantPhotos
+      : importantPhotos.filter(
+          (photo) =>
+            getPhotoLabel(photo) === selectedImportantSubject
+        );
+  const visibleImportantPhotos = filteredImportantPhotos.slice(
+    0,
+    importantPhotoLimit
+  );
+  const hasMoreImportantPhotos =
+    filteredImportantPhotos.length > importantPhotoLimit;
   const summaryMatchesSearch = (
     summary: LectureSummaryRecord
   ) => {
@@ -600,6 +631,22 @@ export default function ReviewScreen() {
               ? photoResult.value
               : []
           );
+          setSelectedImportantSubject((currentSubject) => {
+            if (
+              currentSubject === null ||
+              photoResult.status !== 'fulfilled'
+            ) {
+              return currentSubject;
+            }
+
+            return photoResult.value.some(
+              (photo) =>
+                photo.isImportant === true &&
+                getPhotoLabel(photo) === currentSubject
+            )
+              ? currentSubject
+              : null;
+          });
           setPhotoOcrRecords(
             photoOcrResult.status === 'fulfilled'
               ? photoOcrResult.value
@@ -951,19 +998,19 @@ export default function ReviewScreen() {
                   setSearchQuery(value);
                   setPhotoSearchLimit(photoSearchPageSize);
                 }}
-                placeholder="授業名・まとめ・写真内文字を検索"
+                placeholder="授業名・まとめ・写真内文字・メモを検索"
                 placeholderTextColor="#888"
                 returnKeyType="search"
                 clearButtonMode="while-editing"
                 autoCorrect={false}
-                accessibilityLabel="授業名、まとめ、写真内の文字を検索"
+                accessibilityLabel="授業名、まとめ、写真内の文字、写真メモを検索"
               />
             </View>
 
             {normalizedSearchQuery !== '' ? (
               <View style={styles.photoSearchSection}>
                 <Text style={styles.photoSearchTitle}>
-                  写真内の文字（
+                  写真の文字・メモ（
                   {photoSearchResults.length}件
                   {hasMorePhotoSearchResults ? '以上' : ''}）
                 </Text>
@@ -996,6 +1043,13 @@ export default function ReviewScreen() {
                             {getPhotoDateLabel(
                               result.photo.takenAt
                             )}
+                          </Text>
+                          <Text style={styles.photoSearchSource}>
+                            {result.source === 'note'
+                              ? 'メモに一致'
+                              : result.source === 'ocr'
+                                ? '認識文字に一致'
+                                : 'メモ・認識文字に一致'}
                           </Text>
                           <Text
                             style={styles.photoSearchPreview}
@@ -1036,6 +1090,165 @@ export default function ReviewScreen() {
                     一致する写真はありません
                   </Text>
                 )}
+              </View>
+            ) : null}
+
+            {importantPhotos.length > 0 ? (
+              <View style={styles.importantPhotoSection}>
+                <Pressable
+                  style={styles.importantPhotoHeader}
+                  accessibilityRole="button"
+                  accessibilityLabel={`重要な写真${importantPhotos.length}枚を${showImportantPhotos ? '閉じる' : '開く'}`}
+                  accessibilityState={{
+                    expanded: showImportantPhotos,
+                  }}
+                  onPress={() => {
+                    setShowImportantPhotos(
+                      (currentValue) => !currentValue
+                    );
+                    setImportantPhotoLimit(photoSearchPageSize);
+                  }}
+                >
+                  <View>
+                    <Text style={styles.importantPhotoTitle}>
+                      重要な写真
+                    </Text>
+                    <Text style={styles.importantPhotoCount}>
+                      {importantPhotos.length}枚
+                    </Text>
+                  </View>
+
+                  <Text style={styles.importantPhotoToggle}>
+                    {showImportantPhotos ? '閉じる ︿' : '開く ﹀'}
+                  </Text>
+                </Pressable>
+
+                {showImportantPhotos ? (
+                  <View style={styles.importantPhotoList}>
+                    {importantPhotoSubjects.length > 1 ? (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={
+                          styles.importantSubjectFilterList
+                        }
+                      >
+                        {[null, ...importantPhotoSubjects].map(
+                          (filterSubject) => {
+                            const selected =
+                              selectedImportantSubject ===
+                              filterSubject;
+                            const label =
+                              filterSubject ?? 'すべて';
+
+                            return (
+                              <Pressable
+                                key={label}
+                                style={[
+                                  styles.importantSubjectFilterButton,
+                                  selected &&
+                                    styles.importantSubjectFilterButtonActive,
+                                ]}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected }}
+                                accessibilityLabel={`${label}の重要な写真を表示`}
+                                onPress={() => {
+                                  setSelectedImportantSubject(
+                                    filterSubject
+                                  );
+                                  setImportantPhotoLimit(
+                                    photoSearchPageSize
+                                  );
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.importantSubjectFilterText,
+                                    selected &&
+                                      styles.importantSubjectFilterTextActive,
+                                  ]}
+                                >
+                                  {label}
+                                </Text>
+                              </Pressable>
+                            );
+                          }
+                        )}
+                      </ScrollView>
+                    ) : null}
+
+                    {selectedImportantSubject !== null ? (
+                      <Text style={styles.importantFilteredCount}>
+                        {filteredImportantPhotos.length}枚
+                      </Text>
+                    ) : null}
+
+                    {visibleImportantPhotos.map((photo) => (
+                      <Pressable
+                        key={photo.id}
+                        style={styles.importantPhotoCard}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${getPhotoLabel(photo)}の重要な写真を開く`}
+                        onPress={() => {
+                          router.push({
+                            pathname: '/photo/[id]',
+                            params: {
+                              id: photo.id,
+                              mode: 'important',
+                              importantSubject:
+                                selectedImportantSubject ?? '',
+                            },
+                          });
+                        }}
+                      >
+                        <Image
+                          style={styles.photoSearchThumbnail}
+                          source={{ uri: photo.uri }}
+                        />
+
+                        <View style={styles.photoSearchText}>
+                          <Text style={styles.importantPhotoSubject}>
+                            {getPhotoLabel(photo)}
+                          </Text>
+                          <Text style={styles.photoSearchDate}>
+                            {getPhotoDateLabel(photo.takenAt)}
+                          </Text>
+                          <Text
+                            style={styles.photoSearchPreview}
+                            numberOfLines={2}
+                          >
+                            {photoOcrRecords[photo.id]?.text ??
+                              '文字認識結果なし'}
+                          </Text>
+                        </View>
+
+                        <Text style={styles.importantPhotoOpenText}>
+                          ›
+                        </Text>
+                      </Pressable>
+                    ))}
+
+                    {hasMoreImportantPhotos ? (
+                      <Pressable
+                        style={styles.importantPhotoMoreButton}
+                        accessibilityRole="button"
+                        accessibilityLabel="重要な写真をさらに表示"
+                        onPress={() => {
+                          setImportantPhotoLimit(
+                            (currentLimit) =>
+                              currentLimit + photoSearchPageSize
+                          );
+                        }}
+                      >
+                        <Text
+                          style={styles.importantPhotoMoreButtonText}
+                        >
+                          さらに表示
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
             ) : null}
 
@@ -1833,6 +2046,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  photoSearchSource: {
+    color: '#765294',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginTop: 3,
+  },
+
   photoSearchPreview: {
     color: '#333',
     fontSize: 12,
@@ -1863,6 +2083,119 @@ const styles = StyleSheet.create({
 
   photoSearchMoreButtonText: {
     color: '#6b3ca0',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  importantPhotoSection: {
+    backgroundColor: '#fff9e9',
+    borderWidth: 1,
+    borderColor: '#d8bd74',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+
+  importantPhotoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  importantPhotoTitle: {
+    color: '#614914',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  importantPhotoCount: {
+    color: '#846a2b',
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  importantPhotoToggle: {
+    color: '#715719',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  importantPhotoList: {
+    borderTopWidth: 1,
+    borderTopColor: '#ead9aa',
+    gap: 9,
+    padding: 10,
+  },
+
+  importantSubjectFilterList: {
+    gap: 7,
+    paddingBottom: 2,
+  },
+
+  importantSubjectFilterButton: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#cfb86f',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+
+  importantSubjectFilterButtonActive: {
+    backgroundColor: '#8a6818',
+    borderColor: '#8a6818',
+  },
+
+  importantSubjectFilterText: {
+    color: '#715719',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  importantSubjectFilterTextActive: {
+    color: 'white',
+  },
+
+  importantFilteredCount: {
+    color: '#846a2b',
+    fontSize: 12,
+  },
+
+  importantPhotoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#dbc27c',
+    borderRadius: 10,
+    padding: 9,
+  },
+
+  importantPhotoSubject: {
+    color: '#715719',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  importantPhotoOpenText: {
+    color: '#8a6818',
+    fontSize: 24,
+    marginLeft: 8,
+  },
+
+  importantPhotoMoreButton: {
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#c5a34c',
+    borderRadius: 9,
+    paddingVertical: 10,
+  },
+
+  importantPhotoMoreButtonText: {
+    color: '#715719',
     fontSize: 13,
     fontWeight: 'bold',
   },

@@ -81,6 +81,7 @@ import {
   getPhotosForBulkRecognition,
   moveSelectedPhotosToLecture,
   removeSelectedPhotos,
+  updateSelectedPhotoImportance,
   updateSelectedPhotoSubjects,
 } from '@/utils/photo-bulk-actions';
 import {
@@ -123,6 +124,7 @@ type LecturePhotoImportFeedback = {
 
 type BulkOperation =
   | 'ocr'
+  | 'importance'
   | 'classification'
   | 'lecture'
   | 'delete';
@@ -304,6 +306,8 @@ export default function SubjectScreen() {
   const [savingPhotoOrder, setSavingPhotoOrder] =
     useState(false);
   const [showSummaryAttentionOnly, setShowSummaryAttentionOnly] =
+    useState(false);
+  const [showImportantPhotosOnly, setShowImportantPhotosOnly] =
     useState(false);
 
 
@@ -1092,6 +1096,11 @@ export default function SubjectScreen() {
     .flatMap((section) => section.photos)
     .filter((photo) => selectedPhotoIds.has(photo.id));
   const selectedPhotoCount = selectedPhotos.length;
+  const allSelectedPhotosImportant =
+    selectedPhotoCount > 0 &&
+    selectedPhotos.every(
+      (photo) => photo.isImportant === true
+    );
   const allPhotoIds = sections.flatMap((section) =>
     section.photos.map((photo) => photo.id)
   );
@@ -1115,12 +1124,41 @@ export default function SubjectScreen() {
     lectureSummaryStatuses.filter(
       (summaryStatus) => summaryStatus === 'missing'
     ).length;
-  const displayedSections = showSummaryAttentionOnly
+  const summaryFilteredSections = showSummaryAttentionOnly
     ? sections.filter(
         (section) =>
           getLectureSummaryStatus(section) !== 'current'
       )
     : sections;
+  const displayedSections = showImportantPhotosOnly
+    ? summaryFilteredSections.flatMap((section) => {
+        const importantPhotos = section.photos.filter(
+          (photo) => photo.isImportant === true
+        );
+
+        if (importantPhotos.length === 0) {
+          return [];
+        }
+
+        const rows: PhotoRow[] = [];
+
+        for (
+          let photoIndex = 0;
+          photoIndex < importantPhotos.length;
+          photoIndex += 3
+        ) {
+          rows.push({
+            id: `${section.dateKey}-important-${photoIndex}`,
+            photos: importantPhotos.slice(
+              photoIndex,
+              photoIndex + 3
+            ),
+          });
+        }
+
+        return [{ ...section, data: rows }];
+      })
+    : summaryFilteredSections;
   const pendingLectureSummarySections = sections.filter(
     (section) =>
       getLectureSummaryStatus(section) !== 'current'
@@ -1130,6 +1168,10 @@ export default function SubjectScreen() {
     allPhotoIds.every((photoId) =>
       selectedPhotoIds.has(photoId)
     );
+  const importantPhotoCount = sections
+    .flatMap((section) => section.photos)
+    .filter((photo) => photo.isImportant === true)
+    .length;
   const reorderedPhotos = reorderedPhotoIds.flatMap(
     (photoId) => {
       const photo = reorderingLectureSection?.photos.find(
@@ -1545,6 +1587,48 @@ export default function SubjectScreen() {
   };
 
 
+  const saveSelectedPhotoImportance = async (
+    isImportant: boolean
+  ) => {
+    if (
+      selectedPhotoCount === 0 ||
+      bulkOperation !== null
+    ) {
+      return;
+    }
+
+    setBulkOperation('importance');
+
+    try {
+      const photos = await loadPhotoRecords();
+      const updatedPhotos = updateSelectedPhotoImportance(
+        photos,
+        selectedPhotoIds,
+        isImportant
+      );
+
+      await savePhotoRecords(updatedPhotos);
+      finishPhotoSelection();
+      setLoadRevision((revision) => revision + 1);
+
+      Alert.alert(
+        isImportant
+          ? '重要な写真に設定しました'
+          : '重要マークを解除しました',
+        `${selectedPhotoCount}枚の写真を更新しました。`
+      );
+    } catch (error) {
+      console.log('重要マーク一括変更エラー:', error);
+      Alert.alert(
+        '重要マークを変更できませんでした',
+        '写真データの保存中にエラーが発生しました。'
+      );
+    } finally {
+      setBulkOperation(null);
+    }
+  };
+
+
   const saveBulkClassification = async (
     selectedSubject = bulkSubjectInput
   ) => {
@@ -1861,6 +1945,32 @@ export default function SubjectScreen() {
                 bulkOcrProgress !== null
                   ? `文字認識 ${bulkOcrProgress.completed}/${bulkOcrProgress.total}`
                   : '文字認識'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.bulkImportanceButton,
+                (selectedPhotoCount === 0 ||
+                  bulkOperation !== null) &&
+                  styles.summaryButtonDisabled,
+              ]}
+              disabled={
+                selectedPhotoCount === 0 ||
+                bulkOperation !== null
+              }
+              onPress={() => {
+                void saveSelectedPhotoImportance(
+                  !allSelectedPhotosImportant
+                );
+              }}
+            >
+              <Text style={styles.bulkImportanceButtonText}>
+                {bulkOperation === 'importance'
+                  ? '保存中...'
+                  : allSelectedPhotosImportant
+                    ? '重要を解除'
+                    : '重要にする'}
               </Text>
             </Pressable>
 
@@ -2214,12 +2324,45 @@ export default function SubjectScreen() {
 
             {sections.length > 0 && !isSelectingPhotos ? (
               <View style={styles.photoSelectionEntryActions}>
+                {importantPhotoCount > 0 ||
+                showImportantPhotosOnly ? (
+                  <Pressable
+                    style={[
+                      styles.importantPhotoFilterButton,
+                      showImportantPhotosOnly &&
+                        styles.importantPhotoFilterButtonActive,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected: showImportantPhotosOnly,
+                    }}
+                    onPress={() => {
+                      setShowImportantPhotosOnly(
+                        (currentValue) => !currentValue
+                      );
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.importantPhotoFilterButtonText,
+                        showImportantPhotosOnly &&
+                          styles.importantPhotoFilterButtonTextActive,
+                      ]}
+                    >
+                      {showImportantPhotosOnly
+                        ? 'すべての写真を表示'
+                        : `重要な写真のみ（${importantPhotoCount}枚）`}
+                    </Text>
+                  </Pressable>
+                ) : null}
+
                 <Pressable
                   style={styles.startBulkSelectionButton}
                   accessibilityRole="button"
                   onPress={() => {
                     setSelectedPhotoIds(new Set());
                     setShowSummaryAttentionOnly(false);
+                    setShowImportantPhotosOnly(false);
                     setIsSelectingPhotos(true);
                   }}
                 >
@@ -2234,6 +2377,8 @@ export default function SubjectScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`未認識の写真${unrecognizedPhotoIds.length}枚を選択`}
                     onPress={() => {
+                      setShowSummaryAttentionOnly(false);
+                      setShowImportantPhotosOnly(false);
                       setSelectedPhotoIds(
                         new Set(unrecognizedPhotoIds)
                       );
@@ -2290,7 +2435,16 @@ export default function SubjectScreen() {
           </View>
         }
         ListEmptyComponent={
-          loadError !== '' ? null : showSummaryAttentionOnly ? (
+          loadError !== '' ? null : showImportantPhotosOnly &&
+            showSummaryAttentionOnly ? (
+            <Text style={styles.emptyText}>
+              条件に一致する重要な写真はありません
+            </Text>
+          ) : showImportantPhotosOnly ? (
+            <Text style={styles.emptyText}>
+              重要な写真はありません
+            </Text>
+          ) : showSummaryAttentionOnly ? (
             <Text style={styles.emptyText}>
               未作成・更新待ちの授業回はありません
             </Text>
@@ -2314,7 +2468,13 @@ export default function SubjectScreen() {
               </Text>
 
               <Text style={styles.photoCount}>
-                {section.photos.length}枚
+                {showImportantPhotosOnly
+                  ? `${section.data.reduce(
+                      (count, row) =>
+                        count + row.photos.length,
+                      0
+                    )}/${section.photos.length}枚`
+                  : `${section.photos.length}枚`}
               </Text>
             </View>
 
@@ -2439,6 +2599,7 @@ export default function SubjectScreen() {
             ) : null}
 
             {section.photos.length > 1 &&
+            !showImportantPhotosOnly &&
             !isSelectingPhotos ? (
               <Pressable
                 style={styles.photoOrderButton}
@@ -2474,6 +2635,8 @@ export default function SubjectScreen() {
                   accessibilityState={{ selected: isSelected }}
                   onLongPress={() => {
                     if (!isSelectingPhotos) {
+                      setShowSummaryAttentionOnly(false);
+                      setShowImportantPhotosOnly(false);
                       setIsSelectingPhotos(true);
                       setSelectedPhotoIds(new Set([photo.id]));
                     }
@@ -2527,6 +2690,15 @@ export default function SubjectScreen() {
                           .manuallyEdited
                           ? '編集済'
                           : 'OCR'}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {photo.isImportant === true &&
+                  !isSelectingPhotos ? (
+                    <View style={styles.importantPhotoBadge}>
+                      <Text style={styles.importantPhotoBadgeText}>
+                        重要
                       </Text>
                     </View>
                   ) : null}
@@ -3319,6 +3491,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  bulkImportanceButton: {
+    backgroundColor: '#9c741e',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+
+  bulkImportanceButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
   bulkDeleteButton: {
     backgroundColor: 'white',
     borderWidth: 1,
@@ -3626,6 +3811,30 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  importantPhotoFilterButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#b58a2d',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+
+  importantPhotoFilterButtonActive: {
+    backgroundColor: '#fff4d6',
+    borderColor: '#9c741e',
+  },
+
+  importantPhotoFilterButtonText: {
+    color: '#8a6518',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  importantPhotoFilterButtonTextActive: {
+    color: '#694b0d',
+  },
+
   startBulkSelectionButton: {
     alignSelf: 'flex-start',
     borderWidth: 1,
@@ -3862,6 +4071,22 @@ const styles = StyleSheet.create({
   },
 
   photoOcrBadgeText: {
+    color: 'white',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+
+  importantPhotoBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(156, 116, 30, 0.94)',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+
+  importantPhotoBadgeText: {
     color: 'white',
     fontSize: 9,
     fontWeight: 'bold',

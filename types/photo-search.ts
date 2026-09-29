@@ -5,6 +5,7 @@ import type { PhotoRecord } from '@/types/photo';
 export type PhotoTextSearchResult = {
   photo: PhotoRecord;
   preview: string;
+  source: 'note' | 'ocr' | 'noteAndOcr';
 };
 
 
@@ -129,20 +130,44 @@ export const searchRecognizedPhotos = (
     )
     .flatMap((photo) => {
       const ocrRecord = ocrRecords[photo.id];
+      const note = photo.note ?? '';
+      const ocrText = ocrRecord?.text ?? '';
+      const noteMatches =
+        note !== '' &&
+        matchesStudySearchText(note, query);
+      const ocrMatches =
+        ocrText !== '' &&
+        matchesStudySearchText(ocrText, query);
+      const combinedText = [note, ocrText]
+        .filter(Boolean)
+        .join('\n');
 
       if (
-        ocrRecord === undefined ||
-        !matchesStudySearchText(ocrRecord.text, query)
+        !noteMatches &&
+        !ocrMatches &&
+        !matchesStudySearchText(combinedText, query)
       ) {
         return [];
       }
 
+      const source: PhotoTextSearchResult['source'] = noteMatches
+        ? 'note'
+        : ocrMatches
+          ? 'ocr'
+          : 'noteAndOcr';
+      const previewText = source === 'note'
+        ? note
+        : source === 'ocr'
+          ? ocrText
+          : combinedText;
+
       return [{
         photo,
         preview: createPreview(
-          ocrRecord.text,
+          previewText,
           searchTerms
         ),
+        source,
       }];
     })
     .slice(0, limit);

@@ -51,6 +51,7 @@ describe('recognized photo search', () => {
       'photo-old',
     ]);
     expect(results[0].preview).toContain('付加重合');
+    expect(results[0].source).toBe('ocr');
   });
 
   test('空の検索語と一致しない検索語では結果を返さない', () => {
@@ -108,5 +109,43 @@ describe('recognized photo search', () => {
         '有機 物理'
       )
     ).toBe(false);
+  });
+
+  test('写真メモだけに含まれる文字でも検索できる', () => {
+    const photosWithNote = photos.map((photo) =>
+      photo.id === 'photo-old'
+        ? {
+            ...photo,
+            note: '試験前に反応機構を復習する',
+          }
+        : photo
+    );
+    const results = searchRecognizedPhotos(
+      photosWithNote,
+      ocrRecords,
+      '試験前'
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0].photo.id).toBe('photo-old');
+    expect(results[0].preview).toContain('反応機構');
+    expect(results[0].source).toBe('note');
+  });
+
+  test('メモとOCRに分かれた複数語でも検索できる', () => {
+    const photosWithNote = photos.map((photo) =>
+      photo.id === 'photo-new'
+        ? { ...photo, note: '試験前に確認' }
+        : photo
+    );
+    const results = searchRecognizedPhotos(
+      photosWithNote,
+      ocrRecords,
+      '試験 縮合'
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0].photo.id).toBe('photo-new');
+    expect(results[0].source).toBe('noteAndOcr');
   });
 });

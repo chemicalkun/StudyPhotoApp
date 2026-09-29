@@ -50,6 +50,17 @@ export const updateSelectedPhotoSubjects = (
 );
 
 
+export const updateSelectedPhotoImportance = (
+  photos: PhotoRecord[],
+  selectedPhotoIds: ReadonlySet<string>,
+  isImportant: boolean
+) => photos.map((photo) =>
+  selectedPhotoIds.has(photo.id)
+    ? { ...photo, isImportant }
+    : photo
+);
+
+
 export const moveSelectedPhotosToLecture = (
   photos: PhotoRecord[],
   selectedPhotoIds: ReadonlySet<string>,

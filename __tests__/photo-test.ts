@@ -165,6 +165,17 @@ describe('写真の授業分類', () => {
     ).toBe(true);
   });
 
+  test('写真に保存したメモを読み込む', () => {
+    const photo = {
+      ...createPhoto('noted-photo', '化学'),
+      note: '試験前に反応機構を見直す',
+    };
+
+    expect(
+      parsePhotoRecords(JSON.stringify([photo]))[0].note
+    ).toBe('試験前に反応機構を見直す');
+  });
+
   test('旧い写真は撮影日から学期を補完する', () => {
     expect(
       getPhotoAcademicTerm(createPhoto('old-photo', '化学'))

@@ -106,6 +106,39 @@ export const updatePhotoImportance = async (
 };
 
 
+export const updatePhotoNote = async (
+  photoId: string,
+  note: string
+): Promise<PhotoRecord> => {
+  if (photoId === '') {
+    throw new Error('写真IDが不正です');
+  }
+
+  const photos = await loadPhotoRecords();
+  const photoIndex = photos.findIndex(
+    (photo) => photo.id === photoId
+  );
+
+  if (photoIndex < 0) {
+    throw new Error('写真が見つかりません');
+  }
+
+  const normalizedNote = note.trim();
+  const updatedPhoto: PhotoRecord = {
+    ...photos[photoIndex],
+    note: normalizedNote === ''
+      ? undefined
+      : normalizedNote,
+  };
+  const updatedPhotos = [...photos];
+
+  updatedPhotos[photoIndex] = updatedPhoto;
+  await savePhotoRecords(updatedPhotos);
+
+  return updatedPhoto;
+};
+
+
 type SavePhotoFromUriInput = {
   sourceUri: string;
   takenAt: Date;

@@ -55,6 +55,7 @@ import {
 import {
   loadPhotoRecords,
   updatePhotoImportance,
+  updatePhotoNote,
 } from '@/services/photo-storage';
 import {
   isStudyPhotoVisionAvailable,
@@ -103,6 +104,13 @@ export default function PhotoScreen() {
     typeof params.id === 'string'
       ? params.id
       : '';
+  const isImportantReview =
+    params.mode === 'important';
+  const importantReviewSubject =
+    typeof params.importantSubject === 'string' &&
+    params.importantSubject !== ''
+      ? params.importantSubject
+      : null;
 
   const [photo, setPhoto] =
     useState<PhotoRecord | null>(null);
@@ -117,6 +125,12 @@ export default function PhotoScreen() {
   const [deleting, setDeleting] = useState(false);
   const [savingImportance, setSavingImportance] =
     useState(false);
+  const [noteModalVisible, setNoteModalVisible] =
+    useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteSaveError, setNoteSaveError] = useState('');
+  const [noteEditorRevision, setNoteEditorRevision] =
+    useState(0);
   const [recognizingText, setRecognizingText] =
     useState(false);
   const [photoOcrRecord, setPhotoOcrRecord] =
@@ -155,6 +169,7 @@ export default function PhotoScreen() {
     useState(0);
 
   const zoomScale = useRef(1);
+  const photoNoteRef = useRef('');
   const editedRecognitionTextRef = useRef('');
   const translateX = useRef(
     new Animated.Value(0)
@@ -173,6 +188,8 @@ export default function PhotoScreen() {
         setPhotoOcrRecord(null);
         setTextRecognitionError('');
         setTextRecognitionModalVisible(false);
+        setNoteModalVisible(false);
+        setNoteSaveError('');
         setIsEditingRecognition(false);
         setRecognitionEditError('');
         zoomScale.current = 1;
@@ -194,14 +211,29 @@ export default function PhotoScreen() {
           return;
         }
 
-        const selectedLabel =
-          getPhotoLabel(selectedPhoto);
+        const selectedLabel = getPhotoLabel(selectedPhoto);
 
-        const relatedPhotos = photos
-          .filter((item) => {
-            return getPhotoLabel(item) === selectedLabel;
-          })
-          .sort(comparePhotosByLectureOrder);
+        const relatedPhotos = isImportantReview
+          ? photos
+              .filter(
+                (item) =>
+                  item.isImportant === true &&
+                  (
+                    importantReviewSubject === null ||
+                    getPhotoLabel(item) ===
+                      importantReviewSubject
+                  )
+              )
+              .sort(
+                (photoA, photoB) =>
+                  new Date(photoB.takenAt).getTime() -
+                  new Date(photoA.takenAt).getTime()
+              )
+          : photos
+              .filter((item) => {
+                return getPhotoLabel(item) === selectedLabel;
+              })
+              .sort(comparePhotosByLectureOrder);
 
         setLecturePhotos(relatedPhotos);
         setPhoto(selectedPhoto);
@@ -229,7 +261,12 @@ export default function PhotoScreen() {
     };
 
     loadPhoto();
-  }, [loadRevision, photoId]);
+  }, [
+    importantReviewSubject,
+    isImportantReview,
+    loadRevision,
+    photoId,
+  ]);
 
 
   const getTakenAtLabel = (takenAt: string) => {
@@ -307,6 +344,8 @@ export default function PhotoScreen() {
       setPhotoOcrRecord(null);
       setTextRecognitionError('');
       setTextRecognitionModalVisible(false);
+      setNoteModalVisible(false);
+      setNoteSaveError('');
       zoomScale.current = 1;
 
       loadPhotoOcrRecord(targetPhoto.id)
@@ -518,6 +557,54 @@ export default function PhotoScreen() {
       );
     } finally {
       setSavingImportance(false);
+    }
+  };
+
+
+  const openPhotoNote = () => {
+    if (photo === null) {
+      return;
+    }
+
+    photoNoteRef.current = photo.note ?? '';
+    setNoteSaveError('');
+    setNoteEditorRevision(
+      (currentRevision) => currentRevision + 1
+    );
+    setNoteModalVisible(true);
+  };
+
+
+  const savePhotoNote = async () => {
+    if (photo === null || savingNote) {
+      return;
+    }
+
+    try {
+      setSavingNote(true);
+      setNoteSaveError('');
+
+      const updatedPhoto = await updatePhotoNote(
+        photo.id,
+        photoNoteRef.current
+      );
+
+      setPhoto(updatedPhoto);
+      setLecturePhotos((currentPhotos) =>
+        currentPhotos.map((currentPhoto) =>
+          currentPhoto.id === updatedPhoto.id
+            ? updatedPhoto
+            : currentPhoto
+        )
+      );
+      setNoteModalVisible(false);
+    } catch (error) {
+      console.log('写真メモ保存エラー:', error);
+      setNoteSaveError(
+        'メモを保存できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setSavingNote(false);
     }
   };
 
@@ -951,7 +1038,9 @@ export default function PhotoScreen() {
       <Stack.Screen
         options={{
           title: '写真',
-          headerBackTitle: '授業',
+          headerBackTitle: isImportantReview
+            ? '復習'
+            : '授業',
         }}
       />
 
@@ -1055,7 +1144,8 @@ export default function PhotoScreen() {
               </Text>
             ) : null}
 
-            {currentLectureIndex >= 0 &&
+            {!isImportantReview &&
+            currentLectureIndex >= 0 &&
             currentLecturePhotoIndex >= 0 ? (
               <Text style={styles.positionText}>
                 第{currentLectureIndex + 1}回 ・ この回の写真{' '}
@@ -1066,7 +1156,10 @@ export default function PhotoScreen() {
 
             {currentPhotoIndex >= 0 ? (
               <Text style={styles.overallPositionText}>
-                授業全体 {currentPhotoIndex + 1} /{' '}
+                {isImportantReview
+                  ? '重要な写真'
+                  : '授業全体'}{' '}
+                {currentPhotoIndex + 1} /{' '}
                 {lecturePhotos.length}枚
               </Text>
             ) : null}
@@ -1099,6 +1192,40 @@ export default function PhotoScreen() {
                   : photo.isImportant === true
                     ? '重要な写真に設定済み'
                     : '重要な写真にする'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.noteButton}
+              accessibilityRole="button"
+              accessibilityLabel={
+                photo.note === undefined
+                  ? '写真にメモを追加'
+                  : '写真のメモを編集'
+              }
+              onPress={openPhotoNote}
+            >
+              <View style={styles.noteButtonHeader}>
+                <Text style={styles.noteButtonTitle}>
+                  メモ
+                </Text>
+                <Text style={styles.noteButtonAction}>
+                  {photo.note === undefined
+                    ? '追加 ›'
+                    : '編集 ›'}
+                </Text>
+              </View>
+
+              <Text
+                style={[
+                  styles.notePreview,
+                  photo.note === undefined &&
+                    styles.notePreviewEmpty,
+                ]}
+                numberOfLines={2}
+              >
+                {photo.note ??
+                  'この写真の補足や、復習したい内容を記録できます'}
               </Text>
             </Pressable>
 
@@ -1202,7 +1329,8 @@ export default function PhotoScreen() {
               </Text>
             </Pressable>
 
-            {!isUnclassifiedPhoto(photo) &&
+            {!isImportantReview &&
+            !isUnclassifiedPhoto(photo) &&
             lectureDateKeys.length > 1 ? (
               <Pressable
                 style={styles.lectureMoveButton}
@@ -1233,6 +1361,84 @@ export default function PhotoScreen() {
           </View>
         </>
       ) : null}
+
+      <Modal
+        visible={noteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!savingNote) {
+            setNoteModalVisible(false);
+            setNoteSaveError('');
+          }
+        }}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              写真のメモ
+            </Text>
+
+            <Text style={styles.modalDescription}>
+              補足や、あとで確認したい内容を記録できます。
+            </Text>
+
+            <TextInput
+              key={noteEditorRevision}
+              style={styles.noteInput}
+              defaultValue={photo?.note ?? ''}
+              multiline
+              autoCorrect
+              editable={!savingNote}
+              maxLength={2000}
+              placeholder="例：この反応機構は試験前に見直す"
+              placeholderTextColor="#888"
+              textAlignVertical="top"
+              onChangeText={(text) => {
+                photoNoteRef.current = text;
+              }}
+            />
+
+            <Text style={styles.inputHint}>
+              空欄で保存するとメモを削除します。
+            </Text>
+
+            {noteSaveError !== '' ? (
+              <Text style={styles.noteSaveError}>
+                {noteSaveError}
+              </Text>
+            ) : null}
+
+            <Pressable
+              style={[
+                styles.saveButton,
+                savingNote && styles.disabledButton,
+              ]}
+              disabled={savingNote}
+              onPress={() => {
+                void savePhotoNote();
+              }}
+            >
+              <Text style={styles.saveButtonText}>
+                {savingNote ? '保存中...' : '保存'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.cancelButton}
+              disabled={savingNote}
+              onPress={() => {
+                setNoteModalVisible(false);
+                setNoteSaveError('');
+              }}
+            >
+              <Text style={styles.cancelButtonText}>
+                キャンセル
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={lectureMoveModalVisible}
@@ -1766,6 +1972,44 @@ const styles = StyleSheet.create({
     color: '#ffdc81',
   },
 
+  noteButton: {
+    borderWidth: 1,
+    borderColor: '#686868',
+    borderRadius: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginTop: 10,
+  },
+
+  noteButtonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  noteButtonTitle: {
+    color: '#eee',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  noteButtonAction: {
+    color: '#9db5e8',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  notePreview: {
+    color: '#ddd',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 5,
+  },
+
+  notePreviewEmpty: {
+    color: '#888',
+  },
+
   swipeHint: {
     color: '#888',
     fontSize: 12,
@@ -1891,6 +2135,27 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 22,
+  },
+
+  noteInput: {
+    minHeight: 140,
+    maxHeight: 260,
+    borderWidth: 1,
+    borderColor: '#aaa',
+    borderRadius: 8,
+    color: '#111',
+    fontSize: 16,
+    lineHeight: 22,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginTop: 16,
+  },
+
+  noteSaveError: {
+    color: '#9b2c2c',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
   },
 
   lectureMoveModalContent: {

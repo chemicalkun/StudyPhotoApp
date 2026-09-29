@@ -5,6 +5,7 @@ import {
   getPhotosForBulkRecognition,
   moveSelectedPhotosToLecture,
   removeSelectedPhotos,
+  updateSelectedPhotoImportance,
   updateSelectedPhotoSubjects,
 } from '@/utils/photo-bulk-actions';
 import {
@@ -48,6 +49,32 @@ describe('photo bulk actions', () => {
       '統計学',
       '統計学',
       '有機化学',
+    ]);
+  });
+
+  it('選択した写真だけ重要マークを一括変更する', () => {
+    const marked = updateSelectedPhotoImportance(
+      photos,
+      selectedIds,
+      true
+    );
+
+    expect(marked.map((photo) => photo.isImportant)).toEqual([
+      true,
+      true,
+      undefined,
+    ]);
+
+    const cleared = updateSelectedPhotoImportance(
+      marked,
+      new Set(['photo-1']),
+      false
+    );
+
+    expect(cleared.map((photo) => photo.isImportant)).toEqual([
+      false,
+      true,
+      undefined,
     ]);
   });
 
