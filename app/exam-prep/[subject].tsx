@@ -38,6 +38,7 @@ import {
   deleteSubjectQuestionRecord,
   loadSubjectQuestionRecords,
   saveSubjectQuestionRecord,
+  updateSubjectQuestionRecord,
 } from '@/services/subject-question-storage';
 import {
   buildExamPreparationSource,
@@ -114,6 +115,14 @@ export default function ExamPreparationScreen() {
     useState(false);
   const [expandedQuestionId, setExpandedQuestionId] =
     useState<string | null>(null);
+  const [editingQuestionId, setEditingQuestionId] =
+    useState<string | null>(null);
+  const [isSavingQuestionEdit, setIsSavingQuestionEdit] =
+    useState(false);
+  const [questionEditError, setQuestionEditError] =
+    useState('');
+  const editedHistoryQuestionRef = useRef('');
+  const editedHistoryAnswerRef = useRef('');
   const [loadRevision, setLoadRevision] = useState(0);
 
 
@@ -132,6 +141,9 @@ export default function ExamPreparationScreen() {
         setQuestionSaveError('');
         setIsQuestionHistoryExpanded(false);
         setExpandedQuestionId(null);
+        setEditingQuestionId(null);
+        setIsSavingQuestionEdit(false);
+        setQuestionEditError('');
         setIsExamPreparationExpanded(false);
         setIsEditingExamPreparation(false);
         setExamPreparationEditError('');
@@ -311,6 +323,49 @@ export default function ExamPreparationScreen() {
       );
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+
+  const saveQuestionHistoryEdit = async () => {
+    if (editingQuestionId === null || isSavingQuestionEdit) {
+      return;
+    }
+
+    const question = editedHistoryQuestionRef.current.trim();
+    const answer = editedHistoryAnswerRef.current.trim();
+
+    if (question === '' || answer === '') {
+      setQuestionEditError(
+        '質問と回答の両方を入力してください。'
+      );
+      return;
+    }
+
+    try {
+      setIsSavingQuestionEdit(true);
+      setQuestionEditError('');
+      const updatedRecord = await updateSubjectQuestionRecord(
+        editingQuestionId,
+        question,
+        answer
+      );
+
+      setQuestionHistory((currentHistory) =>
+        currentHistory.map((record) =>
+          record.id === updatedRecord.id
+            ? updatedRecord
+            : record
+        )
+      );
+      setEditingQuestionId(null);
+    } catch (error) {
+      console.log('質問履歴編集エラー:', error);
+      setQuestionEditError(
+        '質問履歴を保存できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setIsSavingQuestionEdit(false);
     }
   };
 
@@ -882,6 +937,8 @@ export default function ExamPreparationScreen() {
                             );
                           const isExpanded =
                             expandedQuestionId === record.id;
+                          const isEditing =
+                            editingQuestionId === record.id;
 
                           return (
                             <View
@@ -922,12 +979,103 @@ export default function ExamPreparationScreen() {
 
                               {isExpanded ? (
                                 <View style={styles.historyAnswerSection}>
-                                  <Text
-                                    style={styles.historyAnswer}
-                                    selectable
-                                  >
-                                    A. {record.answer}
-                                  </Text>
+                                  {isEditing ? (
+                                    <View>
+                                      <Text style={styles.historyEditLabel}>
+                                        質問
+                                      </Text>
+                                      <TextInput
+                                        style={styles.historyQuestionInput}
+                                        defaultValue={
+                                          editedHistoryQuestionRef.current
+                                        }
+                                        onChangeText={(text) => {
+                                          editedHistoryQuestionRef.current =
+                                            text;
+                                          setQuestionEditError('');
+                                        }}
+                                        multiline
+                                        scrollEnabled
+                                        textAlignVertical="top"
+                                        editable={!isSavingQuestionEdit}
+                                        accessibilityLabel="保存済みの質問"
+                                      />
+
+                                      <Text style={styles.historyEditLabel}>
+                                        回答
+                                      </Text>
+                                      <TextInput
+                                        style={styles.historyAnswerInput}
+                                        defaultValue={
+                                          editedHistoryAnswerRef.current
+                                        }
+                                        onChangeText={(text) => {
+                                          editedHistoryAnswerRef.current =
+                                            text;
+                                          setQuestionEditError('');
+                                        }}
+                                        multiline
+                                        scrollEnabled
+                                        textAlignVertical="top"
+                                        editable={!isSavingQuestionEdit}
+                                        accessibilityLabel="保存済みの回答"
+                                      />
+
+                                      {questionEditError !== '' ? (
+                                        <Text style={styles.historyEditError}>
+                                          {questionEditError}
+                                        </Text>
+                                      ) : null}
+
+                                      <View style={styles.historyEditActions}>
+                                        <Pressable
+                                          style={[
+                                            styles.saveHistoryEditButton,
+                                            isSavingQuestionEdit &&
+                                              styles.disabledHistoryAction,
+                                          ]}
+                                          disabled={isSavingQuestionEdit}
+                                          onPress={() =>
+                                            void saveQuestionHistoryEdit()
+                                          }
+                                        >
+                                          {isSavingQuestionEdit ? (
+                                            <ActivityIndicator
+                                              size="small"
+                                              color="white"
+                                            />
+                                          ) : null}
+                                          <Text style={styles.saveHistoryEditButtonText}>
+                                            {isSavingQuestionEdit
+                                              ? '保存中...'
+                                              : '変更を保存'}
+                                          </Text>
+                                        </Pressable>
+
+                                        <Pressable
+                                          style={styles.cancelHistoryEditButton}
+                                          disabled={isSavingQuestionEdit}
+                                          onPress={() => {
+                                            setEditingQuestionId(null);
+                                            setQuestionEditError('');
+                                          }}
+                                        >
+                                          <Text style={styles.cancelHistoryEditButtonText}>
+                                            キャンセル
+                                          </Text>
+                                        </Pressable>
+                                      </View>
+                                    </View>
+                                  ) : (
+                                    <Text
+                                      style={styles.historyAnswer}
+                                      selectable
+                                    >
+                                      A. {record.answer}
+                                    </Text>
+                                  )}
+
+                                  {!isEditing ? (
                                   <View style={styles.historyActions}>
                                     {!isCurrent ? (
                                       <Pressable
@@ -952,6 +1100,23 @@ export default function ExamPreparationScreen() {
                                         </Text>
                                       </Pressable>
                                     ) : null}
+                                    <Pressable
+                                      style={styles.editHistoryButton}
+                                      accessibilityRole="button"
+                                      accessibilityLabel="この質問と回答を編集"
+                                      onPress={() => {
+                                        editedHistoryQuestionRef.current =
+                                          record.question;
+                                        editedHistoryAnswerRef.current =
+                                          record.answer;
+                                        setQuestionEditError('');
+                                        setEditingQuestionId(record.id);
+                                      }}
+                                    >
+                                      <Text style={styles.editHistoryButtonText}>
+                                        質問と回答を編集
+                                      </Text>
+                                    </Pressable>
                                     <Pressable
                                       style={styles.shareHistoryButton}
                                       accessibilityRole="button"
@@ -981,6 +1146,7 @@ export default function ExamPreparationScreen() {
                                       </Text>
                                     </Pressable>
                                   </View>
+                                  ) : null}
                                 </View>
                               ) : null}
                             </View>
@@ -1765,6 +1931,97 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
+  },
+
+  historyEditLabel: {
+    color: '#31518f',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+
+  historyQuestionInput: {
+    height: 110,
+    color: '#222',
+    backgroundColor: '#f8faff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 7,
+    fontSize: 14,
+    lineHeight: 21,
+    padding: 10,
+    marginBottom: 12,
+  },
+
+  historyAnswerInput: {
+    height: 180,
+    color: '#222',
+    backgroundColor: '#f8faff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 7,
+    fontSize: 14,
+    lineHeight: 21,
+    padding: 10,
+  },
+
+  historyEditError: {
+    color: '#9b2c2c',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 9,
+  },
+
+  historyEditActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+
+  saveHistoryEditButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#31518f',
+    borderRadius: 7,
+    padding: 9,
+  },
+
+  saveHistoryEditButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  cancelHistoryEditButton: {
+    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#8090b5',
+    borderRadius: 7,
+    padding: 9,
+  },
+
+  cancelHistoryEditButtonText: {
+    color: '#31518f',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  editHistoryButton: {
+    borderWidth: 1,
+    borderColor: '#28794c',
+    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+
+  editHistoryButtonText: {
+    color: '#28794c',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   refreshHistoryButton: {

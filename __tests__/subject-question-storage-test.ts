@@ -4,6 +4,7 @@ import {
   deleteSubjectQuestionRecord,
   loadSubjectQuestionRecords,
   saveSubjectQuestionRecord,
+  updateSubjectQuestionRecord,
 } from '@/services/subject-question-storage';
 import {
   createSubjectQuestionSourceSignature,
@@ -58,5 +59,29 @@ describe('subject question storage', () => {
 
     expect(records[first.id]).toBeUndefined();
     expect(records[second.id]).toEqual(second);
+  });
+
+  test('質問と回答を編集して作成時の情報を維持する', async () => {
+    const saved = await saveSubjectQuestionRecord(
+      '高分子化学',
+      '質問',
+      '回答',
+      'signature'
+    );
+
+    const updated = await updateSubjectQuestionRecord(
+      saved.id,
+      ' 修正後の質問 ',
+      ' 修正後の回答 '
+    );
+
+    expect(updated).toMatchObject({
+      id: saved.id,
+      subject: saved.subject,
+      question: '修正後の質問',
+      answer: '修正後の回答',
+      sourceSummarySignature: saved.sourceSummarySignature,
+      createdAt: saved.createdAt,
+    });
   });
 });

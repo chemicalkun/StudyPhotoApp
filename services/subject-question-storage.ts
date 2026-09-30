@@ -76,6 +76,44 @@ export const saveSubjectQuestionRecord = async (
 };
 
 
+export const updateSubjectQuestionRecord = async (
+  recordId: string,
+  question: string,
+  answer: string
+) => {
+  const trimmedQuestion = question.trim();
+  const trimmedAnswer = answer.trim();
+
+  if (
+    recordId === '' ||
+    trimmedQuestion === '' ||
+    trimmedAnswer === ''
+  ) {
+    throw new Error('保存する質問履歴がありません');
+  }
+
+  const records = await loadSubjectQuestionRecords();
+  const record = records[recordId];
+
+  if (record === undefined) {
+    throw new Error('質問履歴が見つかりません');
+  }
+
+  const updatedRecord: SubjectQuestionRecord = {
+    ...record,
+    question: trimmedQuestion,
+    answer: trimmedAnswer,
+  };
+
+  await saveSubjectQuestionRecords({
+    ...records,
+    [recordId]: updatedRecord,
+  });
+
+  return updatedRecord;
+};
+
+
 export const deleteSubjectQuestionRecord = async (
   recordId: string
 ) => {
