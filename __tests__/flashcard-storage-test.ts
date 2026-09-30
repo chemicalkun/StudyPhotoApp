@@ -4,6 +4,7 @@ import {
   loadFlashcardRecords,
   saveFlashcardAssessment,
   saveFlashcardRecord,
+  updateFlashcard,
 } from '@/services/flashcard-storage';
 import {
   createFlashcardRecordId,
@@ -78,5 +79,35 @@ describe('flashcard storage', () => {
     expect(record.assessments).toEqual({
       '0': 'review',
     });
+  });
+
+  test('カードを編集して自己評価を維持する', async () => {
+    const saved = await saveFlashcardRecord(
+      '高分子化学',
+      [{
+        term: '重合',
+        definition: '単量体が結合する反応。',
+      }],
+      'signature'
+    );
+    await saveFlashcardAssessment('高分子化学', 0, 'review');
+
+    const updated = await updateFlashcard(
+      '高分子化学',
+      0,
+      {
+        term: ' 付加重合 ',
+        definition: ' 不飽和結合が開いて連鎖的に結合する反応。 ',
+      }
+    );
+
+    expect(updated.cards[0]).toEqual({
+      term: '付加重合',
+      definition: '不飽和結合が開いて連鎖的に結合する反応。',
+    });
+    expect(updated.assessments).toEqual({ '0': 'review' });
+    expect(updated.sourceSummarySignature).toBe(
+      saved.sourceSummarySignature
+    );
   });
 });

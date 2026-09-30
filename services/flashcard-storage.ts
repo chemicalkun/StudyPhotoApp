@@ -108,3 +108,47 @@ export const saveFlashcardAssessment = async (
 
   return updatedRecord;
 };
+
+
+export const updateFlashcard = async (
+  subject: string,
+  cardIndex: number,
+  card: Flashcard
+) => {
+  const term = card.term.trim();
+  const definition = card.definition.trim();
+
+  if (
+    subject === '' ||
+    !Number.isInteger(cardIndex) ||
+    cardIndex < 0 ||
+    term === '' ||
+    definition === ''
+  ) {
+    throw new Error('保存するカードが不正です');
+  }
+
+  const records = await loadFlashcardRecords();
+  const id = createFlashcardRecordId(subject);
+  const record = records[id];
+
+  if (record === undefined || cardIndex >= record.cards.length) {
+    throw new Error('フラッシュカードが見つかりません');
+  }
+
+  const updatedCards = [...record.cards];
+  updatedCards[cardIndex] = { term, definition };
+
+  const updatedRecord: FlashcardRecord = {
+    ...record,
+    cards: updatedCards,
+    createdAt: new Date().toISOString(),
+  };
+
+  await saveFlashcardRecords({
+    ...records,
+    [id]: updatedRecord,
+  });
+
+  return updatedRecord;
+};

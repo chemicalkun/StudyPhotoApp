@@ -1,10 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -24,6 +27,7 @@ import {
   loadFlashcardRecords,
   saveFlashcardAssessment,
   saveFlashcardRecord,
+  updateFlashcard,
 } from '@/services/flashcard-storage';
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
 import { buildExamPreparationSource } from '@/types/exam-preparation';
@@ -75,6 +79,13 @@ export default function FlashcardScreen() {
   const [saveError, setSaveError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [isOutdated, setIsOutdated] = useState(false);
+  const [isEditingCurrentCard, setIsEditingCurrentCard] =
+    useState(false);
+  const [isSavingCurrentCard, setIsSavingCurrentCard] =
+    useState(false);
+  const [cardEditError, setCardEditError] = useState('');
+  const editedTermRef = useRef('');
+  const editedDefinitionRef = useRef('');
   const [loadRevision, setLoadRevision] = useState(0);
 
 
@@ -166,6 +177,9 @@ export default function FlashcardScreen() {
           setIsFinished(false);
           setIsReviewRound(shouldStartReviewRound);
           setIsUnansweredRound(shouldStartUnansweredRound);
+          setIsEditingCurrentCard(false);
+          setIsSavingCurrentCard(false);
+          setCardEditError('');
         } catch (error) {
           console.log('フラッシュカード読み込みエラー:', error);
 
@@ -270,6 +284,59 @@ export default function FlashcardScreen() {
   };
 
 
+  const saveEditedCard = async () => {
+    if (
+      currentCardIndex === undefined ||
+      isSavingCurrentCard
+    ) {
+      return;
+    }
+
+    const term = editedTermRef.current.trim();
+    const definition = editedDefinitionRef.current.trim();
+
+    if (term === '' || definition === '') {
+      setCardEditError('重要語句と説明の両方を入力してください。');
+      return;
+    }
+
+    try {
+      setIsSavingCurrentCard(true);
+      setCardEditError('');
+
+      const editedCards = [...cards];
+      editedCards[currentCardIndex] = { term, definition };
+      const updatedRecord = isSaved
+        ? await updateFlashcard(
+            subject,
+            currentCardIndex,
+            { term, definition }
+          )
+        : await saveFlashcardRecord(
+            subject,
+            editedCards,
+            createFlashcardSourceSignature(summaries)
+          );
+
+      setCards(updatedRecord.cards);
+      editedTermRef.current =
+        updatedRecord.cards[currentCardIndex]?.term ?? term;
+      editedDefinitionRef.current =
+        updatedRecord.cards[currentCardIndex]?.definition ??
+        definition;
+      setIsEditingCurrentCard(false);
+      setIsSaved(true);
+    } catch (error) {
+      console.log('フラッシュカード編集エラー:', error);
+      setCardEditError(
+        'カードを保存できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setIsSavingCurrentCard(false);
+    }
+  };
+
+
   const saveAssessment = async (
     assessment: FlashcardAssessment
   ) => {
@@ -358,10 +425,17 @@ export default function FlashcardScreen() {
         }}
       />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          automaticallyAdjustKeyboardInsets
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+        >
         <Text style={styles.title}>{subject}</Text>
         <Text style={styles.subtitle}>フラッシュカード</Text>
 
@@ -507,35 +581,132 @@ export default function FlashcardScreen() {
                   覚えた {knownCount}枚・あとで復習 {reviewCount}枚
                 </Text>
 
-                <Pressable
-                  style={[
-                    styles.card,
-                    showDefinition && styles.cardBack,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    showDefinition
-                      ? 'カードの表面を見る'
-                      : 'カードの裏面を見る'
-                  }
-                  onPress={() =>
-                    setShowDefinition((value) => !value)
-                  }
-                >
-                  <Text style={styles.cardSideLabel}>
-                    {showDefinition ? '説明' : '重要語句'}
-                  </Text>
-                  <Text style={styles.cardText} selectable>
-                    {showDefinition
-                      ? currentCard.definition
-                      : currentCard.term}
-                  </Text>
-                  <Text style={styles.flipHint}>
-                    タップして{showDefinition ? '語句' : '説明'}を見る
-                  </Text>
-                </Pressable>
+                {isEditingCurrentCard ? (
+                  <View style={styles.editCard}>
+                    <Text style={styles.editLabel}>重要語句</Text>
+                    <TextInput
+                      style={styles.termInput}
+                      defaultValue={editedTermRef.current}
+                      onChangeText={(text) => {
+                        editedTermRef.current = text;
+                        setCardEditError('');
+                      }}
+                      editable={!isSavingCurrentCard}
+                      returnKeyType="next"
+                      accessibilityLabel="フラッシュカードの重要語句"
+                    />
 
-                {showDefinition ? (
+                    <Text style={styles.editLabel}>説明</Text>
+                    <TextInput
+                      style={styles.definitionInput}
+                      defaultValue={editedDefinitionRef.current}
+                      onChangeText={(text) => {
+                        editedDefinitionRef.current = text;
+                        setCardEditError('');
+                      }}
+                      multiline
+                      scrollEnabled
+                      textAlignVertical="top"
+                      editable={!isSavingCurrentCard}
+                      accessibilityLabel="フラッシュカードの説明"
+                    />
+
+                    {cardEditError !== '' ? (
+                      <Text style={styles.editErrorText}>
+                        {cardEditError}
+                      </Text>
+                    ) : null}
+
+                    <View style={styles.editActions}>
+                      <Pressable
+                        style={[
+                          styles.saveEditButton,
+                          isSavingCurrentCard &&
+                            styles.disabledButton,
+                        ]}
+                        disabled={isSavingCurrentCard}
+                        onPress={() => void saveEditedCard()}
+                      >
+                        {isSavingCurrentCard ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="white"
+                          />
+                        ) : null}
+                        <Text style={styles.saveEditButtonText}>
+                          {isSavingCurrentCard
+                            ? '保存中...'
+                            : '変更を保存'}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.cancelEditButton}
+                        disabled={isSavingCurrentCard}
+                        onPress={() => {
+                          editedTermRef.current = currentCard.term;
+                          editedDefinitionRef.current =
+                            currentCard.definition;
+                          setCardEditError('');
+                          setIsEditingCurrentCard(false);
+                        }}
+                      >
+                        <Text style={styles.cancelEditButtonText}>
+                          キャンセル
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <>
+                    <Pressable
+                      style={[
+                        styles.card,
+                        showDefinition && styles.cardBack,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        showDefinition
+                          ? 'カードの表面を見る'
+                          : 'カードの裏面を見る'
+                      }
+                      onPress={() =>
+                        setShowDefinition((value) => !value)
+                      }
+                    >
+                      <Text style={styles.cardSideLabel}>
+                        {showDefinition ? '説明' : '重要語句'}
+                      </Text>
+                      <Text style={styles.cardText} selectable>
+                        {showDefinition
+                          ? currentCard.definition
+                          : currentCard.term}
+                      </Text>
+                      <Text style={styles.flipHint}>
+                        タップして{showDefinition ? '語句' : '説明'}を見る
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.editButton}
+                      accessibilityRole="button"
+                      accessibilityLabel="このフラッシュカードを編集"
+                      onPress={() => {
+                        editedTermRef.current = currentCard.term;
+                        editedDefinitionRef.current =
+                          currentCard.definition;
+                        setCardEditError('');
+                        setIsEditingCurrentCard(true);
+                      }}
+                    >
+                      <Text style={styles.editButtonText}>
+                        このカードを編集
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
+
+                {!isEditingCurrentCard && showDefinition ? (
                   <>
                     <Text style={styles.assessmentPrompt}>
                       このカードを覚えましたか？
@@ -575,6 +746,7 @@ export default function FlashcardScreen() {
                   </>
                 ) : null}
 
+                {!isEditingCurrentCard ? (
                 <View style={styles.navigationRow}>
                   <Pressable
                     style={[
@@ -619,11 +791,13 @@ export default function FlashcardScreen() {
                     </Text>
                   </Pressable>
                 </View>
+                ) : null}
               </View>
             ) : null}
           </>
         ) : null}
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -631,6 +805,7 @@ export default function FlashcardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'white' },
+  keyboardAvoidingView: { flex: 1 },
   scrollView: { flex: 1 },
   contentContainer: { padding: 24, paddingBottom: 48 },
   title: { color: '#111', fontSize: 30, fontWeight: 'bold', marginTop: 24 },
@@ -661,6 +836,18 @@ const styles = StyleSheet.create({
   cardSideLabel: { color: '#6b3ca0', fontSize: 13, fontWeight: 'bold' },
   cardText: { color: '#251832', fontSize: 22, fontWeight: 'bold', lineHeight: 32, textAlign: 'center', marginTop: 14 },
   flipHint: { color: '#755f88', fontSize: 12, marginTop: 24 },
+  editButton: { alignSelf: 'center', borderWidth: 1, borderColor: '#6b3ca0', borderRadius: 9, paddingHorizontal: 18, paddingVertical: 10, marginTop: 12 },
+  editButtonText: { color: '#6b3ca0', fontSize: 14, fontWeight: 'bold' },
+  editCard: { backgroundColor: '#f5effb', borderWidth: 1, borderColor: '#b798d5', borderRadius: 14, padding: 16, marginTop: 12 },
+  editLabel: { color: '#4b315f', fontSize: 13, fontWeight: 'bold', marginBottom: 6 },
+  termInput: { color: '#251832', backgroundColor: 'white', borderWidth: 1, borderColor: '#cbb8dd', borderRadius: 9, fontSize: 17, paddingHorizontal: 12, paddingVertical: 11, marginBottom: 14 },
+  definitionInput: { height: 180, color: '#251832', backgroundColor: 'white', borderWidth: 1, borderColor: '#cbb8dd', borderRadius: 9, fontSize: 16, lineHeight: 24, padding: 12 },
+  editErrorText: { color: '#9b2c2c', fontSize: 13, lineHeight: 20, marginTop: 10 },
+  editActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  saveEditButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#6b3ca0', borderRadius: 9, padding: 12 },
+  saveEditButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold' },
+  cancelEditButton: { flex: 1, alignItems: 'center', borderWidth: 1, borderColor: '#8b769d', borderRadius: 9, padding: 12 },
+  cancelEditButtonText: { color: '#4b315f', fontSize: 14, fontWeight: 'bold' },
   assessmentPrompt: { color: '#444', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginTop: 16 },
   assessmentRow: { flexDirection: 'row', gap: 10, marginTop: 9 },
   reviewButton: { flex: 1, backgroundColor: '#fff3d6', borderWidth: 1, borderColor: '#dfbd6d', borderRadius: 9, padding: 11 },
