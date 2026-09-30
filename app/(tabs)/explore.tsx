@@ -455,6 +455,7 @@ export default function ReviewScreen() {
     photoOcrRecords,
     practiceQuestionRecords,
     flashcardRecords,
+    examPreparationRecords,
   });
   const overallLearningCompletion =
     getOverallLearningCompletion(subjectReviewProgress);
@@ -1399,6 +1400,28 @@ export default function ReviewScreen() {
                             </Pressable>
                           ) : null}
 
+                          {progress.examPreparationIsMissing ||
+                          progress.examPreparationIsOutdated ? (
+                            <Pressable
+                              style={styles.reviewQueueUpdateButton}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                router.push({
+                                  pathname: '/exam-prep/[subject]',
+                                  params: {
+                                    subject: progress.subject,
+                                  },
+                                });
+                              }}
+                            >
+                              <Text style={styles.reviewQueueUpdateText}>
+                                {progress.examPreparationIsOutdated
+                                  ? '試験対策を作り直す'
+                                  : '試験対策を作る'}
+                              </Text>
+                            </Pressable>
+                          ) : null}
+
                           {!progress.flashcardsAreOutdated &&
                           progress.flashcardUnansweredCount > 0 ? (
                             <Pressable
@@ -1694,6 +1717,9 @@ export default function ReviewScreen() {
                           flashcardItemCount === 0 ||
                           progress.flashcardsAreOutdated
                         );
+                      const hasExamPreparationTask =
+                        progress.examPreparationIsMissing ||
+                        progress.examPreparationIsOutdated;
 
                       return (
                         <View
@@ -1763,6 +1789,16 @@ export default function ReviewScreen() {
                           {progress.outdatedSummaryCount}回・未作成{' '}
                           {progress.missingSummaryCount}回
                         </Text>
+                        <Text style={styles.subjectProgressExamPreparation}>
+                          試験対策：
+                          {progress.examPreparationIsOutdated
+                            ? '更新待ち'
+                            : progress.examPreparationIsMissing
+                              ? '未作成'
+                              : summaryCount > 0
+                                ? '最新'
+                                : '授業回まとめ作成後に利用可能'}
+                        </Text>
 
                         {progress.practiceIsOutdated ||
                         progress.flashcardsAreOutdated ? (
@@ -1783,7 +1819,8 @@ export default function ReviewScreen() {
                         progress.flashcardUnansweredCount > 0 ||
                         hasSummaryTasks ||
                         canCreatePractice ||
-                        canCreateFlashcards ? (
+                        canCreateFlashcards ||
+                        hasExamPreparationTask ? (
                           <View style={styles.subjectProgressActions}>
                             {hasSummaryTasks ? (
                               <Pressable
@@ -1850,6 +1887,27 @@ export default function ReviewScreen() {
                                   {progress.flashcardsAreOutdated
                                     ? 'カードを作り直す'
                                     : 'カードを作る'}
+                                </Text>
+                              </Pressable>
+                            ) : null}
+
+                            {hasExamPreparationTask ? (
+                              <Pressable
+                                style={styles.subjectProgressSummaryButton}
+                                accessibilityRole="button"
+                                onPress={() => {
+                                  router.push({
+                                    pathname: '/exam-prep/[subject]',
+                                    params: {
+                                      subject: progress.subject,
+                                    },
+                                  });
+                                }}
+                              >
+                                <Text style={styles.subjectProgressSummaryButtonText}>
+                                  {progress.examPreparationIsOutdated
+                                    ? '試験対策を作り直す'
+                                    : '試験対策を作る'}
                                 </Text>
                               </Pressable>
                             ) : null}
@@ -3480,6 +3538,12 @@ const styles = StyleSheet.create({
   },
 
   subjectProgressSummary: {
+    color: '#52617d',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  subjectProgressExamPreparation: {
     color: '#52617d',
     fontSize: 12,
     lineHeight: 18,

@@ -40,6 +40,8 @@ describe('review progress', () => {
       flashcardReviewCount: 1,
       flashcardUnansweredCount: 0,
       flashcardsAreOutdated: false,
+      examPreparationIsMissing: false,
+      examPreparationIsOutdated: false,
       importantPhotoCount: 0,
       notedPhotoCount: 0,
       currentSummaryCount: 0,
@@ -82,6 +84,8 @@ describe('review progress', () => {
       flashcardReviewCount: 0,
       flashcardUnansweredCount: 0,
       flashcardsAreOutdated: false,
+      examPreparationIsMissing: false,
+      examPreparationIsOutdated: false,
       importantPhotoCount: 0,
       notedPhotoCount: 0,
       currentSummaryCount: 0,
@@ -122,6 +126,8 @@ describe('review progress', () => {
       flashcardReviewCount: 0,
       flashcardUnansweredCount: 0,
       flashcardsAreOutdated: false,
+      examPreparationIsMissing: false,
+      examPreparationIsOutdated: false,
       importantPhotoCount: 0,
       notedPhotoCount: 0,
       currentSummaryCount: 0,
@@ -161,6 +167,8 @@ describe('review progress', () => {
       flashcardReviewCount: 0,
       flashcardUnansweredCount: 0,
       flashcardsAreOutdated: false,
+      examPreparationIsMissing: false,
+      examPreparationIsOutdated: false,
       importantPhotoCount: 1,
       notedPhotoCount: 1,
       currentSummaryCount: 2,
@@ -185,6 +193,10 @@ describe('review progress', () => {
       ...completedProgress,
       practiceIsOutdated: true,
     })).toBe(true);
+    expect(subjectNeedsAttention({
+      ...completedProgress,
+      examPreparationIsMissing: true,
+    })).toBe(true);
   });
 
   test('復習待ちの合計件数を計算する', () => {
@@ -198,6 +210,8 @@ describe('review progress', () => {
       flashcardReviewCount: 4,
       flashcardUnansweredCount: 2,
       flashcardsAreOutdated: false,
+      examPreparationIsMissing: false,
+      examPreparationIsOutdated: false,
       importantPhotoCount: 5,
       notedPhotoCount: 6,
       currentSummaryCount: 7,
@@ -211,6 +225,20 @@ describe('review progress', () => {
       practiceIsOutdated: true,
       flashcardsAreOutdated: true,
     })).toBe(7);
+    expect(getSubjectReviewPendingCount({
+      ...progress,
+      examPreparationIsOutdated: true,
+    })).toBe(15);
+  });
+
+  test('試験対策データの読み込み前でも集計できる', () => {
+    expect(buildSubjectReviewProgress({
+      summaries: [],
+      photos: [],
+      photoOcrRecords: {},
+      practiceQuestionRecords: {},
+      flashcardRecords: {},
+    })).toEqual([]);
   });
 
   test('授業ごとの復習待ちとまとめ状態を集計する', () => {
@@ -323,6 +351,15 @@ describe('review progress', () => {
           createdAt: '2026-09-28T04:00:00.000Z',
         },
       },
+      examPreparationRecords: {
+        '["有機化学"]': {
+          id: '["有機化学"]',
+          subject: '有機化学',
+          text: '試験対策',
+          sourceSummarySignature: 'signature',
+          createdAt: '2026-09-28T04:00:00.000Z',
+        },
+      },
     });
 
     expect(progress).toEqual([
@@ -336,6 +373,8 @@ describe('review progress', () => {
         flashcardReviewCount: 2,
         flashcardUnansweredCount: 1,
         flashcardsAreOutdated: true,
+        examPreparationIsMissing: false,
+        examPreparationIsOutdated: true,
         importantPhotoCount: 1,
         notedPhotoCount: 1,
         currentSummaryCount: 1,

@@ -3,6 +3,10 @@ import {
   type FlashcardRecords,
 } from '@/types/flashcard';
 import {
+  createExamPreparationSourceSignature,
+  type ExamPreparationRecords,
+} from '@/types/exam-preparation';
+import {
   getLectureSummaryUpdateReason,
   type LectureSummaryRecord,
 } from '@/types/lecture-summary';
@@ -28,6 +32,8 @@ export type SubjectReviewProgress = {
   flashcardReviewCount: number;
   flashcardUnansweredCount: number;
   flashcardsAreOutdated: boolean;
+  examPreparationIsMissing: boolean;
+  examPreparationIsOutdated: boolean;
   importantPhotoCount: number;
   notedPhotoCount: number;
   currentSummaryCount: number;
@@ -47,6 +53,12 @@ export const getSubjectReviewPendingCount = (
     ? 1
     : progress.flashcardReviewCount +
       progress.flashcardUnansweredCount) +
+  (
+    progress.examPreparationIsMissing ||
+    progress.examPreparationIsOutdated
+      ? 1
+      : 0
+  ) +
   progress.importantPhotoCount;
 
 
@@ -178,6 +190,8 @@ export const subjectNeedsAttention = (
     progress.outdatedSummaryCount > 0 ||
     progress.practiceIsOutdated ||
     progress.flashcardsAreOutdated ||
+    progress.examPreparationIsMissing ||
+    progress.examPreparationIsOutdated ||
     practiceItemCount === 0 ||
     flashcardItemCount === 0 ||
     completion.percentage === null ||
@@ -239,12 +253,14 @@ export const buildSubjectReviewProgress = ({
   photoOcrRecords,
   practiceQuestionRecords,
   flashcardRecords,
+  examPreparationRecords = {},
 }: {
   summaries: LectureSummaryRecord[];
   photos: PhotoRecord[];
   photoOcrRecords: PhotoOcrRecords;
   practiceQuestionRecords: PracticeQuestionRecords;
   flashcardRecords: FlashcardRecords;
+  examPreparationRecords?: ExamPreparationRecords;
 }): SubjectReviewProgress[] => {
   const subjects = new Set<string>();
 
@@ -254,6 +270,9 @@ export const buildSubjectReviewProgress = ({
     (record) => subjects.add(record.subject)
   );
   Object.values(flashcardRecords).forEach(
+    (record) => subjects.add(record.subject)
+  );
+  Object.values(examPreparationRecords).forEach(
     (record) => subjects.add(record.subject)
   );
 
@@ -350,6 +369,19 @@ export const buildSubjectReviewProgress = ({
         flashcardRecord?.cards.length ?? 0,
         flashcardRecord?.assessments
       );
+      const examPreparationRecord = Object.values(
+        examPreparationRecords
+      ).find((record) => record.subject === subject);
+      const examPreparationIsMissing =
+        subjectSummaries.length > 0 &&
+        examPreparationRecord === undefined;
+      const examPreparationIsOutdated =
+        subjectSummaries.length > 0 &&
+        examPreparationRecord !== undefined &&
+        examPreparationRecord.sourceSummarySignature !==
+          createExamPreparationSourceSignature(
+            subjectSummaries
+          );
 
       return {
         subject,
@@ -363,6 +395,8 @@ export const buildSubjectReviewProgress = ({
         flashcardUnansweredCount:
           flashcardCounts.unansweredCount,
         flashcardsAreOutdated,
+        examPreparationIsMissing,
+        examPreparationIsOutdated,
         importantPhotoCount: subjectPhotos.filter(
           (photo) =>
             photo.isImportant === true &&
