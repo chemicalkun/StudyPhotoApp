@@ -34,7 +34,7 @@ const reviewDisplayItems: {
   {
     key: 'showReviewQueue',
     title: '復習待ち',
-    description: '未回答・あとで復習の問題・カードと重要写真をまとめて表示します。',
+    description: '未回答・あとで復習・更新待ちの学習項目と重要写真をまとめて表示します。',
   },
   {
     key: 'showSubjectProgress',

@@ -188,7 +188,7 @@ describe('review progress', () => {
   });
 
   test('復習待ちの合計件数を計算する', () => {
-    expect(getSubjectReviewPendingCount({
+    const progress = {
       subject: '有機化学',
       practiceKnownCount: 1,
       practiceReviewCount: 2,
@@ -203,7 +203,14 @@ describe('review progress', () => {
       currentSummaryCount: 7,
       outdatedSummaryCount: 8,
       missingSummaryCount: 9,
-    })).toBe(14);
+    };
+
+    expect(getSubjectReviewPendingCount(progress)).toBe(14);
+    expect(getSubjectReviewPendingCount({
+      ...progress,
+      practiceIsOutdated: true,
+      flashcardsAreOutdated: true,
+    })).toBe(7);
   });
 
   test('授業ごとの復習待ちとまとめ状態を集計する', () => {

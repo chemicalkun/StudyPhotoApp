@@ -1293,7 +1293,25 @@ export default function ReviewScreen() {
                         </View>
 
                         <View style={styles.reviewQueueActions}>
-                          {progress.practiceReviewCount > 0 ? (
+                          {progress.practiceIsOutdated ? (
+                            <Pressable
+                              style={styles.reviewQueueUpdateButton}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                router.push({
+                                  pathname: '/practice/[subject]',
+                                  params: {
+                                    subject: progress.subject,
+                                    from: 'review',
+                                  },
+                                });
+                              }}
+                            >
+                              <Text style={styles.reviewQueueUpdateText}>
+                                練習問題を作り直す
+                              </Text>
+                            </Pressable>
+                          ) : progress.practiceReviewCount > 0 ? (
                             <Pressable
                               style={styles.reviewQueueActionButton}
                               accessibilityRole="button"
@@ -1316,7 +1334,8 @@ export default function ReviewScreen() {
                             </Pressable>
                           ) : null}
 
-                          {progress.practiceUnansweredCount > 0 ? (
+                          {!progress.practiceIsOutdated &&
+                          progress.practiceUnansweredCount > 0 ? (
                             <Pressable
                               style={styles.reviewQueueUnansweredButton}
                               accessibilityRole="button"
@@ -1339,7 +1358,25 @@ export default function ReviewScreen() {
                             </Pressable>
                           ) : null}
 
-                          {progress.flashcardReviewCount > 0 ? (
+                          {progress.flashcardsAreOutdated ? (
+                            <Pressable
+                              style={styles.reviewQueueUpdateButton}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                router.push({
+                                  pathname: '/flashcards/[subject]',
+                                  params: {
+                                    subject: progress.subject,
+                                    from: 'review',
+                                  },
+                                });
+                              }}
+                            >
+                              <Text style={styles.reviewQueueUpdateText}>
+                                カードを作り直す
+                              </Text>
+                            </Pressable>
+                          ) : progress.flashcardReviewCount > 0 ? (
                             <Pressable
                               style={styles.reviewQueueActionButton}
                               accessibilityRole="button"
@@ -1362,7 +1399,8 @@ export default function ReviewScreen() {
                             </Pressable>
                           ) : null}
 
-                          {progress.flashcardUnansweredCount > 0 ? (
+                          {!progress.flashcardsAreOutdated &&
+                          progress.flashcardUnansweredCount > 0 ? (
                             <Pressable
                               style={styles.reviewQueueUnansweredButton}
                               accessibilityRole="button"
@@ -3203,6 +3241,21 @@ const styles = StyleSheet.create({
 
   reviewQueueUnansweredText: {
     color: '#405b91',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  reviewQueueUpdateButton: {
+    backgroundColor: '#fff0d9',
+    borderColor: '#d99a43',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+
+  reviewQueueUpdateText: {
+    color: '#8a5511',
     fontSize: 12,
     fontWeight: 'bold',
   },
