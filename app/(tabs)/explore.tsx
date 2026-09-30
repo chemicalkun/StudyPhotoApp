@@ -1305,6 +1305,7 @@ export default function ReviewScreen() {
                                   params: {
                                     subject: progress.subject,
                                     from: 'review',
+                                    summaryAttentionOnly: 'true',
                                   },
                                 });
                               }}

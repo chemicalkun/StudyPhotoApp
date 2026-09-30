@@ -282,6 +282,8 @@ export default function SubjectScreen() {
       ? params.subject
       : '';
   const openedFromReview = params.from === 'review';
+  const openWithSummaryAttentionOnly =
+    params.summaryAttentionOnly === 'true';
 
   const isUnclassified = subject === '未分類';
 
@@ -363,7 +365,7 @@ export default function SubjectScreen() {
   const [savingPhotoOrder, setSavingPhotoOrder] =
     useState(false);
   const [showSummaryAttentionOnly, setShowSummaryAttentionOnly] =
-    useState(false);
+    useState(openWithSummaryAttentionOnly);
   const [showImportantPhotosOnly, setShowImportantPhotosOnly] =
     useState(false);
   const [showNotedPhotosOnly, setShowNotedPhotosOnly] =
