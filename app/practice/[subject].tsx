@@ -5,6 +5,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -44,6 +45,7 @@ import type {
 } from '@/types/lecture-summary';
 import { shuffleIndexes } from '@/utils/random-order';
 import { getUnansweredItemIndexes } from '@/utils/study-assessment';
+import { buildPracticeQuestionShareMessage } from '@/utils/study-material-share';
 
 
 export default function PracticeQuestionScreen() {
@@ -81,6 +83,7 @@ export default function PracticeQuestionScreen() {
   const [generationError, setGenerationError] =
     useState('');
   const [saveError, setSaveError] = useState('');
+  const [shareError, setShareError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [isOutdated, setIsOutdated] = useState(false);
   const [isEditingCurrentQuestion, setIsEditingCurrentQuestion] =
@@ -104,6 +107,7 @@ export default function PracticeQuestionScreen() {
           setLoadError('');
           setGenerationError('');
           setSaveError('');
+          setShareError('');
 
           const [
             summaryRecords,
@@ -237,6 +241,7 @@ export default function PracticeQuestionScreen() {
       setIsGenerating(true);
       setGenerationError('');
       setSaveError('');
+      setShareError('');
       setIsSaved(false);
       setIsOutdated(false);
 
@@ -291,6 +296,29 @@ export default function PracticeQuestionScreen() {
       );
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+
+  const shareQuestions = async () => {
+    if (questions.length === 0) {
+      return;
+    }
+
+    try {
+      setShareError('');
+      await Share.share({
+        title: `${subject}の練習問題`,
+        message: buildPracticeQuestionShareMessage(
+          subject,
+          questions
+        ),
+      });
+    } catch (error) {
+      console.log('練習問題共有エラー:', error);
+      setShareError(
+        '練習問題を共有できませんでした。もう一度お試しください。'
+      );
     }
   };
 
@@ -527,11 +555,27 @@ export default function PracticeQuestionScreen() {
             {saveError !== '' ? (
               <Text style={styles.errorText}>{saveError}</Text>
             ) : null}
+            {shareError !== '' ? (
+              <Text style={styles.errorText}>{shareError}</Text>
+            ) : null}
 
             {isOutdated ? (
               <Text style={styles.outdatedNotice}>
                 授業まとめが更新されています。この練習問題は更新前のまとめから作成されたものです。必要に応じて「練習問題を作り直す」を押してください。
               </Text>
+            ) : null}
+
+            {questions.length > 0 ? (
+              <Pressable
+                style={styles.shareButton}
+                accessibilityRole="button"
+                accessibilityLabel={`${subject}の練習問題をまとめて共有`}
+                onPress={() => void shareQuestions()}
+              >
+                <Text style={styles.shareButtonText}>
+                  練習問題をまとめて共有
+                </Text>
+              </Pressable>
             ) : null}
 
             {isFinished && questions.length > 0 ? (
@@ -848,6 +892,8 @@ const styles = StyleSheet.create({
   unavailableText: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 13, lineHeight: 20, padding: 12, marginTop: 14 },
   errorText: { color: '#9b2c2c', fontSize: 13, lineHeight: 20, marginTop: 12 },
   outdatedNotice: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 12, lineHeight: 19, padding: 10, marginTop: 12 },
+  shareButton: { alignItems: 'center', borderWidth: 1, borderColor: '#31518f', borderRadius: 9, padding: 12, marginTop: 12 },
+  shareButtonText: { color: '#31518f', fontSize: 14, fontWeight: 'bold' },
   completionCard: { backgroundColor: '#f3f6ff', borderWidth: 1, borderColor: '#aebee6', borderRadius: 14, padding: 20, marginTop: 22 },
   completionTitle: { color: '#31518f', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 14 },
   completionText: { color: '#333', fontSize: 15, lineHeight: 25, textAlign: 'center' },

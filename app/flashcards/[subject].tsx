@@ -5,6 +5,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -46,6 +47,7 @@ import {
   takeNextFlashcardRound,
 } from '@/utils/flashcard-session';
 import { getUnansweredItemIndexes } from '@/utils/study-assessment';
+import { buildFlashcardShareMessage } from '@/utils/study-material-share';
 
 
 export default function FlashcardScreen() {
@@ -87,6 +89,7 @@ export default function FlashcardScreen() {
   const [generationError, setGenerationError] =
     useState('');
   const [saveError, setSaveError] = useState('');
+  const [shareError, setShareError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [isOutdated, setIsOutdated] = useState(false);
   const [isEditingCurrentCard, setIsEditingCurrentCard] =
@@ -110,6 +113,7 @@ export default function FlashcardScreen() {
           setLoadError('');
           setGenerationError('');
           setSaveError('');
+          setShareError('');
 
           const [
             summaryRecords,
@@ -247,6 +251,7 @@ export default function FlashcardScreen() {
       setIsGenerating(true);
       setGenerationError('');
       setSaveError('');
+      setShareError('');
       setIsSaved(false);
       setIsOutdated(false);
 
@@ -302,6 +307,26 @@ export default function FlashcardScreen() {
       );
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+
+  const shareCards = async () => {
+    if (cards.length === 0) {
+      return;
+    }
+
+    try {
+      setShareError('');
+      await Share.share({
+        title: `${subject}のフラッシュカード`,
+        message: buildFlashcardShareMessage(subject, cards),
+      });
+    } catch (error) {
+      console.log('フラッシュカード共有エラー:', error);
+      setShareError(
+        'フラッシュカードを共有できませんでした。もう一度お試しください。'
+      );
     }
   };
 
@@ -565,11 +590,27 @@ export default function FlashcardScreen() {
             {saveError !== '' ? (
               <Text style={styles.errorText}>{saveError}</Text>
             ) : null}
+            {shareError !== '' ? (
+              <Text style={styles.errorText}>{shareError}</Text>
+            ) : null}
 
             {isOutdated ? (
               <Text style={styles.outdatedNotice}>
                 授業まとめが更新されています。このフラッシュカードは更新前のまとめから作成されたものです。必要に応じて「フラッシュカードを作り直す」を押してください。
               </Text>
+            ) : null}
+
+            {cards.length > 0 ? (
+              <Pressable
+                style={styles.shareButton}
+                accessibilityRole="button"
+                accessibilityLabel={`${subject}のフラッシュカードをまとめて共有`}
+                onPress={() => void shareCards()}
+              >
+                <Text style={styles.shareButtonText}>
+                  カードをまとめて共有
+                </Text>
+              </Pressable>
             ) : null}
 
             {isFinished && cards.length > 0 ? (
@@ -897,6 +938,8 @@ const styles = StyleSheet.create({
   unavailableText: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 13, lineHeight: 20, padding: 12, marginTop: 14 },
   errorText: { color: '#9b2c2c', fontSize: 13, lineHeight: 20, marginTop: 12 },
   outdatedNotice: { color: '#725b24', backgroundColor: '#fff3d6', borderRadius: 8, fontSize: 12, lineHeight: 19, padding: 10, marginTop: 12 },
+  shareButton: { alignItems: 'center', borderWidth: 1, borderColor: '#6b3ca0', borderRadius: 9, padding: 12, marginTop: 12 },
+  shareButtonText: { color: '#6b3ca0', fontSize: 14, fontWeight: 'bold' },
   completionCard: { backgroundColor: '#f5effb', borderWidth: 1, borderColor: '#b798d5', borderRadius: 14, padding: 20, marginTop: 22 },
   completionTitle: { color: '#6b3ca0', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 14 },
   completionText: { color: '#333', fontSize: 15, lineHeight: 25, textAlign: 'center' },
