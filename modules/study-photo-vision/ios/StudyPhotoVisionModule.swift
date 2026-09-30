@@ -6,7 +6,15 @@ public class StudyPhotoVisionModule: Module {
   public func definition() -> ModuleDefinition {
     Name("StudyPhotoVision")
 
-    AsyncFunction("recognizeText") { (imageUri: String, promise: Promise) in
+    AsyncFunction("recognizeText") {
+      (
+        imageUri: String,
+        regionX: Double,
+        regionY: Double,
+        regionWidth: Double,
+        regionHeight: Double,
+        promise: Promise
+      ) in
       do {
         let imageUrl = try self.localImageUrl(from: imageUri)
 
@@ -28,6 +36,12 @@ public class StudyPhotoVisionModule: Module {
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["ja-JP", "en-US"]
         request.usesLanguageCorrection = true
+        request.regionOfInterest = try self.validatedRegion(
+          x: regionX,
+          y: regionY,
+          width: regionWidth,
+          height: regionHeight
+        )
 
         let handler = VNImageRequestHandler(
           cgImage: image,
@@ -79,6 +93,38 @@ public class StudyPhotoVisionModule: Module {
     throw StudyPhotoVisionError.invalidImageUri
   }
 
+  private func validatedRegion(
+    x: Double,
+    y: Double,
+    width: Double,
+    height: Double
+  ) throws -> CGRect {
+    guard
+      x.isFinite,
+      y.isFinite,
+      width.isFinite,
+      height.isFinite,
+      x >= -0.000_001,
+      y >= -0.000_001,
+      width > 0,
+      height > 0,
+      x + width <= 1.000_001,
+      y + height <= 1.000_001
+    else {
+      throw StudyPhotoVisionError.invalidRegion
+    }
+
+    let clampedX = min(max(x, 0), 1)
+    let clampedY = min(max(y, 0), 1)
+
+    return CGRect(
+      x: clampedX,
+      y: clampedY,
+      width: min(width, 1 - clampedX),
+      height: min(height, 1 - clampedY)
+    )
+  }
+
   private func imageOrientation(
     for imageSource: CGImageSource
   ) -> CGImagePropertyOrientation {
@@ -99,4 +145,5 @@ public class StudyPhotoVisionModule: Module {
 private enum StudyPhotoVisionError: Error {
   case invalidImageUri
   case imageCouldNotBeRead
+  case invalidRegion
 }

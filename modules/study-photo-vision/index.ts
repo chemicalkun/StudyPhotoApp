@@ -2,6 +2,10 @@ import {
   requireOptionalNativeModule,
 } from 'expo-modules-core';
 
+import type {
+  NormalizedImageRegion,
+} from '@/utils/image-region';
+
 
 export type RecognizedTextBlock = {
   text: string;
@@ -17,7 +21,11 @@ export type RecognizedTextBlock = {
 
 type StudyPhotoVisionNativeModule = {
   recognizeText(
-    imageUri: string
+    imageUri: string,
+    regionX: number,
+    regionY: number,
+    regionWidth: number,
+    regionHeight: number
   ): Promise<RecognizedTextBlock[]>;
 };
 
@@ -33,7 +41,8 @@ export const isStudyPhotoVisionAvailable =
 
 
 export const recognizeText = async (
-  imageUri: string
+  imageUri: string,
+  region?: NormalizedImageRegion
 ): Promise<RecognizedTextBlock[]> => {
   if (nativeModule === null) {
     throw new Error(
@@ -41,5 +50,11 @@ export const recognizeText = async (
     );
   }
 
-  return nativeModule.recognizeText(imageUri);
+  return nativeModule.recognizeText(
+    imageUri,
+    region?.x ?? 0,
+    region?.y ?? 0,
+    region?.width ?? 1,
+    region?.height ?? 1
+  );
 };

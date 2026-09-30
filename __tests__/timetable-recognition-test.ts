@@ -1,4 +1,5 @@
 import {
+  deduplicatePositionedTextBlocks,
   normalizeTimetableText,
   parseTimetableCandidates,
   PositionedTextBlock,
@@ -110,6 +111,87 @@ describe('parseTimetableCandidates', () => {
     ]);
   });
 
+  test('時限が1つの縦長文字領域でも各行へ分割する', () => {
+    const result = parseTimetableCandidates([
+      createBlock('月', 0.25, 0.9),
+      createBlock('火', 0.55, 0.9),
+      createBlock(
+        '1限\n2限\n3限\n4限\n5限\n6限',
+        0.05,
+        0.15,
+        0.9,
+        0.08,
+        0.72
+      ),
+      createBlock('物理学', 0.25, 0.69),
+      createBlock('化学', 0.55, 0.21),
+    ]);
+
+    expect(result.detectedPeriods).toEqual([
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+    ]);
+    expect(result.candidates).toEqual([
+      {
+        day: '月',
+        period: 2,
+        subject: '物理学',
+        confidence: 0.9,
+      },
+      {
+        day: '火',
+        period: 6,
+        subject: '化学',
+        confidence: 0.9,
+      },
+    ]);
+  });
+
+  test('曜日が縦・時限が横の時間割を自動判定する', () => {
+    const result = parseTimetableCandidates([
+      createBlock(
+        '月曜日\n火曜日',
+        0.05,
+        0.2,
+        0.9,
+        0.08,
+        0.6
+      ),
+      createBlock(
+        '1限 2限',
+        0.2,
+        0.88,
+        0.9,
+        0.6,
+        0.04
+      ),
+      createBlock('英語', 0.31, 0.63),
+      createBlock('情報処理', 0.61, 0.33),
+    ]);
+
+    expect(result.detectedDays).toEqual(['月', '火']);
+    expect(result.detectedPeriods).toEqual([1, 2]);
+    expect(result.candidates).toEqual([
+      {
+        day: '月',
+        period: 1,
+        subject: '英語',
+        confidence: 0.9,
+      },
+      {
+        day: '火',
+        period: 2,
+        subject: '情報処理',
+        confidence: 0.9,
+      },
+    ]);
+    expect(result.warning).toBeNull();
+  });
+
   test('表の外側にあるタイトルは科目候補に含めない', () => {
     const result = parseTimetableCandidates([
       createBlock('月', 0.25, 0.9),
@@ -121,6 +203,90 @@ describe('parseTimetableCandidates', () => {
 
     expect(result.candidates).toEqual([]);
     expect(result.warning).toContain('科目候補');
+  });
+
+  test('曜日と小時限が横並びの時間割を検出する', () => {
+    const mondayStart = 0.05;
+    const tuesdayStart = 0.35;
+    const slotBlocks = [mondayStart, tuesdayStart]
+      .flatMap((start) =>
+        Array.from({ length: 10 }, (_, index) =>
+          createBlock(
+            String(index + 1),
+            start + index * 0.02,
+            0.88,
+            0.95,
+            0.01,
+            0.02
+          )
+        )
+      );
+    const result = parseTimetableCandidates([
+      createBlock('月', 0.13, 0.94, 0.95, 0.04, 0.02),
+      createBlock('火', 0.43, 0.94, 0.95, 0.04, 0.02),
+      ...slotBlocks,
+      createBlock('数学', 0.055, 0.45, 0.9, 0.03, 0.04),
+      createBlock('情報処理', 0.435, 0.45, 0.85, 0.03, 0.04),
+    ]);
+
+    expect(result.detectedDays).toEqual(['月', '火']);
+    expect(result.detectedPeriods).toEqual([1, 2, 3, 4, 5]);
+    expect(result.candidates).toEqual([
+      {
+        day: '月',
+        period: 1,
+        subject: '数学',
+        confidence: 0.9,
+      },
+      {
+        day: '火',
+        period: 3,
+        subject: '情報処理',
+        confidence: 0.85,
+      },
+    ]);
+    expect(result.warning).toBeNull();
+  });
+
+  test('曜日文字が読めなくても1〜10の繰り返しから曜日を推定する', () => {
+    const mondayStart = 0.05;
+    const tuesdayStart = 0.35;
+    const slotBlocks = [mondayStart, tuesdayStart]
+      .flatMap((start) =>
+        Array.from({ length: 10 }, (_, index) =>
+          createBlock(
+            String(index + 1),
+            start + index * 0.02,
+            0.88 + (index % 2) * 0.004,
+            0.95,
+            0.01,
+            0.02
+          )
+        )
+      );
+    const result = parseTimetableCandidates([
+      ...slotBlocks,
+      createBlock('数学', 0.055, 0.45, 0.9, 0.03, 0.04),
+      createBlock('情報処理', 0.435, 0.45, 0.85, 0.03, 0.04),
+    ]);
+
+    expect(result.detectedDays).toEqual(['月', '火']);
+    expect(result.detectedPeriods).toEqual([1, 2, 3, 4, 5]);
+    expect(result.candidates).toEqual([
+      {
+        day: '月',
+        period: 1,
+        subject: '数学',
+        confidence: 0.9,
+      },
+      {
+        day: '火',
+        period: 3,
+        subject: '情報処理',
+        confidence: 0.85,
+      },
+    ]);
+    expect(result.warning).toBeNull();
   });
 
   test('見出しが不足している場合は推測しない', () => {
@@ -144,5 +310,20 @@ describe('normalizeTimetableText', () => {
     expect(normalizeTimetableText('Data Science')).toBe(
       'Data Science'
     );
+  });
+});
+
+
+describe('deduplicatePositionedTextBlocks', () => {
+  test('重なった読み取り範囲の同じ文字を1つにする', () => {
+    const blocks = deduplicatePositionedTextBlocks([
+      createBlock('月', 0.1, 0.9),
+      createBlock('月', 0.101, 0.901),
+      createBlock('月', 0.3, 0.9),
+    ]);
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].boundingBox.x).toBe(0.1);
+    expect(blocks[1].boundingBox.x).toBe(0.3);
   });
 });

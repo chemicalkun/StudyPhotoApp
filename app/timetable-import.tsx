@@ -32,10 +32,17 @@ import {
   sortTimetableCandidates,
 } from '@/utils/timetable-import';
 import {
+  deduplicatePositionedTextBlocks,
   normalizeTimetableText,
   parseTimetableCandidates,
   type TimetableCandidate,
 } from '@/utils/timetable-recognition';
+import {
+  getContainedImageFrame,
+  toVisionImageRegion,
+  type NormalizedImageRegion,
+} from '@/utils/image-region';
+import { ImageRegionEditor } from '@/components/image-region-editor';
 import { parsePhotoRecords } from '@/types/photo';
 import { renameSubjectLearningData } from '@/services/subject-learning-data-storage';
 import { getTimetableSubjectRenames } from '@/utils/timetable-subject';
@@ -78,6 +85,14 @@ export default function TimetableImportScreen() {
   const candidateRowYs = useRef<Record<number, number>>({});
   const [selectedImage, setSelectedImage] =
     useState<SelectedTimetableImage | null>(null);
+  const [previewSize, setPreviewSize] = useState({
+    width: 0,
+    height: 0,
+  });
+  const [selectedImageRegions, setSelectedImageRegions] =
+    useState<NormalizedImageRegion[]>([]);
+  const [selectingImageRegion, setSelectingImageRegion] =
+    useState(false);
   const [selecting, setSelecting] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
@@ -99,6 +114,17 @@ export default function TimetableImportScreen() {
     );
   const enabledDays = getEnabledTimetableDays(displayOptions);
   const enabledPeriods = getEnabledPeriodNumbers(displayOptions);
+  const displayedImageFrame = useMemo(
+    () => selectedImage === null
+      ? null
+      : getContainedImageFrame({
+          containerWidth: previewSize.width,
+          containerHeight: previewSize.height,
+          imageWidth: selectedImage.width,
+          imageHeight: selectedImage.height,
+        }),
+    [previewSize, selectedImage]
+  );
   const timetableRecognitionResult = useMemo(
     () => parseTimetableCandidates(recognizedTextBlocks),
     [recognizedTextBlocks]
@@ -188,6 +214,8 @@ export default function TimetableImportScreen() {
       width: asset.width,
       height: asset.height,
     });
+    setSelectedImageRegions([]);
+    setSelectingImageRegion(false);
     setRecognizedTextBlocks([]);
     setRecognizedTextExpanded(false);
     setCandidateDrafts([]);
@@ -327,8 +355,20 @@ export default function TimetableImportScreen() {
     setErrorMessage('');
 
     try {
-      const recognizedBlocks = await recognizeText(
-        selectedImage.uri
+      const recognitionRegions =
+        selectedImageRegions.length === 0
+          ? [undefined]
+          : selectedImageRegions.map(toVisionImageRegion);
+      const recognizedBlockGroups: RecognizedTextBlock[][] = [];
+
+      for (const region of recognitionRegions) {
+        recognizedBlockGroups.push(
+          await recognizeText(selectedImage.uri, region)
+        );
+      }
+
+      const recognizedBlocks = deduplicatePositionedTextBlocks(
+        recognizedBlockGroups.flat()
       );
       const recognitionResult =
         parseTimetableCandidates(recognizedBlocks);
@@ -350,12 +390,50 @@ export default function TimetableImportScreen() {
     } catch (error) {
       console.log('時間割画像認識エラー:', error);
 
+      const errorDescription = error instanceof Error
+        ? error.message
+        : String(error);
+      const developmentBuildMayBeOutdated =
+        /argument|invalidRegion|recognizeText/i.test(
+          errorDescription
+        );
+
       setErrorMessage(
-        '時間割画像を解析できませんでした。もう一度お試しください。'
+        developmentBuildMayBeOutdated
+          ? 'Apple Visionの開発ビルドが古い可能性があります。Xcodeからアプリを再ビルドしてください。'
+          : '時間割画像を解析できませんでした。もう一度お試しください。'
       );
     } finally {
       setRecognizing(false);
     }
+  };
+
+
+  const beginImageRegionSelection = () => {
+    setSelectingImageRegion(true);
+    setErrorMessage('');
+  };
+
+
+  const confirmImageRegionSelection = (
+    regions: NormalizedImageRegion[]
+  ) => {
+    setRecognizedTextBlocks([]);
+    setCandidateDrafts([]);
+    setCandidatesSaved(false);
+    setSelectedImageRegions(regions);
+    setSelectingImageRegion(false);
+    setErrorMessage('');
+  };
+
+
+  const useFullImage = () => {
+    setRecognizedTextBlocks([]);
+    setCandidateDrafts([]);
+    setCandidatesSaved(false);
+    setSelectedImageRegions([]);
+    setSelectingImageRegion(false);
+    setErrorMessage('');
   };
 
 
@@ -712,7 +790,15 @@ export default function TimetableImportScreen() {
 
       {selectedImage !== null ? (
         <>
-          <View style={styles.previewContainer}>
+          <View
+            style={styles.previewContainer}
+            onLayout={({ nativeEvent }) => {
+              setPreviewSize({
+                width: nativeEvent.layout.width,
+                height: nativeEvent.layout.height,
+              });
+            }}
+          >
             <Image
               style={styles.previewImage}
               source={{ uri: selectedImage.uri }}
@@ -723,7 +809,43 @@ export default function TimetableImportScreen() {
                 );
               }}
             />
+
+            {displayedImageFrame !== null
+              ? selectedImageRegions.map((region, index) => (
+                  <View
+                    pointerEvents="none"
+                    key={`${region.x}-${region.y}-${index}`}
+                    style={[
+                      styles.selectedRegion,
+                      {
+                        left:
+                          displayedImageFrame.x +
+                          displayedImageFrame.width * region.x,
+                        top:
+                          displayedImageFrame.y +
+                          displayedImageFrame.height * region.y,
+                        width:
+                          displayedImageFrame.width * region.width,
+                        height:
+                          displayedImageFrame.height * region.height,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.selectedRegionLabel}>
+                      {index + 1}
+                    </Text>
+                  </View>
+                ))
+              : null}
           </View>
+
+          <ImageRegionEditor
+            visible={selectingImageRegion}
+            image={selectedImage}
+            initialRegions={selectedImageRegions}
+            onCancel={() => setSelectingImageRegion(false)}
+            onConfirm={confirmImageRegionSelection}
+          />
 
           <Text style={styles.imageInfo}>
             {selectedImage.fileName ?? '時間割画像'}
@@ -732,6 +854,43 @@ export default function TimetableImportScreen() {
           <Text style={styles.imageSize}>
             {selectedImage.width} × {selectedImage.height}px
           </Text>
+
+          <View style={styles.regionSelectionCard}>
+            <Text style={styles.regionSelectionTitle}>
+              読み取り範囲
+            </Text>
+            <Text style={styles.regionSelectionText}>
+              {selectedImageRegions.length === 0
+                ? '現在は画像全体を読み取ります。'
+                : `${selectedImageRegions.length}個の青い枠で囲んだ範囲をまとめて読み取ります。`}
+            </Text>
+
+            <Pressable
+              style={styles.regionSelectionButton}
+              disabled={recognizing}
+              accessibilityRole="button"
+              onPress={beginImageRegionSelection}
+            >
+              <Text style={styles.regionSelectionButtonText}>
+                {selectedImageRegions.length === 0
+                  ? '読み取る範囲を選択'
+                  : '範囲を調整'}
+              </Text>
+            </Pressable>
+
+            {selectedImageRegions.length > 0 ? (
+              <Pressable
+                style={styles.fullImageButton}
+                disabled={recognizing}
+                accessibilityRole="button"
+                onPress={useFullImage}
+              >
+                <Text style={styles.fullImageButtonText}>
+                  画像全体を読み取る
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </>
       ) : (
         <View style={styles.emptyPreview}>
@@ -799,7 +958,9 @@ export default function TimetableImportScreen() {
               <ActivityIndicator color="white" />
             ) : (
               <Text style={styles.selectButtonText}>
-                文字を認識して候補を作成
+                {selectedImageRegions.length === 0
+                  ? '画像全体を認識して候補を作成'
+                  : `${selectedImageRegions.length}個の範囲を認識して候補を作成`}
               </Text>
             )}
           </Pressable>
@@ -1224,6 +1385,23 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 
+  selectedRegion: {
+    position: 'absolute',
+    backgroundColor: 'rgba(36, 84, 166, 0.18)',
+    borderWidth: 3,
+    borderColor: '#2454a6',
+  },
+
+  selectedRegionLabel: {
+    alignSelf: 'flex-start',
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    backgroundColor: '#2454a6',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+
   emptyPreview: {
     width: '100%',
     aspectRatio: 4 / 3,
@@ -1256,6 +1434,56 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     textAlign: 'center',
+  },
+
+  regionSelectionCard: {
+    backgroundColor: '#f7f9fc',
+    borderWidth: 1,
+    borderColor: '#cdd5e1',
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 14,
+  },
+
+  regionSelectionTitle: {
+    color: '#222',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+
+  regionSelectionText: {
+    color: '#555',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 5,
+  },
+
+  regionSelectionButton: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2454a6',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 12,
+  },
+
+  regionSelectionButtonText: {
+    color: '#2454a6',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  fullImageButton: {
+    alignItems: 'center',
+    paddingVertical: 9,
+    marginTop: 4,
+  },
+
+  fullImageButtonText: {
+    color: '#666',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 
   selectButton: {
