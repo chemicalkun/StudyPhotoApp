@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   SectionList,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -68,6 +69,7 @@ import {
   loadLectureSummaryRecords,
   moveLectureSummaryRecords,
   saveLectureSummaryRecord,
+  updateLectureSummaryText,
 } from '@/services/lecture-summary-storage';
 import {
   createLectureSummaryId,
@@ -320,6 +322,15 @@ export default function SubjectScreen() {
     useState('');
   const [isLectureSummarySaved, setIsLectureSummarySaved] =
     useState(false);
+  const [isEditingLectureSummary, setIsEditingLectureSummary] =
+    useState(false);
+  const editedLectureSummaryRef = useRef('');
+  const [lectureSummaryEditError, setLectureSummaryEditError] =
+    useState('');
+  const [isSavingLectureSummary, setIsSavingLectureSummary] =
+    useState(false);
+  const [isSharingLectureSummary, setIsSharingLectureSummary] =
+    useState(false);
   const [lectureQuestion, setLectureQuestion] = useState('');
   const [lectureAnswer, setLectureAnswer] = useState('');
   const [questionError, setQuestionError] = useState('');
@@ -564,7 +575,12 @@ export default function SubjectScreen() {
     setLectureSummary(
       canUseSavedSummary ? savedSummary.text : ''
     );
+    editedLectureSummaryRef.current =
+      canUseSavedSummary ? savedSummary.text : '';
     setIsLectureSummarySaved(canUseSavedSummary);
+    setIsEditingLectureSummary(false);
+    setLectureSummaryEditError('');
+    setIsSavingLectureSummary(false);
     setSummaryError('');
     setSummarySaveError('');
     setIsGeneratingSummary(false);
@@ -618,6 +634,9 @@ export default function SubjectScreen() {
       }
 
       setLectureSummary(trimmedSummary);
+      editedLectureSummaryRef.current = trimmedSummary;
+      setIsEditingLectureSummary(false);
+      setLectureSummaryEditError('');
 
       try {
         const savedRecord =
@@ -908,6 +927,105 @@ export default function SubjectScreen() {
       );
     } finally {
       setIsAnsweringQuestion(false);
+    }
+  };
+
+
+  const shareLectureSummary = async () => {
+    if (
+      selectedLectureSection === null ||
+      lectureSummary.trim() === '' ||
+      isSharingLectureSummary
+    ) {
+      return;
+    }
+
+    const lectureTitle =
+      `${subject} ${selectedLectureSection.title}`.trim();
+
+    try {
+      setIsSharingLectureSummary(true);
+
+      await Share.share({
+        title: `${lectureTitle}のまとめ`,
+        message: [
+          `${lectureTitle}のまとめ`,
+          selectedLectureSection.dateLabel,
+          '',
+          lectureSummary.trim(),
+        ].join('\n'),
+      });
+    } catch (error) {
+      console.log('授業回まとめ共有エラー:', error);
+      Alert.alert(
+        'まとめを共有できません',
+        '授業回のまとめを共有する際にエラーが発生しました。'
+      );
+    } finally {
+      setIsSharingLectureSummary(false);
+    }
+  };
+
+
+  const saveEditedLectureSummary = async () => {
+    if (
+      selectedLectureSection === null ||
+      isSavingLectureSummary
+    ) {
+      return;
+    }
+
+    const trimmedSummary =
+      editedLectureSummaryRef.current.trim();
+
+    if (trimmedSummary === '') {
+      setLectureSummaryEditError(
+        'まとめ本文を入力してください。'
+      );
+      return;
+    }
+
+    const summaryId = createLectureSummaryId(
+      subject,
+      selectedLectureSection.dateKey
+    );
+
+    try {
+      setIsSavingLectureSummary(true);
+      setLectureSummaryEditError('');
+
+      const savedRecord =
+        lectureSummaryRecords[summaryId] === undefined
+          ? await saveLectureSummaryRecord(
+              subject,
+              selectedLectureSection.dateKey,
+              trimmedSummary,
+              createLectureSummarySourceSignature(
+                getLectureSummarySourceRecords(
+                  selectedLectureSection
+                )
+              )
+            )
+          : await updateLectureSummaryText(
+              summaryId,
+              trimmedSummary
+            );
+
+      setLectureSummaryRecords((records) => ({
+        ...records,
+        [savedRecord.id]: savedRecord,
+      }));
+      setLectureSummary(savedRecord.text);
+      editedLectureSummaryRef.current = savedRecord.text;
+      setIsLectureSummarySaved(true);
+      setIsEditingLectureSummary(false);
+    } catch (error) {
+      console.log('授業回まとめ編集エラー:', error);
+      setLectureSummaryEditError(
+        'まとめを保存できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setIsSavingLectureSummary(false);
     }
   };
 
@@ -3541,7 +3659,10 @@ export default function SubjectScreen() {
         transparent
         animationType="fade"
         onRequestClose={() => {
-          if (processingLectureDateKey === null) {
+          if (
+            processingLectureDateKey === null &&
+            !isSavingLectureSummary
+          ) {
             setSelectedLectureSection(null);
           }
         }}
@@ -3592,12 +3713,16 @@ export default function SubjectScreen() {
                   style={[
                     styles.summaryButton,
                     (isGeneratingSummary ||
-                      processingLectureDateKey !== null) &&
+                      processingLectureDateKey !== null ||
+                      isEditingLectureSummary ||
+                      isSavingLectureSummary) &&
                       styles.summaryButtonDisabled,
                   ]}
                   disabled={
                     isGeneratingSummary ||
-                    processingLectureDateKey !== null
+                    processingLectureDateKey !== null ||
+                    isEditingLectureSummary ||
+                    isSavingLectureSummary
                   }
                   onPress={() => {
                     if (selectedLectureSection !== null) {
@@ -3667,16 +3792,137 @@ export default function SubjectScreen() {
                     </Text>
                   ) : null}
 
-                  <LectureSummaryReviewPoints
-                    summaryText={lectureSummary}
-                  />
+                  {isEditingLectureSummary ? (
+                    <View>
+                      <TextInput
+                        style={styles.lectureSummaryEditInput}
+                        defaultValue={
+                          editedLectureSummaryRef.current
+                        }
+                        onChangeText={(text) => {
+                          editedLectureSummaryRef.current = text;
+                          setLectureSummaryEditError('');
+                        }}
+                        multiline
+                        textAlignVertical="top"
+                        autoFocus
+                        editable={!isSavingLectureSummary}
+                        accessibilityLabel="授業回まとめ本文"
+                      />
 
-                  <Text
-                    style={styles.summaryResultText}
-                    selectable
-                  >
-                    {lectureSummary}
-                  </Text>
+                      {lectureSummaryEditError !== '' ? (
+                        <Text style={styles.summaryErrorText}>
+                          {lectureSummaryEditError}
+                        </Text>
+                      ) : null}
+
+                      <View style={styles.lectureSummaryEditActions}>
+                        <Pressable
+                          style={[
+                            styles.saveLectureSummaryEditButton,
+                            isSavingLectureSummary &&
+                              styles.summaryButtonDisabled,
+                          ]}
+                          disabled={isSavingLectureSummary}
+                          accessibilityRole="button"
+                          onPress={() => {
+                            void saveEditedLectureSummary();
+                          }}
+                        >
+                          {isSavingLectureSummary ? (
+                            <ActivityIndicator
+                              size="small"
+                              color="white"
+                            />
+                          ) : null}
+
+                          <Text
+                            style={styles.saveLectureSummaryEditText}
+                          >
+                            {isSavingLectureSummary
+                              ? '保存中...'
+                              : '変更を保存'}
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={styles.cancelLectureSummaryEditButton}
+                          disabled={isSavingLectureSummary}
+                          accessibilityRole="button"
+                          onPress={() => {
+                            editedLectureSummaryRef.current =
+                              lectureSummary;
+                            setIsEditingLectureSummary(false);
+                            setLectureSummaryEditError('');
+                          }}
+                        >
+                          <Text
+                            style={styles.cancelLectureSummaryEditText}
+                          >
+                            キャンセル
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : (
+                    <>
+                      <LectureSummaryReviewPoints
+                        summaryText={lectureSummary}
+                      />
+
+                      <Text
+                        style={styles.summaryResultText}
+                        selectable
+                      >
+                        {lectureSummary}
+                      </Text>
+
+                      <View style={styles.lectureSummaryActionRow}>
+                        <Pressable
+                          style={styles.editLectureSummaryButton}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${selectedLectureSection?.title ?? 'この回'}のまとめを編集`}
+                          onPress={() => {
+                            editedLectureSummaryRef.current =
+                              lectureSummary;
+                            setLectureSummaryEditError('');
+                            setIsEditingLectureSummary(true);
+                          }}
+                        >
+                          <Text style={styles.editLectureSummaryText}>
+                            このまとめを編集
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={[
+                            styles.shareLectureSummaryButton,
+                            isSharingLectureSummary &&
+                              styles.summaryButtonDisabled,
+                          ]}
+                          disabled={isSharingLectureSummary}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${selectedLectureSection?.title ?? 'この回'}のまとめを共有`}
+                          onPress={() => {
+                            void shareLectureSummary();
+                          }}
+                        >
+                          {isSharingLectureSummary ? (
+                            <ActivityIndicator
+                              size="small"
+                              color="#28794c"
+                            />
+                          ) : null}
+
+                          <Text style={styles.shareLectureSummaryText}>
+                            {isSharingLectureSummary
+                              ? '共有を準備中...'
+                              : 'このまとめを共有'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  )}
                 </View>
               ) : null}
 
@@ -3777,10 +4023,14 @@ export default function SubjectScreen() {
             <Pressable
               style={[
                 styles.closeButton,
-                processingLectureDateKey !== null &&
+                (processingLectureDateKey !== null ||
+                  isSavingLectureSummary) &&
                   styles.summaryButtonDisabled,
               ]}
-              disabled={processingLectureDateKey !== null}
+              disabled={
+                processingLectureDateKey !== null ||
+                isSavingLectureSummary
+              }
               onPress={() => setSelectedLectureSection(null)}
             >
               <Text style={styles.closeButtonText}>
@@ -4857,6 +5107,95 @@ const styles = StyleSheet.create({
     color: '#222',
     fontSize: 14,
     lineHeight: 22,
+  },
+
+  lectureSummaryActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+
+  editLectureSummaryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#28794c',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+
+  editLectureSummaryText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  shareLectureSummaryButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  shareLectureSummaryText: {
+    color: '#28794c',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  lectureSummaryEditInput: {
+    minHeight: 220,
+    color: '#222',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 8,
+    fontSize: 14,
+    lineHeight: 22,
+    padding: 12,
+  },
+
+  lectureSummaryEditActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+
+  saveLectureSummaryEditButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#28794c',
+    borderRadius: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+
+  saveLectureSummaryEditText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  cancelLectureSummaryEditButton: {
+    borderWidth: 1,
+    borderColor: '#8d8d8d',
+    borderRadius: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+
+  cancelLectureSummaryEditText: {
+    color: '#444',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 
   questionSection: {
