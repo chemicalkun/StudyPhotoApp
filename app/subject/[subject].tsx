@@ -3,8 +3,10 @@ import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   SectionList,
@@ -3794,7 +3796,10 @@ export default function SubjectScreen() {
         animationType="fade"
         onRequestClose={closeLectureSummary}
       >
-        <View style={styles.modalBackground}>
+        <KeyboardAvoidingView
+          style={styles.modalBackground}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
               {selectedLectureSection?.title}のまとめ
@@ -3931,6 +3936,7 @@ export default function SubjectScreen() {
                           setLectureSummaryEditError('');
                         }}
                         multiline
+                        scrollEnabled
                         textAlignVertical="top"
                         autoFocus
                         editable={!isSavingLectureSummary}
@@ -4165,7 +4171,7 @@ export default function SubjectScreen() {
               </Text>
             </Pressable>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -5297,7 +5303,7 @@ const styles = StyleSheet.create({
   },
 
   lectureSummaryEditInput: {
-    minHeight: 220,
+    height: 240,
     color: '#222',
     backgroundColor: 'white',
     borderWidth: 1,

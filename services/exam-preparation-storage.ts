@@ -67,3 +67,35 @@ export const saveExamPreparationRecord = async (
 
   return record;
 };
+
+
+export const updateExamPreparationText = async (
+  recordId: string,
+  text: string
+): Promise<ExamPreparationRecord> => {
+  const trimmedText = text.trim();
+
+  if (recordId === '' || trimmedText === '') {
+    throw new Error('保存する試験対策がありません');
+  }
+
+  const records = await loadExamPreparationRecords();
+  const record = records[recordId];
+
+  if (record === undefined) {
+    throw new Error('試験対策が見つかりません');
+  }
+
+  const updatedRecord: ExamPreparationRecord = {
+    ...record,
+    text: trimmedText,
+    createdAt: new Date().toISOString(),
+  };
+
+  await saveExamPreparationRecords({
+    ...records,
+    [recordId]: updatedRecord,
+  });
+
+  return updatedRecord;
+};

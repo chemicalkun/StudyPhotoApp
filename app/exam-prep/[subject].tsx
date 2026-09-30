@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -29,6 +31,7 @@ import {
 import {
   loadExamPreparationRecords,
   saveExamPreparationRecord,
+  updateExamPreparationText,
 } from '@/services/exam-preparation-storage';
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
 import {
@@ -90,6 +93,13 @@ export default function ExamPreparationScreen() {
     useState(false);
   const [isExamPreparationExpanded, setIsExamPreparationExpanded] =
     useState(false);
+  const [isEditingExamPreparation, setIsEditingExamPreparation] =
+    useState(false);
+  const editedExamPreparationRef = useRef('');
+  const [examPreparationEditError, setExamPreparationEditError] =
+    useState('');
+  const [isSavingExamPreparation, setIsSavingExamPreparation] =
+    useState(false);
   const questionTextRef = useRef('');
   const [hasQuestionText, setHasQuestionText] = useState(false);
   const [isAnsweringQuestion, setIsAnsweringQuestion] =
@@ -123,6 +133,9 @@ export default function ExamPreparationScreen() {
         setIsQuestionHistoryExpanded(false);
         setExpandedQuestionId(null);
         setIsExamPreparationExpanded(false);
+        setIsEditingExamPreparation(false);
+        setExamPreparationEditError('');
+        setIsSavingExamPreparation(false);
 
         const [
           records,
@@ -168,6 +181,10 @@ export default function ExamPreparationScreen() {
             ? savedExamPreparation.text
             : ''
         );
+        editedExamPreparationRef.current =
+          hasSavedExamPreparation
+            ? savedExamPreparation.text
+            : '';
         setIsExamPreparationSaved(
           hasSavedExamPreparation
         );
@@ -231,7 +248,9 @@ export default function ExamPreparationScreen() {
     if (
       summaries.length === 0 ||
       availability !== 'available' ||
-      isGenerating
+      isGenerating ||
+      isEditingExamPreparation ||
+      isSavingExamPreparation
     ) {
       return;
     }
@@ -261,6 +280,9 @@ export default function ExamPreparationScreen() {
       }
 
       setExamPreparation(trimmedResult);
+      editedExamPreparationRef.current = trimmedResult;
+      setIsEditingExamPreparation(false);
+      setExamPreparationEditError('');
       setIsExamPreparationExpanded(true);
 
       try {
@@ -310,6 +332,59 @@ export default function ExamPreparationScreen() {
       setShareError(
         '試験対策を共有できませんでした。もう一度お試しください。'
       );
+    }
+  };
+
+
+  const saveEditedExamPreparation = async () => {
+    if (isSavingExamPreparation) {
+      return;
+    }
+
+    const trimmedText =
+      editedExamPreparationRef.current.trim();
+
+    if (trimmedText === '') {
+      setExamPreparationEditError(
+        '試験対策本文を入力してください。'
+      );
+      return;
+    }
+
+    try {
+      setIsSavingExamPreparation(true);
+      setExamPreparationEditError('');
+
+      const recordId =
+        createExamPreparationRecordId(subject);
+      const savedRecord = isExamPreparationSaved
+        ? await updateExamPreparationText(
+            recordId,
+            trimmedText
+          )
+        : await saveExamPreparationRecord(
+            subject,
+            trimmedText,
+            createExamPreparationSourceSignature(
+              summaries
+            )
+          );
+
+      setExamPreparation(savedRecord.text);
+      editedExamPreparationRef.current = savedRecord.text;
+      setIsExamPreparationSaved(true);
+      setIsEditingExamPreparation(false);
+
+      if (!isExamPreparationSaved) {
+        setIsExamPreparationOutdated(false);
+      }
+    } catch (error) {
+      console.log('試験対策編集エラー:', error);
+      setExamPreparationEditError(
+        '試験対策を保存できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setIsSavingExamPreparation(false);
     }
   };
 
@@ -498,10 +573,17 @@ export default function ExamPreparationScreen() {
         }}
       />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          automaticallyAdjustKeyboardInsets
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+        >
         <Text style={styles.title}>
           {subject}
         </Text>
@@ -565,9 +647,16 @@ export default function ExamPreparationScreen() {
                 <Pressable
                   style={[
                     styles.sourceRefreshButton,
-                    isGenerating && styles.disabledButton,
+                    (isGenerating ||
+                      isEditingExamPreparation ||
+                      isSavingExamPreparation) &&
+                      styles.disabledButton,
                   ]}
-                  disabled={isGenerating}
+                  disabled={
+                    isGenerating ||
+                    isEditingExamPreparation ||
+                    isSavingExamPreparation
+                  }
                   accessibilityRole="button"
                   accessibilityLabel="更新された授業まとめから試験対策を作り直す"
                   onPress={() => {
@@ -602,11 +691,17 @@ export default function ExamPreparationScreen() {
                 <Pressable
                   style={[
                     styles.generateButton,
-                    (isGenerating || summaries.length === 0) &&
+                    (isGenerating ||
+                      summaries.length === 0 ||
+                      isEditingExamPreparation ||
+                      isSavingExamPreparation) &&
                       styles.disabledButton,
                   ]}
                   disabled={
-                    isGenerating || summaries.length === 0
+                    isGenerating ||
+                    summaries.length === 0 ||
+                    isEditingExamPreparation ||
+                    isSavingExamPreparation
                   }
                   onPress={() => {
                     void generateExamPreparation();
@@ -915,44 +1010,141 @@ export default function ExamPreparationScreen() {
                   </Text>
                 ) : null}
 
-                <Pressable
-                  style={styles.examPreparationToggle}
-                  accessibilityRole="button"
-                  accessibilityState={{
-                    expanded: isExamPreparationExpanded,
-                  }}
-                  onPress={() => {
-                    setIsExamPreparationExpanded(
-                      (expanded) => !expanded
-                    );
-                  }}
-                >
-                  <Text style={styles.examPreparationToggleText}>
-                    {isExamPreparationExpanded
-                      ? '閉じる ▲'
-                      : '開く ▼'}
-                  </Text>
-                </Pressable>
+                {isEditingExamPreparation ? (
+                  <View>
+                    <TextInput
+                      style={styles.examPreparationEditInput}
+                      defaultValue={
+                        editedExamPreparationRef.current
+                      }
+                      onChangeText={(text) => {
+                        editedExamPreparationRef.current = text;
+                        setExamPreparationEditError('');
+                      }}
+                      multiline
+                      scrollEnabled
+                      textAlignVertical="top"
+                      autoFocus
+                      editable={!isSavingExamPreparation}
+                      accessibilityLabel="試験対策本文"
+                    />
 
-                {isExamPreparationExpanded ? (
-                  <Text
-                    style={styles.resultText}
-                    selectable
-                  >
-                    {examPreparation}
-                  </Text>
-                ) : null}
+                    {examPreparationEditError !== '' ? (
+                      <Text style={styles.examPreparationEditError}>
+                        {examPreparationEditError}
+                      </Text>
+                    ) : null}
 
-                <Pressable
-                  style={styles.shareButton}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${subject}の試験対策を共有`}
-                  onPress={() => void shareExamPreparation()}
-                >
-                  <Text style={styles.shareButtonText}>
-                    試験対策を共有
-                  </Text>
-                </Pressable>
+                    <View style={styles.examPreparationEditActions}>
+                      <Pressable
+                        style={[
+                          styles.saveExamPreparationEditButton,
+                          isSavingExamPreparation &&
+                            styles.disabledButton,
+                        ]}
+                        disabled={isSavingExamPreparation}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          void saveEditedExamPreparation();
+                        }}
+                      >
+                        {isSavingExamPreparation ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="white"
+                          />
+                        ) : null}
+
+                        <Text
+                          style={styles.saveExamPreparationEditText}
+                        >
+                          {isSavingExamPreparation
+                            ? '保存中...'
+                            : '変更を保存'}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.cancelExamPreparationEditButton}
+                        disabled={isSavingExamPreparation}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          editedExamPreparationRef.current =
+                            examPreparation;
+                          setIsEditingExamPreparation(false);
+                          setExamPreparationEditError('');
+                        }}
+                      >
+                        <Text
+                          style={styles.cancelExamPreparationEditText}
+                        >
+                          キャンセル
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <>
+                    <Pressable
+                      style={styles.examPreparationToggle}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        expanded: isExamPreparationExpanded,
+                      }}
+                      onPress={() => {
+                        setIsExamPreparationExpanded(
+                          (expanded) => !expanded
+                        );
+                      }}
+                    >
+                      <Text style={styles.examPreparationToggleText}>
+                        {isExamPreparationExpanded
+                          ? '閉じる ▲'
+                          : '開く ▼'}
+                      </Text>
+                    </Pressable>
+
+                    {isExamPreparationExpanded ? (
+                      <Text
+                        style={styles.resultText}
+                        selectable
+                      >
+                        {examPreparation}
+                      </Text>
+                    ) : null}
+
+                    <View style={styles.examPreparationActions}>
+                      <Pressable
+                        style={styles.editExamPreparationButton}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${subject}の試験対策を編集`}
+                        onPress={() => {
+                          editedExamPreparationRef.current =
+                            examPreparation;
+                          setExamPreparationEditError('');
+                          setIsEditingExamPreparation(true);
+                        }}
+                      >
+                        <Text
+                          style={styles.editExamPreparationButtonText}
+                        >
+                          試験対策を編集
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.shareButton}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${subject}の試験対策を共有`}
+                        onPress={() => void shareExamPreparation()}
+                      >
+                        <Text style={styles.shareButtonText}>
+                          試験対策を共有
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </>
+                )}
               </View>
             ) : null}
 
@@ -989,7 +1181,8 @@ export default function ExamPreparationScreen() {
             ) : null}
           </>
         ) : null}
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal
         visible={selectedSourceSummary !== null}
@@ -1045,6 +1238,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'white',
+  },
+
+  keyboardAvoidingView: {
+    flex: 1,
   },
 
   scrollView: {
@@ -1323,6 +1520,83 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
+  examPreparationActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 16,
+  },
+
+  editExamPreparationButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#28794c',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+
+  editExamPreparationButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  examPreparationEditInput: {
+    height: 300,
+    color: '#222',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 8,
+    fontSize: 14,
+    lineHeight: 23,
+    padding: 12,
+  },
+
+  examPreparationEditError: {
+    color: '#9b2c2c',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+
+  examPreparationEditActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+
+  saveExamPreparationEditButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#28794c',
+    borderRadius: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+
+  saveExamPreparationEditText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  cancelExamPreparationEditButton: {
+    borderWidth: 1,
+    borderColor: '#8d8d8d',
+    borderRadius: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+
+  cancelExamPreparationEditText: {
+    color: '#444',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
   questionSection: {
     backgroundColor: '#f3f6ff',
     borderWidth: 1,
@@ -1545,7 +1819,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    marginTop: 16,
   },
 
   shareButtonText: {

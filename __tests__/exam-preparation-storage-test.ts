@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   loadExamPreparationRecords,
   saveExamPreparationRecord,
+  updateExamPreparationText,
 } from '@/services/exam-preparation-storage';
 import {
   createExamPreparationRecordId,
@@ -69,6 +70,26 @@ describe('exam preparation storage', () => {
     const records = await loadExamPreparationRecords();
 
     expect(Object.keys(records)).toHaveLength(2);
+  });
+
+  test('保存済みの試験対策本文を編集する', async () => {
+    const saved = await saveExamPreparationRecord(
+      '有機化学',
+      '編集前の試験対策',
+      'signature-1'
+    );
+
+    const updated = await updateExamPreparationText(
+      saved.id,
+      ' 編集後の試験対策 '
+    );
+    const records = await loadExamPreparationRecords();
+
+    expect(updated.text).toBe('編集後の試験対策');
+    expect(updated.sourceSummarySignature).toBe(
+      'signature-1'
+    );
+    expect(records[saved.id]).toEqual(updated);
   });
 });
 
