@@ -1203,6 +1203,8 @@ export default function SubjectScreen() {
     selectedImportantPhotos.every(
       (photo) => photo.importantReviewedAt !== undefined
     );
+  const isPhotoSelectionBusy =
+    bulkOperation !== null || sharingPhotoGroup !== null;
   const allPhotoIds = sections.flatMap((section) =>
     section.photos.map((photo) => photo.id)
   );
@@ -2107,7 +2109,7 @@ export default function SubjectScreen() {
         <View style={styles.bulkSelectionBar}>
           <View style={styles.bulkSelectionHeader}>
             <View style={styles.bulkSelectionCountRow}>
-              {bulkOperation !== null ? (
+              {isPhotoSelectionBusy ? (
                 <ActivityIndicator
                   size="small"
                   color="#31518f"
@@ -2121,7 +2123,7 @@ export default function SubjectScreen() {
 
             <View style={styles.bulkSelectionHeaderActions}>
               <Pressable
-                disabled={bulkOperation !== null}
+                disabled={isPhotoSelectionBusy}
                 accessibilityRole="button"
                 onPress={toggleAllPhotoSelection}
               >
@@ -2133,7 +2135,7 @@ export default function SubjectScreen() {
               </Pressable>
 
               <Pressable
-                disabled={bulkOperation !== null}
+                disabled={isPhotoSelectionBusy}
                 accessibilityRole="button"
                 onPress={finishPhotoSelection}
               >
@@ -2153,12 +2155,39 @@ export default function SubjectScreen() {
               style={[
                 styles.bulkActionButton,
                 (selectedPhotoCount === 0 ||
-                  bulkOperation !== null) &&
+                  isPhotoSelectionBusy) &&
                   styles.summaryButtonDisabled,
               ]}
               disabled={
                 selectedPhotoCount === 0 ||
-                bulkOperation !== null
+                isPhotoSelectionBusy
+              }
+              accessibilityRole="button"
+              accessibilityLabel={`選択した${selectedPhotoCount}枚の写真を共有`}
+              onPress={() => {
+                void sharePhotos(
+                  selectedPhotos,
+                  'selection'
+                );
+              }}
+            >
+              <Text style={styles.bulkActionButtonText}>
+                {sharingPhotoGroup === 'selection'
+                  ? '共有を準備中...'
+                  : '共有'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.bulkActionButton,
+                (selectedPhotoCount === 0 ||
+                  isPhotoSelectionBusy) &&
+                  styles.summaryButtonDisabled,
+              ]}
+              disabled={
+                selectedPhotoCount === 0 ||
+                isPhotoSelectionBusy
               }
               onPress={() => {
                 void recognizeSelectedPhotos();
@@ -2176,10 +2205,10 @@ export default function SubjectScreen() {
               <Pressable
                 style={[
                   styles.bulkImportantReviewButton,
-                  (bulkOperation !== null) &&
+                  isPhotoSelectionBusy &&
                     styles.summaryButtonDisabled,
                 ]}
-                disabled={bulkOperation !== null}
+                disabled={isPhotoSelectionBusy}
                 onPress={() => {
                   void saveSelectedImportantPhotoReview(
                     !allSelectedImportantPhotosReviewed
@@ -2200,12 +2229,12 @@ export default function SubjectScreen() {
               style={[
                 styles.bulkImportanceButton,
                 (selectedPhotoCount === 0 ||
-                  bulkOperation !== null) &&
+                  isPhotoSelectionBusy) &&
                   styles.summaryButtonDisabled,
               ]}
               disabled={
                 selectedPhotoCount === 0 ||
-                bulkOperation !== null
+                isPhotoSelectionBusy
               }
               onPress={() => {
                 void saveSelectedPhotoImportance(
@@ -2226,12 +2255,12 @@ export default function SubjectScreen() {
               style={[
                 styles.bulkActionButton,
                 (selectedPhotoCount === 0 ||
-                  bulkOperation !== null) &&
+                  isPhotoSelectionBusy) &&
                   styles.summaryButtonDisabled,
               ]}
               disabled={
                 selectedPhotoCount === 0 ||
-                bulkOperation !== null
+                isPhotoSelectionBusy
               }
               onPress={() => {
                 void openBulkClassification();
@@ -2247,12 +2276,12 @@ export default function SubjectScreen() {
                 style={[
                   styles.bulkActionButton,
                   (selectedPhotoCount === 0 ||
-                    bulkOperation !== null) &&
+                    isPhotoSelectionBusy) &&
                     styles.summaryButtonDisabled,
                 ]}
                 disabled={
                   selectedPhotoCount === 0 ||
-                  bulkOperation !== null
+                  isPhotoSelectionBusy
                 }
                 onPress={() => {
                   setBulkLectureModalVisible(true);
@@ -2268,12 +2297,12 @@ export default function SubjectScreen() {
               style={[
                 styles.bulkDeleteButton,
                 (selectedPhotoCount === 0 ||
-                  bulkOperation !== null) &&
+                  isPhotoSelectionBusy) &&
                   styles.summaryButtonDisabled,
               ]}
               disabled={
                 selectedPhotoCount === 0 ||
-                bulkOperation !== null
+                isPhotoSelectionBusy
               }
               onPress={confirmDeleteSelectedPhotos}
             >
