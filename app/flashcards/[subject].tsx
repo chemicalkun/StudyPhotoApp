@@ -36,6 +36,7 @@ import {
 import type {
   LectureSummaryRecord,
 } from '@/types/lecture-summary';
+import { getUnansweredItemIndexes } from '@/utils/study-assessment';
 
 
 export default function FlashcardScreen() {
@@ -45,6 +46,9 @@ export default function FlashcardScreen() {
       ? params.subject
       : '';
   const startInReviewMode = params.mode === 'review';
+  const startInUnansweredMode =
+    params.mode === 'unanswered';
+  const openedFromReview = params.from === 'review';
 
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
@@ -56,6 +60,8 @@ export default function FlashcardScreen() {
     useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [isReviewRound, setIsReviewRound] = useState(false);
+  const [isUnansweredRound, setIsUnansweredRound] =
+    useState(false);
   const [assessments, setAssessments] = useState<
     Record<string, FlashcardAssessment>
   >({});
@@ -133,11 +139,21 @@ export default function FlashcardScreen() {
           const shouldStartReviewRound =
             startInReviewMode &&
             reviewCardIndexes.length > 0;
+          const unansweredCardIndexes =
+            getUnansweredItemIndexes(
+              loadedCards.length,
+              loadedAssessments
+            );
+          const shouldStartUnansweredRound =
+            startInUnansweredMode &&
+            unansweredCardIndexes.length > 0;
 
           setCards(loadedCards);
           setCardOrder(
             shouldStartReviewRound
               ? reviewCardIndexes
+              : shouldStartUnansweredRound
+                ? unansweredCardIndexes
               : loadedCards.map((_, index) => index)
           );
           setAssessments(loadedAssessments);
@@ -149,6 +165,7 @@ export default function FlashcardScreen() {
           setShowDefinition(false);
           setIsFinished(false);
           setIsReviewRound(shouldStartReviewRound);
+          setIsUnansweredRound(shouldStartUnansweredRound);
         } catch (error) {
           console.log('フラッシュカード読み込みエラー:', error);
 
@@ -170,7 +187,12 @@ export default function FlashcardScreen() {
       return () => {
         active = false;
       };
-    }, [loadRevision, startInReviewMode, subject])
+    }, [
+      loadRevision,
+      startInReviewMode,
+      startInUnansweredMode,
+      subject,
+    ])
   );
 
 
@@ -220,6 +242,7 @@ export default function FlashcardScreen() {
       setShowDefinition(false);
       setIsFinished(false);
       setIsReviewRound(false);
+      setIsUnansweredRound(false);
       setAssessments({});
 
       try {
@@ -327,7 +350,9 @@ export default function FlashcardScreen() {
       <Stack.Screen
         options={{
           title: 'フラッシュカード',
-          headerBackTitle: startInReviewMode
+          headerBackTitle: startInReviewMode ||
+            startInUnansweredMode ||
+            openedFromReview
             ? '復習'
             : '試験対策',
         }}
@@ -435,6 +460,7 @@ export default function FlashcardScreen() {
                       setShowDefinition(false);
                       setIsFinished(false);
                       setIsReviewRound(true);
+                      setIsUnansweredRound(false);
                     }}
                   >
                     <Text style={styles.retryReviewButtonText}>
@@ -453,6 +479,7 @@ export default function FlashcardScreen() {
                     setShowDefinition(false);
                     setIsFinished(false);
                     setIsReviewRound(false);
+                    setIsUnansweredRound(false);
                   }}
                 >
                   <Text style={styles.retryButtonText}>
@@ -464,7 +491,11 @@ export default function FlashcardScreen() {
               <View style={styles.cardSection}>
                 <View style={styles.progressRow}>
                   <Text style={styles.progressText}>
-                    {isReviewRound ? '復習 ' : 'カード '}
+                    {isReviewRound
+                      ? '復習 '
+                      : isUnansweredRound
+                        ? '未回答 '
+                        : 'カード '}
                     {currentCardPosition + 1} / {cardOrder.length}
                   </Text>
                   {isSaved ? (

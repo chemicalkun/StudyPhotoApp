@@ -43,6 +43,7 @@ describe('StudyPhoto backup', () => {
     expect(
       backup.storage.timetableDisplayOptions
     ).toBeNull();
+    expect(backup.storage.reviewDisplayOptions).toBeNull();
     expect(backup.storage.subjectQuestionRecords).toBeNull();
   });
 
@@ -122,6 +123,7 @@ describe('StudyPhoto backup', () => {
     delete legacyStorage.academicTimetables;
     delete legacyStorage.academicTermData;
     delete legacyStorage.timetableDisplayOptions;
+    delete legacyStorage.reviewDisplayOptions;
     delete legacyStorage.subjectQuestionRecords;
 
     const parsed = parseStudyPhotoBackup(JSON.stringify({
@@ -135,6 +137,7 @@ describe('StudyPhoto backup', () => {
     expect(
       parsed.storage.timetableDisplayOptions
     ).toBeNull();
+    expect(parsed.storage.reviewDisplayOptions).toBeNull();
     expect(parsed.storage.subjectQuestionRecords).toBeNull();
   });
 

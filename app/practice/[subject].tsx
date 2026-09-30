@@ -38,6 +38,7 @@ import {
 import type {
   LectureSummaryRecord,
 } from '@/types/lecture-summary';
+import { getUnansweredItemIndexes } from '@/utils/study-assessment';
 
 
 export default function PracticeQuestionScreen() {
@@ -47,6 +48,9 @@ export default function PracticeQuestionScreen() {
       ? params.subject
       : '';
   const startInReviewMode = params.mode === 'review';
+  const startInUnansweredMode =
+    params.mode === 'unanswered';
+  const openedFromReview = params.from === 'review';
 
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
@@ -59,6 +63,8 @@ export default function PracticeQuestionScreen() {
   const [showAnswer, setShowAnswer] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [isReviewRound, setIsReviewRound] = useState(false);
+  const [isUnansweredRound, setIsUnansweredRound] =
+    useState(false);
   const [assessments, setAssessments] = useState<
     Record<string, PracticeQuestionAssessment>
   >({});
@@ -138,11 +144,21 @@ export default function PracticeQuestionScreen() {
           const shouldStartReviewRound =
             startInReviewMode &&
             reviewQuestionIndexes.length > 0;
+          const unansweredQuestionIndexes =
+            getUnansweredItemIndexes(
+              loadedQuestions.length,
+              loadedAssessments
+            );
+          const shouldStartUnansweredRound =
+            startInUnansweredMode &&
+            unansweredQuestionIndexes.length > 0;
 
           setQuestions(loadedQuestions);
           setQuestionOrder(
             shouldStartReviewRound
               ? reviewQuestionIndexes
+              : shouldStartUnansweredRound
+                ? unansweredQuestionIndexes
               : loadedQuestions.map((_, index) => index)
           );
           setIsSaved(hasSavedRecord);
@@ -154,6 +170,7 @@ export default function PracticeQuestionScreen() {
           setShowAnswer(false);
           setIsFinished(false);
           setIsReviewRound(shouldStartReviewRound);
+          setIsUnansweredRound(shouldStartUnansweredRound);
         } catch (error) {
           console.log('練習問題読み込みエラー:', error);
 
@@ -175,7 +192,12 @@ export default function PracticeQuestionScreen() {
       return () => {
         active = false;
       };
-    }, [loadRevision, startInReviewMode, subject])
+    }, [
+      loadRevision,
+      startInReviewMode,
+      startInUnansweredMode,
+      subject,
+    ])
   );
 
 
@@ -229,6 +251,7 @@ export default function PracticeQuestionScreen() {
       setShowAnswer(false);
       setIsFinished(false);
       setIsReviewRound(false);
+      setIsUnansweredRound(false);
       setAssessments({});
 
       try {
@@ -339,7 +362,9 @@ export default function PracticeQuestionScreen() {
       <Stack.Screen
         options={{
           title: '練習問題',
-          headerBackTitle: startInReviewMode
+          headerBackTitle: startInReviewMode ||
+            startInUnansweredMode ||
+            openedFromReview
             ? '復習'
             : '試験対策',
         }}
@@ -452,6 +477,7 @@ export default function PracticeQuestionScreen() {
                       setShowAnswer(false);
                       setIsFinished(false);
                       setIsReviewRound(true);
+                      setIsUnansweredRound(false);
                     }}
                   >
                     <Text style={styles.retryReviewButtonText}>
@@ -470,6 +496,7 @@ export default function PracticeQuestionScreen() {
                     setShowAnswer(false);
                     setIsFinished(false);
                     setIsReviewRound(false);
+                    setIsUnansweredRound(false);
                   }}
                 >
                   <Text style={styles.retryAllButtonText}>
@@ -481,7 +508,11 @@ export default function PracticeQuestionScreen() {
               <View style={styles.questionSection}>
                 <View style={styles.progressRow}>
                   <Text style={styles.progressText}>
-                    {isReviewRound ? '復習 ' : '問題 '}
+                    {isReviewRound
+                      ? '復習 '
+                      : isUnansweredRound
+                        ? '未回答 '
+                        : '問題 '}
                     {currentQuestionPosition + 1} /{' '}
                     {questionOrder.length}
                   </Text>

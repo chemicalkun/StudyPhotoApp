@@ -35,6 +35,7 @@ import {
 } from '@/services/lecture-summary-storage';
 import {
   getPhotoAcademicTerm,
+  getNextPendingImportantPhoto,
   isUnclassifiedPhoto,
   parsePhotoRecords,
   PhotoRecord,
@@ -54,6 +55,7 @@ import {
 } from '@/services/photo-ocr-storage';
 import {
   loadPhotoRecords,
+  updatePhotoImportantReview,
   updatePhotoImportance,
   updatePhotoNote,
 } from '@/services/photo-storage';
@@ -106,10 +108,20 @@ export default function PhotoScreen() {
       : '';
   const isImportantReview =
     params.mode === 'important';
+  const isNotedReview = params.mode === 'noted';
+  const pendingImportantOnly =
+    params.importantStatus === 'pending';
+  const isPhotoCollectionReview =
+    isImportantReview || isNotedReview;
   const importantReviewSubject =
     typeof params.importantSubject === 'string' &&
     params.importantSubject !== ''
       ? params.importantSubject
+      : null;
+  const notedReviewSubject =
+    typeof params.notedSubject === 'string' &&
+    params.notedSubject !== ''
+      ? params.notedSubject
       : null;
 
   const [photo, setPhoto] =
@@ -124,6 +136,8 @@ export default function PhotoScreen() {
     useState(false);
   const [deleting, setDeleting] = useState(false);
   const [savingImportance, setSavingImportance] =
+    useState(false);
+  const [savingImportantReview, setSavingImportantReview] =
     useState(false);
   const [noteModalVisible, setNoteModalVisible] =
     useState(false);
@@ -219,6 +233,10 @@ export default function PhotoScreen() {
                 (item) =>
                   item.isImportant === true &&
                   (
+                    !pendingImportantOnly ||
+                    item.importantReviewedAt === undefined
+                  ) &&
+                  (
                     importantReviewSubject === null ||
                     getPhotoLabel(item) ===
                       importantReviewSubject
@@ -229,6 +247,23 @@ export default function PhotoScreen() {
                   new Date(photoB.takenAt).getTime() -
                   new Date(photoA.takenAt).getTime()
               )
+          : isNotedReview
+            ? photos
+                .filter(
+                  (item) =>
+                    item.note !== undefined &&
+                    item.note.trim() !== '' &&
+                    (
+                      notedReviewSubject === null ||
+                      getPhotoLabel(item) ===
+                        notedReviewSubject
+                    )
+                )
+                .sort(
+                  (photoA, photoB) =>
+                    new Date(photoB.takenAt).getTime() -
+                    new Date(photoA.takenAt).getTime()
+                )
           : photos
               .filter((item) => {
                 return getPhotoLabel(item) === selectedLabel;
@@ -264,7 +299,10 @@ export default function PhotoScreen() {
   }, [
     importantReviewSubject,
     isImportantReview,
+    isNotedReview,
     loadRevision,
+    notedReviewSubject,
+    pendingImportantOnly,
     photoId,
   ]);
 
@@ -317,15 +355,13 @@ export default function PhotoScreen() {
     : -1;
 
 
-  const goToPhoto = (targetIndex: number) => {
-    const targetPhoto = lecturePhotos[targetIndex];
-
-    if (!targetPhoto || transitioning) {
+  const transitionToPhoto = (
+    targetPhoto: PhotoRecord,
+    exitDirection: -1 | 1
+  ) => {
+    if (transitioning) {
       return;
     }
-
-    const exitDirection =
-      targetIndex > currentPhotoIndex ? -1 : 1;
 
     setTransitioning(true);
 
@@ -369,6 +405,20 @@ export default function PhotoScreen() {
         setTransitioning(false);
       });
     });
+  };
+
+
+  const goToPhoto = (targetIndex: number) => {
+    const targetPhoto = lecturePhotos[targetIndex];
+
+    if (!targetPhoto) {
+      return;
+    }
+
+    transitionToPhoto(
+      targetPhoto,
+      targetIndex > currentPhotoIndex ? -1 : 1
+    );
   };
 
 
@@ -557,6 +607,75 @@ export default function PhotoScreen() {
       );
     } finally {
       setSavingImportance(false);
+    }
+  };
+
+
+  const toggleImportantReview = async () => {
+    if (
+      photo === null ||
+      photo.isImportant !== true ||
+      savingImportantReview
+    ) {
+      return;
+    }
+
+    const nextIsReviewed =
+      photo.importantReviewedAt === undefined;
+
+    try {
+      setSavingImportantReview(true);
+
+      const updatedPhoto = await updatePhotoImportantReview(
+        photo.id,
+        nextIsReviewed
+      );
+
+      if (nextIsReviewed && isImportantReview) {
+        const nextPhoto = getNextPendingImportantPhoto(
+          lecturePhotos,
+          updatedPhoto.id
+        );
+
+        if (nextPhoto === null) {
+          router.back();
+          return;
+        }
+
+        const nextPhotoIndex = lecturePhotos.findIndex(
+          (currentPhoto) => currentPhoto.id === nextPhoto.id
+        );
+        const updatedLecturePhotos = lecturePhotos
+          .filter(
+            (currentPhoto) =>
+              currentPhoto.id !== updatedPhoto.id &&
+              currentPhoto.importantReviewedAt === undefined
+          );
+
+        setLecturePhotos(updatedLecturePhotos);
+        transitionToPhoto(
+          nextPhoto,
+          nextPhotoIndex > currentPhotoIndex ? -1 : 1
+        );
+        return;
+      }
+
+      setPhoto(updatedPhoto);
+      setLecturePhotos((currentPhotos) =>
+        currentPhotos.map((currentPhoto) =>
+          currentPhoto.id === updatedPhoto.id
+            ? updatedPhoto
+            : currentPhoto
+        )
+      );
+    } catch (error) {
+      console.log('重要写真の復習状態保存エラー:', error);
+      Alert.alert(
+        '復習状態を保存できませんでした',
+        '少し待ってからもう一度お試しください。'
+      );
+    } finally {
+      setSavingImportantReview(false);
     }
   };
 
@@ -1038,7 +1157,7 @@ export default function PhotoScreen() {
       <Stack.Screen
         options={{
           title: '写真',
-          headerBackTitle: isImportantReview
+          headerBackTitle: isPhotoCollectionReview
             ? '復習'
             : '授業',
         }}
@@ -1144,7 +1263,7 @@ export default function PhotoScreen() {
               </Text>
             ) : null}
 
-            {!isImportantReview &&
+            {!isPhotoCollectionReview &&
             currentLectureIndex >= 0 &&
             currentLecturePhotoIndex >= 0 ? (
               <Text style={styles.positionText}>
@@ -1158,7 +1277,9 @@ export default function PhotoScreen() {
               <Text style={styles.overallPositionText}>
                 {isImportantReview
                   ? '重要な写真'
-                  : '授業全体'}{' '}
+                  : isNotedReview
+                    ? 'メモ付き写真'
+                    : '授業全体'}{' '}
                 {currentPhotoIndex + 1} /{' '}
                 {lecturePhotos.length}枚
               </Text>
@@ -1194,6 +1315,40 @@ export default function PhotoScreen() {
                     : '重要な写真にする'}
               </Text>
             </Pressable>
+
+            {photo.isImportant === true ? (
+              <Pressable
+                style={[
+                  styles.importantReviewButton,
+                  photo.importantReviewedAt !== undefined &&
+                    styles.importantReviewButtonCompleted,
+                  savingImportantReview && styles.disabledButton,
+                ]}
+                disabled={savingImportantReview}
+                accessibilityRole="button"
+                accessibilityState={{
+                  selected:
+                    photo.importantReviewedAt !== undefined,
+                }}
+                onPress={() => {
+                  void toggleImportantReview();
+                }}
+              >
+                <Text
+                  style={[
+                    styles.importantReviewButtonText,
+                    photo.importantReviewedAt !== undefined &&
+                      styles.importantReviewButtonTextCompleted,
+                  ]}
+                >
+                  {savingImportantReview
+                    ? '保存中...'
+                    : photo.importantReviewedAt !== undefined
+                      ? '復習済み・もう一度復習待ちにする'
+                      : '復習済みにする'}
+                </Text>
+              </Pressable>
+            ) : null}
 
             <Pressable
               style={styles.noteButton}
@@ -1329,7 +1484,7 @@ export default function PhotoScreen() {
               </Text>
             </Pressable>
 
-            {!isImportantReview &&
+            {!isPhotoCollectionReview &&
             !isUnclassifiedPhoto(photo) &&
             lectureDateKeys.length > 1 ? (
               <Pressable
@@ -1970,6 +2125,31 @@ const styles = StyleSheet.create({
 
   importanceButtonTextSelected: {
     color: '#ffdc81',
+  },
+
+  importantReviewButton: {
+    backgroundColor: '#fff4d8',
+    borderColor: '#d2ad51',
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 9,
+    padding: 12,
+  },
+
+  importantReviewButtonCompleted: {
+    backgroundColor: '#eaf6ee',
+    borderColor: '#83b895',
+  },
+
+  importantReviewButtonText: {
+    color: '#735716',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  importantReviewButtonTextCompleted: {
+    color: '#2d6a44',
   },
 
   noteButton: {

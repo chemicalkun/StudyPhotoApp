@@ -56,7 +56,32 @@ export const updateSelectedPhotoImportance = (
   isImportant: boolean
 ) => photos.map((photo) =>
   selectedPhotoIds.has(photo.id)
-    ? { ...photo, isImportant }
+    ? {
+        ...photo,
+        isImportant,
+        importantReviewedAt:
+          isImportant && photo.isImportant === true
+            ? photo.importantReviewedAt
+            : undefined,
+      }
+    : photo
+);
+
+
+export const updateSelectedImportantPhotoReview = (
+  photos: PhotoRecord[],
+  selectedPhotoIds: ReadonlySet<string>,
+  isReviewed: boolean,
+  reviewedAt = new Date().toISOString()
+) => photos.map((photo) =>
+  selectedPhotoIds.has(photo.id) &&
+  photo.isImportant === true
+    ? {
+        ...photo,
+        importantReviewedAt: isReviewed
+          ? reviewedAt
+          : undefined,
+      }
     : photo
 );
 

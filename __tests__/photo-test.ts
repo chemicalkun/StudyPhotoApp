@@ -1,4 +1,5 @@
 import {
+  getNextPendingImportantPhoto,
   groupPhotosBySubject,
   getLatestPhotoTakenAt,
   getPhotoLectureCount,
@@ -163,6 +164,55 @@ describe('写真の授業分類', () => {
       parsePhotoRecords(JSON.stringify([photo]))[0]
         .isImportant
     ).toBe(true);
+  });
+
+  test('重要な写真の復習日時を読み込む', () => {
+    const photo = {
+      ...createPhoto('reviewed-important-photo', '化学'),
+      isImportant: true,
+      importantReviewedAt: '2026-09-30T01:00:00.000Z',
+    };
+
+    expect(
+      parsePhotoRecords(JSON.stringify([photo]))[0]
+        .importantReviewedAt
+    ).toBe('2026-09-30T01:00:00.000Z');
+  });
+
+  test('次の未復習の重要写真を選ぶ', () => {
+    const firstPhoto = {
+      ...createPhoto('first-important-photo', '化学'),
+      isImportant: true,
+    };
+    const currentPhoto = {
+      ...createPhoto('current-important-photo', '化学'),
+      isImportant: true,
+    };
+    const nextPhoto = {
+      ...createPhoto('next-important-photo', '化学'),
+      isImportant: true,
+    };
+
+    expect(getNextPendingImportantPhoto(
+      [firstPhoto, currentPhoto, nextPhoto],
+      currentPhoto.id
+    )?.id).toBe(nextPhoto.id);
+    expect(getNextPendingImportantPhoto(
+      [
+        firstPhoto,
+        currentPhoto,
+        {
+          ...nextPhoto,
+          importantReviewedAt:
+            '2026-09-30T01:00:00.000Z',
+        },
+      ],
+      currentPhoto.id
+    )?.id).toBe(firstPhoto.id);
+    expect(getNextPendingImportantPhoto(
+      [currentPhoto],
+      currentPhoto.id
+    )).toBeNull();
   });
 
   test('写真に保存したメモを読み込む', () => {

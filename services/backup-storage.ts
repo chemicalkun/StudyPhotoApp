@@ -30,6 +30,7 @@ import {
   type PeriodTimes,
 } from '@/utils/period-times';
 import { parseTimetableDisplayOptions } from '@/utils/timetable-display-options';
+import { parseReviewDisplayOptions } from '@/utils/review-display-options';
 import type { StudyPhotoBackup } from '@/types/backup';
 
 
@@ -151,6 +152,12 @@ const validateRestorableData = (
   if (storage.timetableDisplayOptions !== null) {
     parseTimetableDisplayOptions(
       storage.timetableDisplayOptions
+    );
+  }
+
+  if (storage.reviewDisplayOptions !== null) {
+    parseReviewDisplayOptions(
+      storage.reviewDisplayOptions
     );
   }
 

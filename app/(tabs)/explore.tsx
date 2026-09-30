@@ -93,11 +93,25 @@ import {
   loadTimetableDisplayOptions,
   type TimetableDisplayOptions,
 } from '@/utils/timetable-display-options';
-import { buildSubjectReviewProgress } from '@/utils/review-progress';
+import {
+  buildSubjectReviewProgress,
+  getOverallLearningCompletion,
+  getSubjectLearningCompletion,
+  getSubjectReviewPendingCount,
+  sortSubjectReviewProgressByAttention,
+  subjectNeedsAttention,
+} from '@/utils/review-progress';
+import {
+  defaultReviewDisplayOptions,
+  loadReviewDisplayOptions,
+  saveReviewDisplayOptions,
+  type ReviewDisplayOptions,
+} from '@/utils/review-display-options';
 
 
 type ReviewMode = 'lecture' | 'subject';
 type ReviewDay = TimetableDay | 'すべて';
+type ImportantReviewFilter = 'pending' | 'all';
 type SubjectClassSlot = {
   day: TimetableDay;
   period: number;
@@ -206,6 +220,14 @@ export default function ReviewScreen() {
     useState(photoSearchPageSize);
   const [selectedImportantSubject, setSelectedImportantSubject] =
     useState<string | null>(null);
+  const [importantReviewFilter, setImportantReviewFilter] =
+    useState<ImportantReviewFilter>('all');
+  const [showNotedPhotos, setShowNotedPhotos] =
+    useState(false);
+  const [notedPhotoLimit, setNotedPhotoLimit] =
+    useState(photoSearchPageSize);
+  const [selectedNotedSubject, setSelectedNotedSubject] =
+    useState<string | null>(null);
   const [showReviewQueue, setShowReviewQueue] =
     useState(true);
   const [showSubjectProgress, setShowSubjectProgress] =
@@ -222,6 +244,10 @@ export default function ReviewScreen() {
   const [displayOptions, setDisplayOptions] =
     useState<TimetableDisplayOptions>(
       defaultTimetableDisplayOptions
+    );
+  const [reviewDisplayOptions, setReviewDisplayOptions] =
+    useState<ReviewDisplayOptions>(
+      defaultReviewDisplayOptions
     );
   const [photoOcrRecords, setPhotoOcrRecords] =
     useState<PhotoOcrRecords>({});
@@ -373,19 +399,56 @@ export default function ReviewScreen() {
   ].sort((subjectA, subjectB) =>
     subjectA.localeCompare(subjectB, 'ja')
   );
-  const filteredImportantPhotos =
+  const pendingImportantPhotoCount = importantPhotos.filter(
+    (photo) => photo.importantReviewedAt === undefined
+  ).length;
+  const subjectFilteredImportantPhotos =
     selectedImportantSubject === null
       ? importantPhotos
       : importantPhotos.filter(
           (photo) =>
             getPhotoLabel(photo) === selectedImportantSubject
         );
+  const filteredImportantPhotos =
+    importantReviewFilter === 'pending'
+      ? subjectFilteredImportantPhotos.filter(
+          (photo) => photo.importantReviewedAt === undefined
+        )
+      : subjectFilteredImportantPhotos;
   const visibleImportantPhotos = filteredImportantPhotos.slice(
     0,
     importantPhotoLimit
   );
   const hasMoreImportantPhotos =
     filteredImportantPhotos.length > importantPhotoLimit;
+  const notedPhotos = photos
+    .filter(
+      (photo) =>
+        photo.note !== undefined &&
+        photo.note.trim() !== ''
+    )
+    .sort(
+      (photoA, photoB) =>
+        new Date(photoB.takenAt).getTime() -
+        new Date(photoA.takenAt).getTime()
+    );
+  const notedPhotoSubjects = [
+    ...new Set(notedPhotos.map(getPhotoLabel)),
+  ].sort((subjectA, subjectB) =>
+    subjectA.localeCompare(subjectB, 'ja')
+  );
+  const filteredNotedPhotos = selectedNotedSubject === null
+    ? notedPhotos
+    : notedPhotos.filter(
+        (photo) =>
+          getPhotoLabel(photo) === selectedNotedSubject
+      );
+  const visibleNotedPhotos = filteredNotedPhotos.slice(
+    0,
+    notedPhotoLimit
+  );
+  const hasMoreNotedPhotos =
+    filteredNotedPhotos.length > notedPhotoLimit;
   const subjectReviewProgress = buildSubjectReviewProgress({
     summaries,
     photos,
@@ -393,18 +456,39 @@ export default function ReviewScreen() {
     practiceQuestionRecords,
     flashcardRecords,
   });
-  const reviewQueueSubjects = subjectReviewProgress.filter(
-    (progress) =>
-      progress.practiceReviewCount > 0 ||
-      progress.flashcardReviewCount > 0 ||
-      progress.importantPhotoCount > 0
-  );
+  const overallLearningCompletion =
+    getOverallLearningCompletion(subjectReviewProgress);
+  const filteredSubjectReviewProgress =
+    reviewDisplayOptions.subjectProgressFilterMode ===
+    'attention'
+      ? subjectReviewProgress.filter(subjectNeedsAttention)
+      : subjectReviewProgress;
+  const sortedSubjectReviewProgress =
+    reviewDisplayOptions.subjectProgressSortMode === 'attention'
+      ? sortSubjectReviewProgressByAttention(
+          filteredSubjectReviewProgress
+        )
+      : filteredSubjectReviewProgress;
+  const reviewQueueSubjects = subjectReviewProgress
+    .filter(
+      (progress) =>
+        getSubjectReviewPendingCount(progress) > 0
+    )
+    .sort((progressA, progressB) => {
+      const countDifference =
+        getSubjectReviewPendingCount(progressB) -
+        getSubjectReviewPendingCount(progressA);
+
+      return countDifference !== 0
+        ? countDifference
+        : progressA.subject.localeCompare(
+            progressB.subject,
+            'ja'
+          );
+    });
   const reviewQueueTotal = reviewQueueSubjects.reduce(
     (total, progress) =>
-      total +
-      progress.practiceReviewCount +
-      progress.flashcardReviewCount +
-      progress.importantPhotoCount,
+      total + getSubjectReviewPendingCount(progress),
     0
   );
   const summaryMatchesSearch = (
@@ -584,6 +668,7 @@ export default function ReviewScreen() {
             AsyncStorage.getItem('timetable'),
             loadAcademicTerm(),
             loadTimetableDisplayOptions(),
+            loadReviewDisplayOptions(),
           ]);
           const [
             lectureSummaryResult,
@@ -595,6 +680,7 @@ export default function ReviewScreen() {
             timetableResult,
             academicTermResult,
             displayOptionsResult,
+            reviewDisplayOptionsResult,
           ] = learningDataResults;
 
           if (!active) {
@@ -673,6 +759,23 @@ export default function ReviewScreen() {
               ? currentSubject
               : null;
           });
+          setSelectedNotedSubject((currentSubject) => {
+            if (
+              currentSubject === null ||
+              photoResult.status !== 'fulfilled'
+            ) {
+              return currentSubject;
+            }
+
+            return photoResult.value.some(
+              (photo) =>
+                photo.note !== undefined &&
+                photo.note.trim() !== '' &&
+                getPhotoLabel(photo) === currentSubject
+            )
+              ? currentSubject
+              : null;
+          });
           setPhotoOcrRecords(
             photoOcrResult.status === 'fulfilled'
               ? photoOcrResult.value
@@ -710,6 +813,21 @@ export default function ReviewScreen() {
             console.log(
               '復習表示範囲読み込みエラー:',
               displayOptionsResult.reason
+            );
+          }
+          if (
+            reviewDisplayOptionsResult.status === 'fulfilled'
+          ) {
+            setReviewDisplayOptions(
+              reviewDisplayOptionsResult.value
+            );
+          } else {
+            console.log(
+              '復習タブ表示設定読み込みエラー:',
+              reviewDisplayOptionsResult.reason
+            );
+            setReviewDisplayOptions(
+              defaultReviewDisplayOptions
             );
           }
 
@@ -1122,7 +1240,8 @@ export default function ReviewScreen() {
               </View>
             ) : null}
 
-            <View style={styles.reviewQueueSection}>
+            {reviewDisplayOptions.showReviewQueue ? (
+              <View style={styles.reviewQueueSection}>
               <Pressable
                 style={styles.reviewDashboardHeader}
                 accessibilityRole="button"
@@ -1162,9 +1281,16 @@ export default function ReviewScreen() {
                         key={progress.subject}
                         style={styles.reviewQueueCard}
                       >
-                        <Text style={styles.reviewQueueSubject}>
-                          {progress.subject}
-                        </Text>
+                        <View style={styles.reviewQueueSubjectRow}>
+                          <Text style={styles.reviewQueueSubject}>
+                            {progress.subject}
+                          </Text>
+                          <Text style={styles.reviewQueueSubjectCount}>
+                            合計
+                            {getSubjectReviewPendingCount(progress)}
+                            件
+                          </Text>
+                        </View>
 
                         <View style={styles.reviewQueueActions}>
                           {progress.practiceReviewCount > 0 ? (
@@ -1186,6 +1312,29 @@ export default function ReviewScreen() {
                               >
                                 練習問題{' '}
                                 {progress.practiceReviewCount}問
+                              </Text>
+                            </Pressable>
+                          ) : null}
+
+                          {progress.practiceUnansweredCount > 0 ? (
+                            <Pressable
+                              style={styles.reviewQueueUnansweredButton}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                router.push({
+                                  pathname: '/practice/[subject]',
+                                  params: {
+                                    subject: progress.subject,
+                                    mode: 'unanswered',
+                                  },
+                                });
+                              }}
+                            >
+                              <Text
+                                style={styles.reviewQueueUnansweredText}
+                              >
+                                未回答問題{' '}
+                                {progress.practiceUnansweredCount}問
                               </Text>
                             </Pressable>
                           ) : null}
@@ -1213,6 +1362,29 @@ export default function ReviewScreen() {
                             </Pressable>
                           ) : null}
 
+                          {progress.flashcardUnansweredCount > 0 ? (
+                            <Pressable
+                              style={styles.reviewQueueUnansweredButton}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                router.push({
+                                  pathname: '/flashcards/[subject]',
+                                  params: {
+                                    subject: progress.subject,
+                                    mode: 'unanswered',
+                                  },
+                                });
+                              }}
+                            >
+                              <Text
+                                style={styles.reviewQueueUnansweredText}
+                              >
+                                未回答カード{' '}
+                                {progress.flashcardUnansweredCount}枚
+                              </Text>
+                            </Pressable>
+                          ) : null}
+
                           {progress.importantPhotoCount > 0 ? (
                             <Pressable
                               style={styles.reviewQueuePhotoButton}
@@ -1221,6 +1393,8 @@ export default function ReviewScreen() {
                                 const firstImportantPhoto =
                                   importantPhotos.find(
                                     (photo) =>
+                                      photo.importantReviewedAt ===
+                                        undefined &&
                                       getPhotoLabel(photo) ===
                                       progress.subject
                                   );
@@ -1236,6 +1410,7 @@ export default function ReviewScreen() {
                                     mode: 'important',
                                     importantSubject:
                                       progress.subject,
+                                    importantStatus: 'pending',
                                   },
                                 });
                               }}
@@ -1254,9 +1429,11 @@ export default function ReviewScreen() {
                   )}
                 </View>
               ) : null}
-            </View>
+              </View>
+            ) : null}
 
-            {subjectReviewProgress.length > 0 ? (
+            {reviewDisplayOptions.showSubjectProgress &&
+            subjectReviewProgress.length > 0 ? (
               <View style={styles.subjectProgressSection}>
                 <Pressable
                   style={styles.reviewDashboardHeader}
@@ -1289,14 +1466,239 @@ export default function ReviewScreen() {
 
                 {showSubjectProgress ? (
                   <View style={styles.subjectProgressContent}>
-                    {subjectReviewProgress.map((progress) => (
-                      <View
-                        key={progress.subject}
-                        style={styles.subjectProgressCard}
-                      >
-                        <Text style={styles.subjectProgressSubject}>
-                          {progress.subject}
+                    <View style={styles.overallProgressCard}>
+                      <View style={styles.overallProgressHeading}>
+                        <Text style={styles.overallProgressTitle}>
+                          全授業の定着度
                         </Text>
+                        <Text style={styles.overallProgressPercentage}>
+                          {overallLearningCompletion.percentage === null
+                            ? '未開始'
+                            : `${overallLearningCompletion.percentage}%`}
+                        </Text>
+                      </View>
+
+                      {overallLearningCompletion.percentage !== null ? (
+                        <>
+                          <View
+                            style={styles.overallProgressBarTrack}
+                            accessibilityRole="progressbar"
+                            accessibilityValue={{
+                              min: 0,
+                              max: 100,
+                              now: overallLearningCompletion.percentage,
+                              text: `全授業の問題・カード定着度${overallLearningCompletion.percentage}%`,
+                            }}
+                          >
+                            <View
+                              style={[
+                                styles.overallProgressBarFill,
+                                {
+                                  width: `${overallLearningCompletion.percentage}%`,
+                                },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.overallProgressDetail}>
+                            覚えた{' '}
+                            {overallLearningCompletion.knownCount}件・残り{' '}
+                            {overallLearningCompletion.remainingCount}件
+                          </Text>
+                        </>
+                      ) : (
+                        <Text style={styles.overallProgressEmpty}>
+                          練習問題またはカードを作成すると表示されます
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.subjectProgressSortRow}>
+                      <Text style={styles.subjectProgressSortLabel}>
+                        並び順
+                      </Text>
+                      {([
+                        ['attention', '要対応順'],
+                        ['subject', '授業名順'],
+                      ] as const).map(([mode, label]) => {
+                        const selected =
+                          reviewDisplayOptions
+                            .subjectProgressSortMode === mode;
+
+                        return (
+                          <Pressable
+                            key={mode}
+                            style={[
+                              styles.subjectProgressSortButton,
+                              selected &&
+                                styles.subjectProgressSortButtonSelected,
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected }}
+                            onPress={() => {
+                              const updatedOptions = {
+                                ...reviewDisplayOptions,
+                                subjectProgressSortMode: mode,
+                              };
+
+                              setReviewDisplayOptions(updatedOptions);
+                              void saveReviewDisplayOptions(
+                                updatedOptions
+                              ).catch((error) => {
+                                console.log(
+                                  '復習進捗の並び順保存エラー:',
+                                  error
+                                );
+                              });
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.subjectProgressSortButtonText,
+                                selected &&
+                                  styles.subjectProgressSortButtonTextSelected,
+                              ]}
+                            >
+                              {label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    <View style={styles.subjectProgressSortRow}>
+                      <Text style={styles.subjectProgressSortLabel}>
+                        表示
+                      </Text>
+                      {([
+                        ['attention', '要対応のみ'],
+                        ['all', 'すべて'],
+                      ] as const).map(([mode, label]) => {
+                        const selected =
+                          reviewDisplayOptions
+                            .subjectProgressFilterMode === mode;
+
+                        return (
+                          <Pressable
+                            key={mode}
+                            style={[
+                              styles.subjectProgressSortButton,
+                              selected &&
+                                styles.subjectProgressSortButtonSelected,
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected }}
+                            onPress={() => {
+                              const updatedOptions = {
+                                ...reviewDisplayOptions,
+                                subjectProgressFilterMode: mode,
+                              };
+
+                              setReviewDisplayOptions(updatedOptions);
+                              void saveReviewDisplayOptions(
+                                updatedOptions
+                              ).catch((error) => {
+                                console.log(
+                                  '復習進捗の表示範囲保存エラー:',
+                                  error
+                                );
+                              });
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.subjectProgressSortButtonText,
+                                selected &&
+                                  styles.subjectProgressSortButtonTextSelected,
+                              ]}
+                            >
+                              {label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    {sortedSubjectReviewProgress.length === 0 ? (
+                      <Text style={styles.subjectProgressCompleteText}>
+                        現在、要対応の授業はありません
+                      </Text>
+                    ) : null}
+
+                    {sortedSubjectReviewProgress.map((progress) => {
+                      const learningCompletion =
+                        getSubjectLearningCompletion(progress);
+                      const practiceItemCount =
+                        progress.practiceKnownCount +
+                        progress.practiceReviewCount +
+                        progress.practiceUnansweredCount;
+                      const flashcardItemCount =
+                        progress.flashcardKnownCount +
+                        progress.flashcardReviewCount +
+                        progress.flashcardUnansweredCount;
+                      const summaryCount =
+                        progress.currentSummaryCount +
+                        progress.outdatedSummaryCount;
+                      const hasMissingSummary =
+                        progress.missingSummaryCount > 0;
+                      const hasOutdatedSummary =
+                        progress.outdatedSummaryCount > 0;
+                      const hasSummaryTasks =
+                        hasMissingSummary || hasOutdatedSummary;
+                      const canCreatePractice =
+                        summaryCount > 0 &&
+                        (
+                          practiceItemCount === 0 ||
+                          progress.practiceIsOutdated
+                        );
+                      const canCreateFlashcards =
+                        summaryCount > 0 &&
+                        (
+                          flashcardItemCount === 0 ||
+                          progress.flashcardsAreOutdated
+                        );
+
+                      return (
+                        <View
+                          key={progress.subject}
+                          style={styles.subjectProgressCard}
+                        >
+                          <View style={styles.subjectProgressHeading}>
+                            <Text style={styles.subjectProgressSubject}>
+                              {progress.subject}
+                            </Text>
+                            {learningCompletion.percentage !== null ? (
+                              <Text style={styles.subjectProgressPercentage}>
+                                定着度{' '}
+                                {learningCompletion.percentage}%
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          {learningCompletion.percentage !== null ? (
+                            <View
+                              style={styles.subjectProgressBarTrack}
+                              accessibilityRole="progressbar"
+                              accessibilityValue={{
+                                min: 0,
+                                max: 100,
+                                now: learningCompletion.percentage,
+                                text: `問題・カード定着度${learningCompletion.percentage}%`,
+                              }}
+                            >
+                              <View
+                                style={[
+                                  styles.subjectProgressBarFill,
+                                  {
+                                    width: `${learningCompletion.percentage}%`,
+                                  },
+                                ]}
+                              />
+                            </View>
+                          ) : (
+                            <Text style={styles.subjectProgressNotCreated}>
+                              練習問題・カードは未作成です
+                            </Text>
+                          )}
 
                         <Text style={styles.subjectProgressKnown}>
                           覚えた：練習問題{' '}
@@ -1309,20 +1711,162 @@ export default function ReviewScreen() {
                           {progress.flashcardReviewCount}枚・重要写真{' '}
                           {progress.importantPhotoCount}枚
                         </Text>
+                        <Text style={styles.subjectProgressUnanswered}>
+                          未回答：練習問題{' '}
+                          {progress.practiceUnansweredCount}問・カード{' '}
+                          {progress.flashcardUnansweredCount}枚
+                        </Text>
+                        <Text style={styles.subjectProgressMemo}>
+                          写真メモ：{progress.notedPhotoCount}枚
+                        </Text>
                         <Text style={styles.subjectProgressSummary}>
                           授業回まとめ：最新{' '}
                           {progress.currentSummaryCount}回・更新待ち{' '}
                           {progress.outdatedSummaryCount}回・未作成{' '}
                           {progress.missingSummaryCount}回
                         </Text>
-                      </View>
-                    ))}
+
+                        {progress.practiceIsOutdated ||
+                        progress.flashcardsAreOutdated ? (
+                          <Text style={styles.subjectProgressOutdated}>
+                            更新待ち：
+                            {[
+                              progress.practiceIsOutdated
+                                ? '練習問題'
+                                : '',
+                              progress.flashcardsAreOutdated
+                                ? 'カード'
+                                : '',
+                            ].filter(Boolean).join('・')}
+                          </Text>
+                        ) : null}
+
+                        {progress.practiceUnansweredCount > 0 ||
+                        progress.flashcardUnansweredCount > 0 ||
+                        hasSummaryTasks ||
+                        canCreatePractice ||
+                        canCreateFlashcards ? (
+                          <View style={styles.subjectProgressActions}>
+                            {hasSummaryTasks ? (
+                              <Pressable
+                                style={styles.subjectProgressSummaryButton}
+                                accessibilityRole="button"
+                                onPress={() => {
+                                  router.push({
+                                    pathname: '/subject/[subject]',
+                                    params: {
+                                      subject: progress.subject,
+                                      from: 'review',
+                                    },
+                                  });
+                                }}
+                              >
+                                <Text style={styles.subjectProgressSummaryButtonText}>
+                                  {hasMissingSummary &&
+                                  hasOutdatedSummary
+                                    ? 'まとめを作成・更新'
+                                    : hasOutdatedSummary
+                                      ? 'まとめを更新'
+                                      : '未作成のまとめを作る'}
+                                </Text>
+                              </Pressable>
+                            ) : null}
+
+                            {canCreatePractice ? (
+                              <Pressable
+                                style={styles.subjectProgressActionButton}
+                                accessibilityRole="button"
+                                onPress={() => {
+                                  router.push({
+                                    pathname: '/practice/[subject]',
+                                    params: {
+                                      subject: progress.subject,
+                                      from: 'review',
+                                    },
+                                  });
+                                }}
+                              >
+                                <Text style={styles.subjectProgressActionText}>
+                                  {progress.practiceIsOutdated
+                                    ? '練習問題を作り直す'
+                                    : '練習問題を作る'}
+                                </Text>
+                              </Pressable>
+                            ) : null}
+
+                            {canCreateFlashcards ? (
+                              <Pressable
+                                style={styles.subjectProgressActionButton}
+                                accessibilityRole="button"
+                                onPress={() => {
+                                  router.push({
+                                    pathname: '/flashcards/[subject]',
+                                    params: {
+                                      subject: progress.subject,
+                                      from: 'review',
+                                    },
+                                  });
+                                }}
+                              >
+                                <Text style={styles.subjectProgressActionText}>
+                                  {progress.flashcardsAreOutdated
+                                    ? 'カードを作り直す'
+                                    : 'カードを作る'}
+                                </Text>
+                              </Pressable>
+                            ) : null}
+
+                            {progress.practiceUnansweredCount > 0 ? (
+                              <Pressable
+                                style={styles.subjectProgressActionButton}
+                                accessibilityRole="button"
+                                onPress={() => {
+                                  router.push({
+                                    pathname: '/practice/[subject]',
+                                    params: {
+                                      subject: progress.subject,
+                                      mode: 'unanswered',
+                                    },
+                                  });
+                                }}
+                              >
+                                <Text style={styles.subjectProgressActionText}>
+                                  未回答の問題に挑戦
+                                </Text>
+                              </Pressable>
+                            ) : null}
+
+                            {progress.flashcardUnansweredCount > 0 ? (
+                              <Pressable
+                                style={styles.subjectProgressActionButton}
+                                accessibilityRole="button"
+                                onPress={() => {
+                                  router.push({
+                                    pathname: '/flashcards/[subject]',
+                                    params: {
+                                      subject: progress.subject,
+                                      mode: 'unanswered',
+                                    },
+                                  });
+                                }}
+                              >
+                                <Text style={styles.subjectProgressActionText}>
+                                  未回答のカードに挑戦
+                                </Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        ) : null}
+                        </View>
+                      );
+                    })}
                   </View>
                 ) : null}
               </View>
             ) : null}
 
-            {importantPhotos.length > 0 ? (
+            {reviewDisplayOptions.showImportantPhotos &&
+            importantPhotos.length > 0 ? (
               <View style={styles.importantPhotoSection}>
                 <Pressable
                   style={styles.importantPhotoHeader}
@@ -1343,7 +1887,8 @@ export default function ReviewScreen() {
                       重要な写真
                     </Text>
                     <Text style={styles.importantPhotoCount}>
-                      {importantPhotos.length}枚
+                      全{importantPhotos.length}枚・未復習{' '}
+                      {pendingImportantPhotoCount}枚
                     </Text>
                   </View>
 
@@ -1406,9 +1951,58 @@ export default function ReviewScreen() {
                       </ScrollView>
                     ) : null}
 
-                    {selectedImportantSubject !== null ? (
+                    <View style={styles.importantStatusFilterRow}>
+                      <Text style={styles.importantStatusFilterLabel}>
+                        状態
+                      </Text>
+                      {([
+                        ['pending', '未復習のみ'],
+                        ['all', 'すべて'],
+                      ] as const).map(([filter, label]) => {
+                        const selected =
+                          importantReviewFilter === filter;
+
+                        return (
+                          <Pressable
+                            key={filter}
+                            style={[
+                              styles.importantStatusFilterButton,
+                              selected &&
+                                styles.importantStatusFilterButtonActive,
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected }}
+                            onPress={() => {
+                              setImportantReviewFilter(filter);
+                              setImportantPhotoLimit(
+                                photoSearchPageSize
+                              );
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.importantStatusFilterText,
+                                selected &&
+                                  styles.importantStatusFilterTextActive,
+                              ]}
+                            >
+                              {label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    {selectedImportantSubject !== null ||
+                    importantReviewFilter === 'pending' ? (
                       <Text style={styles.importantFilteredCount}>
                         {filteredImportantPhotos.length}枚
+                      </Text>
+                    ) : null}
+
+                    {filteredImportantPhotos.length === 0 ? (
+                      <Text style={styles.importantPhotoEmptyText}>
+                        未復習の重要写真はありません
                       </Text>
                     ) : null}
 
@@ -1426,6 +2020,9 @@ export default function ReviewScreen() {
                               mode: 'important',
                               importantSubject:
                                 selectedImportantSubject ?? '',
+                              ...(importantReviewFilter === 'pending'
+                                ? { importantStatus: 'pending' }
+                                : {}),
                             },
                           });
                         }}
@@ -1436,18 +2033,40 @@ export default function ReviewScreen() {
                         />
 
                         <View style={styles.photoSearchText}>
-                          <Text style={styles.importantPhotoSubject}>
-                            {getPhotoLabel(photo)}
-                          </Text>
+                          <View style={styles.importantPhotoSubjectRow}>
+                            <Text style={styles.importantPhotoSubject}>
+                              {getPhotoLabel(photo)}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.importantReviewStatusBadge,
+                                photo.importantReviewedAt !== undefined &&
+                                  styles.importantReviewStatusBadgeCompleted,
+                              ]}
+                            >
+                              {photo.importantReviewedAt === undefined
+                                ? '未復習'
+                                : '復習済み'}
+                            </Text>
+                          </View>
                           <Text style={styles.photoSearchDate}>
                             {getPhotoDateLabel(photo.takenAt)}
+                          </Text>
+                          <Text style={styles.importantPreviewSource}>
+                            {photo.note !== undefined &&
+                            photo.note.trim() !== ''
+                              ? 'メモ'
+                              : '認識文字'}
                           </Text>
                           <Text
                             style={styles.photoSearchPreview}
                             numberOfLines={2}
                           >
-                            {photoOcrRecords[photo.id]?.text ??
-                              '文字認識結果なし'}
+                            {photo.note !== undefined &&
+                            photo.note.trim() !== ''
+                              ? photo.note
+                              : photoOcrRecords[photo.id]?.text ??
+                                '文字認識結果なし'}
                           </Text>
                         </View>
 
@@ -1471,6 +2090,165 @@ export default function ReviewScreen() {
                       >
                         <Text
                           style={styles.importantPhotoMoreButtonText}
+                        >
+                          さらに表示
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {reviewDisplayOptions.showPhotoNotes &&
+            notedPhotos.length > 0 ? (
+              <View style={styles.notedPhotoSection}>
+                <Pressable
+                  style={styles.importantPhotoHeader}
+                  accessibilityRole="button"
+                  accessibilityLabel={`メモ付き写真${notedPhotos.length}枚を${showNotedPhotos ? '閉じる' : '開く'}`}
+                  accessibilityState={{
+                    expanded: showNotedPhotos,
+                  }}
+                  onPress={() => {
+                    setShowNotedPhotos(
+                      (currentValue) => !currentValue
+                    );
+                    setNotedPhotoLimit(photoSearchPageSize);
+                  }}
+                >
+                  <View>
+                    <Text style={styles.notedPhotoTitle}>
+                      写真メモ
+                    </Text>
+                    <Text style={styles.notedPhotoCount}>
+                      {notedPhotos.length}枚
+                    </Text>
+                  </View>
+
+                  <Text style={styles.notedPhotoToggle}>
+                    {showNotedPhotos ? '閉じる ︿' : '開く ﹀'}
+                  </Text>
+                </Pressable>
+
+                {showNotedPhotos ? (
+                  <View style={styles.notedPhotoList}>
+                    {notedPhotoSubjects.length > 1 ? (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={
+                          styles.importantSubjectFilterList
+                        }
+                      >
+                        {[null, ...notedPhotoSubjects].map(
+                          (filterSubject) => {
+                            const selected =
+                              selectedNotedSubject ===
+                              filterSubject;
+                            const label =
+                              filterSubject ?? 'すべて';
+
+                            return (
+                              <Pressable
+                                key={label}
+                                style={[
+                                  styles.notedSubjectFilterButton,
+                                  selected &&
+                                    styles.notedSubjectFilterButtonActive,
+                                ]}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected }}
+                                accessibilityLabel={`${label}のメモ付き写真を表示`}
+                                onPress={() => {
+                                  setSelectedNotedSubject(
+                                    filterSubject
+                                  );
+                                  setNotedPhotoLimit(
+                                    photoSearchPageSize
+                                  );
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.notedSubjectFilterText,
+                                    selected &&
+                                      styles.notedSubjectFilterTextActive,
+                                  ]}
+                                >
+                                  {label}
+                                </Text>
+                              </Pressable>
+                            );
+                          }
+                        )}
+                      </ScrollView>
+                    ) : null}
+
+                    {selectedNotedSubject !== null ? (
+                      <Text style={styles.notedFilteredCount}>
+                        {filteredNotedPhotos.length}枚
+                      </Text>
+                    ) : null}
+
+                    {visibleNotedPhotos.map((photo) => (
+                      <Pressable
+                        key={photo.id}
+                        style={styles.notedPhotoCard}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${getPhotoLabel(photo)}のメモ付き写真を開く`}
+                        onPress={() => {
+                          router.push({
+                            pathname: '/photo/[id]',
+                            params: {
+                              id: photo.id,
+                              mode: 'noted',
+                              notedSubject:
+                                selectedNotedSubject ?? '',
+                            },
+                          });
+                        }}
+                      >
+                        <Image
+                          style={styles.photoSearchThumbnail}
+                          source={{ uri: photo.uri }}
+                        />
+
+                        <View style={styles.photoSearchText}>
+                          <Text style={styles.notedPhotoSubject}>
+                            {getPhotoLabel(photo)}
+                          </Text>
+                          <Text style={styles.photoSearchDate}>
+                            {getPhotoDateLabel(photo.takenAt)}
+                          </Text>
+                          <Text
+                            style={styles.photoSearchPreview}
+                            numberOfLines={3}
+                          >
+                            {photo.note}
+                          </Text>
+                        </View>
+
+                        <Text style={styles.notedPhotoOpenText}>
+                          ›
+                        </Text>
+                      </Pressable>
+                    ))}
+
+                    {hasMoreNotedPhotos ? (
+                      <Pressable
+                        style={styles.notedPhotoMoreButton}
+                        accessibilityRole="button"
+                        accessibilityLabel="メモ付き写真をさらに表示"
+                        onPress={() => {
+                          setNotedPhotoLimit(
+                            (currentLimit) =>
+                              currentLimit + photoSearchPageSize
+                          );
+                        }}
+                      >
+                        <Text
+                          style={styles.notedPhotoMoreButtonText}
                         >
                           さらに表示
                         </Text>
@@ -2377,6 +3155,19 @@ const styles = StyleSheet.create({
     color: '#332b19',
     fontSize: 15,
     fontWeight: 'bold',
+    flex: 1,
+  },
+
+  reviewQueueSubjectRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  reviewQueueSubjectCount: {
+    color: '#7d6b3e',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   reviewQueueActions: {
@@ -2397,6 +3188,21 @@ const styles = StyleSheet.create({
 
   reviewQueueActionText: {
     color: '#6e5418',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  reviewQueueUnansweredButton: {
+    backgroundColor: '#eef2fb',
+    borderColor: '#9dadcf',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+
+  reviewQueueUnansweredText: {
+    color: '#405b91',
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -2450,6 +3256,103 @@ const styles = StyleSheet.create({
     padding: 10,
   },
 
+  overallProgressCard: {
+    backgroundColor: '#263b68',
+    borderRadius: 10,
+    padding: 13,
+  },
+
+  overallProgressHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+
+  overallProgressTitle: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+
+  overallProgressPercentage: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+
+  overallProgressBarTrack: {
+    backgroundColor: '#67789d',
+    borderRadius: 4,
+    height: 8,
+    marginTop: 11,
+    overflow: 'hidden',
+  },
+
+  overallProgressBarFill: {
+    backgroundColor: '#b9d0ff',
+    borderRadius: 4,
+    height: '100%',
+  },
+
+  overallProgressDetail: {
+    color: '#e7edfa',
+    fontSize: 12,
+    marginTop: 8,
+  },
+
+  overallProgressEmpty: {
+    color: '#e7edfa',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+
+  subjectProgressSortRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+
+  subjectProgressSortLabel: {
+    color: '#596579',
+    fontSize: 12,
+    marginRight: 2,
+  },
+
+  subjectProgressSortButton: {
+    backgroundColor: 'white',
+    borderColor: '#c4cde0',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+
+  subjectProgressSortButtonSelected: {
+    backgroundColor: '#31518f',
+    borderColor: '#31518f',
+  },
+
+  subjectProgressSortButtonText: {
+    color: '#52617d',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  subjectProgressSortButtonTextSelected: {
+    color: 'white',
+  },
+
+  subjectProgressCompleteText: {
+    color: '#3b6d50',
+    fontSize: 13,
+    lineHeight: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    textAlign: 'center',
+  },
+
   subjectProgressCard: {
     backgroundColor: 'white',
     borderWidth: 1,
@@ -2465,6 +3368,39 @@ const styles = StyleSheet.create({
     marginBottom: 7,
   },
 
+  subjectProgressHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  subjectProgressPercentage: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  subjectProgressBarTrack: {
+    backgroundColor: '#e2e7f1',
+    borderRadius: 4,
+    height: 8,
+    marginTop: 10,
+    overflow: 'hidden',
+    width: '100%',
+  },
+
+  subjectProgressBarFill: {
+    backgroundColor: '#31518f',
+    borderRadius: 4,
+    height: '100%',
+  },
+
+  subjectProgressNotCreated: {
+    color: '#6b7280',
+    fontSize: 12,
+    marginTop: 8,
+  },
+
   subjectProgressKnown: {
     color: '#28794c',
     fontSize: 12,
@@ -2477,10 +3413,68 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
+  subjectProgressUnanswered: {
+    color: '#596579',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 4,
+  },
+
+  subjectProgressMemo: {
+    color: '#505b98',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
   subjectProgressSummary: {
     color: '#52617d',
     fontSize: 12,
     lineHeight: 18,
+  },
+
+  subjectProgressOutdated: {
+    color: '#a05f18',
+    fontSize: 12,
+    fontWeight: 'bold',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+
+  subjectProgressActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 10,
+  },
+
+  subjectProgressActionButton: {
+    backgroundColor: '#edf2ff',
+    borderColor: '#9eb0dc',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+
+  subjectProgressSummaryButton: {
+    backgroundColor: '#fff4d8',
+    borderColor: '#d2ad51',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+
+  subjectProgressSummaryButtonText: {
+    color: '#735716',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  subjectProgressActionText: {
+    color: '#31518f',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   importantPhotoSection: {
@@ -2559,6 +3553,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
+  importantStatusFilterRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+
+  importantStatusFilterLabel: {
+    color: '#846a2b',
+    fontSize: 12,
+    marginRight: 2,
+  },
+
+  importantStatusFilterButton: {
+    backgroundColor: 'white',
+    borderColor: '#cfb86f',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+
+  importantStatusFilterButtonActive: {
+    backgroundColor: '#8a6818',
+    borderColor: '#8a6818',
+  },
+
+  importantStatusFilterText: {
+    color: '#715719',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  importantStatusFilterTextActive: {
+    color: 'white',
+  },
+
+  importantPhotoEmptyText: {
+    color: '#6c5a30',
+    fontSize: 13,
+    lineHeight: 20,
+    paddingVertical: 8,
+    textAlign: 'center',
+  },
+
   importantPhotoCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2571,8 +3610,38 @@ const styles = StyleSheet.create({
 
   importantPhotoSubject: {
     color: '#715719',
+    flex: 1,
     fontSize: 14,
     fontWeight: 'bold',
+  },
+
+  importantPhotoSubjectRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+
+  importantReviewStatusBadge: {
+    backgroundColor: '#fff0c5',
+    borderRadius: 999,
+    color: '#755615',
+    fontSize: 10,
+    fontWeight: 'bold',
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+
+  importantReviewStatusBadgeCompleted: {
+    backgroundColor: '#e1f1e7',
+    color: '#2d6a44',
+  },
+
+  importantPreviewSource: {
+    color: '#8a6818',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginTop: 3,
   },
 
   importantPhotoOpenText: {
@@ -2592,6 +3661,106 @@ const styles = StyleSheet.create({
 
   importantPhotoMoreButtonText: {
     color: '#715719',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  notedPhotoSection: {
+    backgroundColor: '#f3f4ff',
+    borderWidth: 1,
+    borderColor: '#aeb4dc',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+
+  notedPhotoTitle: {
+    color: '#384277',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  notedPhotoCount: {
+    color: '#6872a5',
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  notedPhotoToggle: {
+    color: '#505b98',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  notedPhotoList: {
+    borderTopWidth: 1,
+    borderTopColor: '#d2d6ed',
+    gap: 9,
+    padding: 10,
+  },
+
+  notedSubjectFilterButton: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#aeb4dc',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+
+  notedSubjectFilterButtonActive: {
+    backgroundColor: '#505b98',
+    borderColor: '#505b98',
+  },
+
+  notedSubjectFilterText: {
+    color: '#505b98',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  notedSubjectFilterTextActive: {
+    color: 'white',
+  },
+
+  notedFilteredCount: {
+    color: '#6872a5',
+    fontSize: 12,
+  },
+
+  notedPhotoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#bfc4e4',
+    borderRadius: 10,
+    padding: 9,
+  },
+
+  notedPhotoSubject: {
+    color: '#384277',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  notedPhotoOpenText: {
+    color: '#505b98',
+    fontSize: 24,
+    marginLeft: 8,
+  },
+
+  notedPhotoMoreButton: {
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#9ca4d2',
+    borderRadius: 9,
+    paddingVertical: 10,
+  },
+
+  notedPhotoMoreButtonText: {
+    color: '#505b98',
     fontSize: 13,
     fontWeight: 'bold',
   },

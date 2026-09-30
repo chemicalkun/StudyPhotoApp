@@ -92,6 +92,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="review-display-settings"
+          options={{
+            title: '復習タブの表示項目',
+            headerBackTitle: '設定',
+          }}
+        />
+        <Stack.Screen
           name="backup"
           options={{
             title: 'バックアップ',

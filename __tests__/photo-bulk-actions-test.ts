@@ -6,6 +6,7 @@ import {
   moveSelectedPhotosToLecture,
   removeSelectedPhotos,
   updateSelectedPhotoImportance,
+  updateSelectedImportantPhotoReview,
   updateSelectedPhotoSubjects,
 } from '@/utils/photo-bulk-actions';
 import {
@@ -76,6 +77,38 @@ describe('photo bulk actions', () => {
       true,
       undefined,
     ]);
+    expect(cleared[0].importantReviewedAt).toBeUndefined();
+  });
+
+  it('選択した重要写真だけ復習状態を一括変更する', () => {
+    const importantPhotos = [
+      { ...photos[0], isImportant: true },
+      { ...photos[1], isImportant: false },
+      { ...photos[2], isImportant: true },
+    ];
+    const reviewedAt = '2026-09-30T02:00:00.000Z';
+    const reviewed = updateSelectedImportantPhotoReview(
+      importantPhotos,
+      selectedIds,
+      true,
+      reviewedAt
+    );
+
+    expect(reviewed.map(
+      (photo) => photo.importantReviewedAt
+    )).toEqual([reviewedAt, undefined, undefined]);
+
+    const returnedToPending =
+      updateSelectedImportantPhotoReview(
+        reviewed,
+        new Set(['photo-1']),
+        false,
+        reviewedAt
+      );
+
+    expect(
+      returnedToPending[0].importantReviewedAt
+    ).toBeUndefined();
   });
 
   it('選択した写真だけ指定した授業回へ移動する', () => {

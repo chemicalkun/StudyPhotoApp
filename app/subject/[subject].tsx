@@ -82,6 +82,7 @@ import {
   moveSelectedPhotosToLecture,
   removeSelectedPhotos,
   updateSelectedPhotoImportance,
+  updateSelectedImportantPhotoReview,
   updateSelectedPhotoSubjects,
 } from '@/utils/photo-bulk-actions';
 import {
@@ -180,6 +181,7 @@ type LecturePhotoImportFeedback = {
 type BulkOperation =
   | 'ocr'
   | 'importance'
+  | 'importantReview'
   | 'classification'
   | 'lecture'
   | 'delete';
@@ -1183,6 +1185,16 @@ export default function SubjectScreen() {
     selectedPhotos.every(
       (photo) => photo.isImportant === true
     );
+  const selectedImportantPhotos = selectedPhotos.filter(
+    (photo) => photo.isImportant === true
+  );
+  const selectedImportantPhotoCount =
+    selectedImportantPhotos.length;
+  const allSelectedImportantPhotosReviewed =
+    selectedImportantPhotoCount > 0 &&
+    selectedImportantPhotos.every(
+      (photo) => photo.importantReviewedAt !== undefined
+    );
   const allPhotoIds = sections.flatMap((section) =>
     section.photos.map((photo) => photo.id)
   );
@@ -1732,6 +1744,49 @@ export default function SubjectScreen() {
   };
 
 
+  const saveSelectedImportantPhotoReview = async (
+    isReviewed: boolean
+  ) => {
+    if (
+      selectedImportantPhotoCount === 0 ||
+      bulkOperation !== null
+    ) {
+      return;
+    }
+
+    setBulkOperation('importantReview');
+
+    try {
+      const photos = await loadPhotoRecords();
+      const updatedPhotos =
+        updateSelectedImportantPhotoReview(
+          photos,
+          selectedPhotoIds,
+          isReviewed
+        );
+
+      await savePhotoRecords(updatedPhotos);
+      finishPhotoSelection();
+      setLoadRevision((revision) => revision + 1);
+
+      Alert.alert(
+        isReviewed
+          ? '重要写真を復習済みにしました'
+          : '重要写真を復習待ちに戻しました',
+        `${selectedImportantPhotoCount}枚の重要写真を更新しました。`
+      );
+    } catch (error) {
+      console.log('重要写真の復習状態一括変更エラー:', error);
+      Alert.alert(
+        '復習状態を変更できませんでした',
+        '写真データの保存中にエラーが発生しました。'
+      );
+    } finally {
+      setBulkOperation(null);
+    }
+  };
+
+
   const saveBulkClassification = async (
     selectedSubject = bulkSubjectInput
   ) => {
@@ -2050,6 +2105,30 @@ export default function SubjectScreen() {
                   : '文字認識'}
               </Text>
             </Pressable>
+
+            {selectedImportantPhotoCount > 0 ? (
+              <Pressable
+                style={[
+                  styles.bulkImportantReviewButton,
+                  (bulkOperation !== null) &&
+                    styles.summaryButtonDisabled,
+                ]}
+                disabled={bulkOperation !== null}
+                onPress={() => {
+                  void saveSelectedImportantPhotoReview(
+                    !allSelectedImportantPhotosReviewed
+                  );
+                }}
+              >
+                <Text style={styles.bulkImportantReviewButtonText}>
+                  {bulkOperation === 'importantReview'
+                    ? '保存中...'
+                    : allSelectedImportantPhotosReviewed
+                      ? `復習待ちに戻す（${selectedImportantPhotoCount}枚）`
+                      : `復習済みにする（${selectedImportantPhotoCount}枚）`}
+                </Text>
+              </Pressable>
+            ) : null}
 
             <Pressable
               style={[
@@ -2831,7 +2910,9 @@ export default function SubjectScreen() {
                   !isSelectingPhotos ? (
                     <View style={styles.importantPhotoBadge}>
                       <Text style={styles.importantPhotoBadgeText}>
-                        重要
+                        {photo.importantReviewedAt === undefined
+                          ? '重要'
+                          : '重要・復習済'}
                       </Text>
                     </View>
                   ) : null}
@@ -3642,6 +3723,19 @@ const styles = StyleSheet.create({
   },
 
   bulkImportanceButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  bulkImportantReviewButton: {
+    backgroundColor: '#3d8056',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+
+  bulkImportantReviewButtonText: {
     color: 'white',
     fontSize: 13,
     fontWeight: 'bold',

@@ -17,6 +17,7 @@ export type PhotoRecord = {
   originalTakenAt?: string;
   lectureOrder?: number;
   isImportant?: boolean;
+  importantReviewedAt?: string;
   note?: string;
 };
 
@@ -92,6 +93,37 @@ export const getLatestPhotoTakenAt = (
 };
 
 
+export const getNextPendingImportantPhoto = (
+  photos: PhotoRecord[],
+  currentPhotoId: string
+): PhotoRecord | null => {
+  const currentIndex = photos.findIndex(
+    (photo) => photo.id === currentPhotoId
+  );
+
+  if (currentIndex < 0) {
+    return null;
+  }
+
+  const isPendingImportantPhoto = (photo: PhotoRecord) =>
+    photo.id !== currentPhotoId &&
+    photo.isImportant === true &&
+    photo.importantReviewedAt === undefined;
+  const nextPhoto = photos
+    .slice(currentIndex + 1)
+    .find(isPendingImportantPhoto);
+
+  if (nextPhoto !== undefined) {
+    return nextPhoto;
+  }
+
+  return [...photos]
+    .slice(0, currentIndex)
+    .reverse()
+    .find(isPendingImportantPhoto) ?? null;
+};
+
+
 export const getPhotoAcademicTerm = (
   photo: PhotoRecord
 ): AcademicTerm | null => {
@@ -147,6 +179,15 @@ export const isPhotoRecord = (
     (
       photo.isImportant === undefined ||
       typeof photo.isImportant === 'boolean'
+    ) &&
+    (
+      photo.importantReviewedAt === undefined ||
+      (
+        typeof photo.importantReviewedAt === 'string' &&
+        !Number.isNaN(
+          new Date(photo.importantReviewedAt).getTime()
+        )
+      )
     ) &&
     (
       photo.note === undefined ||

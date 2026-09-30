@@ -96,6 +96,43 @@ export const updatePhotoImportance = async (
   const updatedPhoto: PhotoRecord = {
     ...photos[photoIndex],
     isImportant,
+    importantReviewedAt: undefined,
+  };
+  const updatedPhotos = [...photos];
+
+  updatedPhotos[photoIndex] = updatedPhoto;
+  await savePhotoRecords(updatedPhotos);
+
+  return updatedPhoto;
+};
+
+
+export const updatePhotoImportantReview = async (
+  photoId: string,
+  isReviewed: boolean
+): Promise<PhotoRecord> => {
+  if (photoId === '') {
+    throw new Error('写真IDが不正です');
+  }
+
+  const photos = await loadPhotoRecords();
+  const photoIndex = photos.findIndex(
+    (photo) => photo.id === photoId
+  );
+
+  if (photoIndex < 0) {
+    throw new Error('写真が見つかりません');
+  }
+
+  if (photos[photoIndex].isImportant !== true) {
+    throw new Error('重要な写真ではありません');
+  }
+
+  const updatedPhoto: PhotoRecord = {
+    ...photos[photoIndex],
+    importantReviewedAt: isReviewed
+      ? new Date().toISOString()
+      : undefined,
   };
   const updatedPhotos = [...photos];
 

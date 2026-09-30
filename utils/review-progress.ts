@@ -1,4 +1,7 @@
-import type { FlashcardRecords } from '@/types/flashcard';
+import {
+  createFlashcardSourceSignature,
+  type FlashcardRecords,
+} from '@/types/flashcard';
 import {
   getLectureSummaryUpdateReason,
   type LectureSummaryRecord,
@@ -8,7 +11,10 @@ import {
   type PhotoRecord,
 } from '@/types/photo';
 import type { PhotoOcrRecords } from '@/types/photo-ocr';
-import type { PracticeQuestionRecords } from '@/types/practice-question';
+import {
+  createPracticeQuestionSourceSignature,
+  type PracticeQuestionRecords,
+} from '@/types/practice-question';
 import { comparePhotosByLectureOrder } from '@/utils/photo-order';
 
 
@@ -16,12 +22,163 @@ export type SubjectReviewProgress = {
   subject: string;
   practiceKnownCount: number;
   practiceReviewCount: number;
+  practiceUnansweredCount: number;
+  practiceIsOutdated: boolean;
   flashcardKnownCount: number;
   flashcardReviewCount: number;
+  flashcardUnansweredCount: number;
+  flashcardsAreOutdated: boolean;
   importantPhotoCount: number;
+  notedPhotoCount: number;
   currentSummaryCount: number;
   outdatedSummaryCount: number;
   missingSummaryCount: number;
+};
+
+
+export const getSubjectReviewPendingCount = (
+  progress: SubjectReviewProgress
+) =>
+  progress.practiceReviewCount +
+  progress.practiceUnansweredCount +
+  progress.flashcardReviewCount +
+  progress.flashcardUnansweredCount +
+  progress.importantPhotoCount;
+
+
+export const getSubjectLearningCompletion = (
+  progress: SubjectReviewProgress
+) => {
+  const knownCount =
+    (progress.practiceIsOutdated
+      ? 0
+      : progress.practiceKnownCount) +
+    (progress.flashcardsAreOutdated
+      ? 0
+      : progress.flashcardKnownCount);
+  const itemCount =
+    knownCount +
+    (progress.practiceIsOutdated
+      ? 0
+      : progress.practiceReviewCount +
+        progress.practiceUnansweredCount) +
+    (progress.flashcardsAreOutdated
+      ? 0
+      : progress.flashcardReviewCount +
+        progress.flashcardUnansweredCount);
+
+  return {
+    knownCount,
+    itemCount,
+    percentage: itemCount === 0
+      ? null
+      : Math.round((knownCount / itemCount) * 100),
+  };
+};
+
+
+export const getOverallLearningCompletion = (
+  progressItems: SubjectReviewProgress[]
+) => {
+  const totals = progressItems.reduce(
+    (result, progress) => {
+      const completion =
+        getSubjectLearningCompletion(progress);
+
+      return {
+        knownCount:
+          result.knownCount + completion.knownCount,
+        itemCount:
+          result.itemCount + completion.itemCount,
+      };
+    },
+    { knownCount: 0, itemCount: 0 }
+  );
+
+  return {
+    ...totals,
+    remainingCount: totals.itemCount - totals.knownCount,
+    percentage: totals.itemCount === 0
+      ? null
+      : Math.round(
+          (totals.knownCount / totals.itemCount) * 100
+        ),
+  };
+};
+
+
+export const sortSubjectReviewProgressByAttention = (
+  progressItems: SubjectReviewProgress[]
+) => [...progressItems].sort((progressA, progressB) => {
+  const completionA = getSubjectLearningCompletion(progressA);
+  const completionB = getSubjectLearningCompletion(progressB);
+
+  if (
+    completionA.percentage === null &&
+    completionB.percentage !== null
+  ) {
+    return -1;
+  }
+
+  if (
+    completionA.percentage !== null &&
+    completionB.percentage === null
+  ) {
+    return 1;
+  }
+
+  if (
+    completionA.percentage !== completionB.percentage &&
+    completionA.percentage !== null &&
+    completionB.percentage !== null
+  ) {
+    return completionA.percentage - completionB.percentage;
+  }
+
+  const summaryActionCountA =
+    progressA.missingSummaryCount +
+    progressA.outdatedSummaryCount;
+  const summaryActionCountB =
+    progressB.missingSummaryCount +
+    progressB.outdatedSummaryCount;
+
+  if (summaryActionCountA !== summaryActionCountB) {
+    return summaryActionCountB - summaryActionCountA;
+  }
+
+  const pendingCountDifference =
+    getSubjectReviewPendingCount(progressB) -
+    getSubjectReviewPendingCount(progressA);
+
+  return pendingCountDifference !== 0
+    ? pendingCountDifference
+    : progressA.subject.localeCompare(progressB.subject, 'ja');
+});
+
+
+export const subjectNeedsAttention = (
+  progress: SubjectReviewProgress
+) => {
+  const practiceItemCount =
+    progress.practiceKnownCount +
+    progress.practiceReviewCount +
+    progress.practiceUnansweredCount;
+  const flashcardItemCount =
+    progress.flashcardKnownCount +
+    progress.flashcardReviewCount +
+    progress.flashcardUnansweredCount;
+  const completion = getSubjectLearningCompletion(progress);
+
+  return (
+    progress.missingSummaryCount > 0 ||
+    progress.outdatedSummaryCount > 0 ||
+    progress.practiceIsOutdated ||
+    progress.flashcardsAreOutdated ||
+    practiceItemCount === 0 ||
+    flashcardItemCount === 0 ||
+    completion.percentage === null ||
+    completion.percentage < 100
+  );
 };
 
 
@@ -63,7 +220,12 @@ const countAssessments = (
     }
   }
 
-  return { knownCount, reviewCount };
+  return {
+    knownCount,
+    reviewCount,
+    unansweredCount:
+      itemCount - knownCount - reviewCount,
+  };
 };
 
 
@@ -163,6 +325,12 @@ export const buildSubjectReviewProgress = ({
       const practiceRecord = Object.values(
         practiceQuestionRecords
       ).find((record) => record.subject === subject);
+      const practiceIsOutdated =
+        practiceRecord !== undefined &&
+        practiceRecord.sourceSummarySignature !==
+          createPracticeQuestionSourceSignature(
+            subjectSummaries
+          );
       const practiceCounts = countAssessments(
         practiceRecord?.questions.length ?? 0,
         practiceRecord?.assessments
@@ -170,6 +338,10 @@ export const buildSubjectReviewProgress = ({
       const flashcardRecord = Object.values(
         flashcardRecords
       ).find((record) => record.subject === subject);
+      const flashcardsAreOutdated =
+        flashcardRecord !== undefined &&
+        flashcardRecord.sourceSummarySignature !==
+          createFlashcardSourceSignature(subjectSummaries);
       const flashcardCounts = countAssessments(
         flashcardRecord?.cards.length ?? 0,
         flashcardRecord?.assessments
@@ -179,10 +351,23 @@ export const buildSubjectReviewProgress = ({
         subject,
         practiceKnownCount: practiceCounts.knownCount,
         practiceReviewCount: practiceCounts.reviewCount,
+        practiceUnansweredCount:
+          practiceCounts.unansweredCount,
+        practiceIsOutdated,
         flashcardKnownCount: flashcardCounts.knownCount,
         flashcardReviewCount: flashcardCounts.reviewCount,
+        flashcardUnansweredCount:
+          flashcardCounts.unansweredCount,
+        flashcardsAreOutdated,
         importantPhotoCount: subjectPhotos.filter(
-          (photo) => photo.isImportant === true
+          (photo) =>
+            photo.isImportant === true &&
+            photo.importantReviewedAt === undefined
+        ).length,
+        notedPhotoCount: subjectPhotos.filter(
+          (photo) =>
+            photo.note !== undefined &&
+            photo.note.trim() !== ''
         ).length,
         currentSummaryCount,
         outdatedSummaryCount,

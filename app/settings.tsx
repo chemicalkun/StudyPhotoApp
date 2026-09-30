@@ -26,6 +26,7 @@ import { parsePhotoRecords } from '@/types/photo';
 import { parseTimetable } from '@/utils/classification';
 import { loadPeriodTimes } from '@/utils/period-times';
 import { loadTimetableDisplayOptions } from '@/utils/timetable-display-options';
+import { loadReviewDisplayOptions } from '@/utils/review-display-options';
 
 
 type SettingsLinkProps = {
@@ -70,6 +71,8 @@ export default function SettingsScreen() {
     useState('現在の表示範囲を読み込み中...');
   const [periodTimesDescription, setPeriodTimesDescription] =
     useState('現在の時限設定を読み込み中...');
+  const [reviewDisplayDescription, setReviewDisplayDescription] =
+    useState('現在の表示項目を読み込み中...');
   const [timetableDescription, setTimetableDescription] =
     useState('現在の時間割を読み込み中...');
   const [backupDescription, setBackupDescription] =
@@ -104,6 +107,62 @@ export default function SettingsScreen() {
       };
 
       void refreshAcademicTerm();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const refreshReviewDisplayOptions = async () => {
+        try {
+          const options = await loadReviewDisplayOptions();
+          const visibleItems = [
+            options.showReviewQueue ? '復習待ち' : '',
+            options.showSubjectProgress ? '授業ごとの進捗' : '',
+            options.showImportantPhotos ? '重要な写真' : '',
+            options.showPhotoNotes ? '写真メモ' : '',
+          ].filter(Boolean);
+
+          if (active) {
+            setReviewDisplayDescription(
+              visibleItems.length === 0
+                ? 'すべて非表示'
+                : [
+                    `表示：${visibleItems.join('・')}`,
+                    `進捗の並び順：${
+                      options.subjectProgressSortMode === 'attention'
+                        ? '要対応順'
+                        : '授業名順'
+                    }`,
+                    `進捗の表示：${
+                      options.subjectProgressFilterMode === 'attention'
+                        ? '要対応のみ'
+                        : 'すべて'
+                    }`,
+                  ].join('\n')
+            );
+          }
+        } catch (error) {
+          console.log(
+            '設定画面の復習表示設定読み込みエラー:',
+            error
+          );
+
+          if (active) {
+            setReviewDisplayDescription(
+              '現在の表示項目を確認できません'
+            );
+          }
+        }
+      };
+
+      void refreshReviewDisplayOptions();
 
       return () => {
         active = false;
@@ -357,6 +416,17 @@ export default function SettingsScreen() {
               pathname: '/period-settings',
               params: { from: 'settings' },
             })}
+          />
+        </View>
+
+        <Text style={styles.sectionTitle}>復習設定</Text>
+        <View style={styles.sectionCard}>
+          <SettingsLink
+            title="復習タブの表示項目"
+            description={reviewDisplayDescription}
+            onPress={() =>
+              router.push('/review-display-settings')
+            }
           />
         </View>
 
