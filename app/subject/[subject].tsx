@@ -1030,6 +1030,44 @@ export default function SubjectScreen() {
   };
 
 
+  const closeLectureSummary = () => {
+    if (
+      processingLectureDateKey !== null ||
+      isSavingLectureSummary
+    ) {
+      return;
+    }
+
+    const hasUnsavedEdit =
+      isEditingLectureSummary &&
+      editedLectureSummaryRef.current.trim() !==
+        lectureSummary.trim();
+
+    if (!hasUnsavedEdit) {
+      setSelectedLectureSection(null);
+      return;
+    }
+
+    Alert.alert(
+      '編集内容を破棄しますか？',
+      'まだ保存していないまとめの変更があります。',
+      [
+        { text: '編集を続ける', style: 'cancel' },
+        {
+          text: '破棄して閉じる',
+          style: 'destructive',
+          onPress: () => {
+            editedLectureSummaryRef.current = lectureSummary;
+            setIsEditingLectureSummary(false);
+            setLectureSummaryEditError('');
+            setSelectedLectureSection(null);
+          },
+        },
+      ]
+    );
+  };
+
+
   const getSummaryUnavailableMessage = () => {
     switch (summaryAvailability) {
       case 'unsupportedBuild':
@@ -3658,14 +3696,7 @@ export default function SubjectScreen() {
         visible={selectedLectureSection !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          if (
-            processingLectureDateKey === null &&
-            !isSavingLectureSummary
-          ) {
-            setSelectedLectureSection(null);
-          }
-        }}
+        onRequestClose={closeLectureSummary}
       >
         <View style={styles.modalBackground}>
           <View style={styles.modalContent}>
@@ -4031,7 +4062,7 @@ export default function SubjectScreen() {
                 processingLectureDateKey !== null ||
                 isSavingLectureSummary
               }
-              onPress={() => setSelectedLectureSection(null)}
+              onPress={closeLectureSummary}
             >
               <Text style={styles.closeButtonText}>
                 閉じる
