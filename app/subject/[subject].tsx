@@ -53,6 +53,10 @@ import {
   recognizeText,
 } from '@/modules/study-photo-vision';
 import {
+  isStudyPhotoSharingAvailable,
+  sharePhotoFiles,
+} from '@/modules/study-photo-sharing';
+import {
   answerLectureQuestion,
   getLectureSummaryAvailability,
   summarizeLecture,
@@ -370,6 +374,8 @@ export default function SubjectScreen() {
     useState(false);
   const [showNotedPhotosOnly, setShowNotedPhotosOnly] =
     useState(false);
+  const [sharingPhotoGroup, setSharingPhotoGroup] =
+    useState<string | null>(null);
 
 
   useFocusEffect(
@@ -1298,6 +1304,64 @@ export default function SubjectScreen() {
       return photo === undefined ? [] : [photo];
     }
   );
+
+
+  const sharePhotos = async (
+    targetPhotos: PhotoRecord[],
+    sharingKey: string
+  ) => {
+    if (sharingPhotoGroup !== null) {
+      return;
+    }
+
+    if (!isStudyPhotoSharingAvailable) {
+      Alert.alert(
+        '開発ビルドの更新が必要です',
+        '複数写真の共有機能を使うには、Xcodeからアプリを再ビルドしてください。'
+      );
+      return;
+    }
+
+    const existingPhotoUris = targetPhotos.flatMap((photo) => {
+      try {
+        return new File(photo.uri).exists
+          ? [photo.uri]
+          : [];
+      } catch {
+        return [];
+      }
+    });
+    const missingPhotoCount =
+      targetPhotos.length - existingPhotoUris.length;
+
+    if (existingPhotoUris.length === 0) {
+      Alert.alert(
+        '写真を共有できません',
+        '共有できる写真ファイルが端末内に見つかりません。'
+      );
+      return;
+    }
+
+    try {
+      setSharingPhotoGroup(sharingKey);
+      await sharePhotoFiles(existingPhotoUris);
+
+      if (missingPhotoCount > 0) {
+        Alert.alert(
+          '一部の写真を除外しました',
+          `ファイルが見つからない${missingPhotoCount}枚を除いて共有しました。`
+        );
+      }
+    } catch (error) {
+      console.log('複数写真共有エラー:', error);
+      Alert.alert(
+        '写真を共有できません',
+        '写真をまとめて共有する際にエラーが発生しました。'
+      );
+    } finally {
+      setSharingPhotoGroup(null);
+    }
+  };
 
 
   const createPendingLectureSummaries = async (
@@ -2244,6 +2308,40 @@ export default function SubjectScreen() {
 
             {allPhotoIds.length > 0 &&
             !isSelectingPhotos ? (
+              <Pressable
+                style={[
+                  styles.shareSubjectPhotosButton,
+                  sharingPhotoGroup !== null &&
+                    styles.summaryButtonDisabled,
+                ]}
+                disabled={sharingPhotoGroup !== null}
+                accessibilityRole="button"
+                onPress={() => {
+                  void sharePhotos(
+                    sections.flatMap(
+                      (section) => section.photos
+                    ),
+                    'subject'
+                  );
+                }}
+              >
+                {sharingPhotoGroup === 'subject' ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#31518f"
+                  />
+                ) : null}
+
+                <Text style={styles.shareSubjectPhotosText}>
+                  {sharingPhotoGroup === 'subject'
+                    ? '共有を準備中...'
+                    : `授業全体の写真を共有（${allPhotoIds.length}枚）`}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {allPhotoIds.length > 0 &&
+            !isSelectingPhotos ? (
               <View
                 style={[
                   styles.subjectOcrProgressCard,
@@ -2809,6 +2907,39 @@ export default function SubjectScreen() {
               <Text style={styles.lectureSummaryUpdateReason}>
                 {getLectureSummaryUpdateMessage(section)}
               </Text>
+            ) : null}
+
+            {!isSelectingPhotos ? (
+              <Pressable
+                style={[
+                  styles.shareLecturePhotosButton,
+                  sharingPhotoGroup !== null &&
+                    styles.summaryButtonDisabled,
+                ]}
+                disabled={sharingPhotoGroup !== null}
+                accessibilityRole="button"
+                onPress={() => {
+                  void sharePhotos(
+                    section.photos,
+                    `lecture-${section.dateKey}`
+                  );
+                }}
+              >
+                {sharingPhotoGroup ===
+                `lecture-${section.dateKey}` ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#31518f"
+                  />
+                ) : null}
+
+                <Text style={styles.shareLecturePhotosText}>
+                  {sharingPhotoGroup ===
+                  `lecture-${section.dateKey}`
+                    ? '共有を準備中...'
+                    : `この回の写真を共有（${section.photos.length}枚）`}
+                </Text>
+              </Pressable>
             ) : null}
 
             {section.photos.length > 1 &&
@@ -3772,6 +3903,26 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  shareSubjectPhotosButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#eef3ff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 9,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    marginBottom: 12,
+  },
+
+  shareSubjectPhotosText: {
+    color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
   subjectOcrProgressCard: {
     backgroundColor: '#f3f6ff',
     borderWidth: 1,
@@ -3991,6 +4142,26 @@ const styles = StyleSheet.create({
   },
 
   photoOrderButtonText: {
+    color: '#31518f',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  shareLecturePhotosButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#f3f6ff',
+    borderWidth: 1,
+    borderColor: '#aebee6',
+    borderRadius: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+
+  shareLecturePhotosText: {
     color: '#31518f',
     fontSize: 12,
     fontWeight: 'bold',
