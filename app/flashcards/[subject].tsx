@@ -40,6 +40,11 @@ import {
 import type {
   LectureSummaryRecord,
 } from '@/types/lecture-summary';
+import {
+  createFlashcardSession,
+  flashcardRoundSize,
+  takeNextFlashcardRound,
+} from '@/utils/flashcard-session';
 import { getUnansweredItemIndexes } from '@/utils/study-assessment';
 
 
@@ -58,6 +63,11 @@ export default function FlashcardScreen() {
     useState<LectureSummaryRecord[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [cardOrder, setCardOrder] = useState<number[]>([]);
+  const [remainingCardOrder, setRemainingCardOrder] =
+    useState<number[]>([]);
+  const [currentRoundNumber, setCurrentRoundNumber] =
+    useState(1);
+  const [totalRoundCount, setTotalRoundCount] = useState(0);
   const [currentCardPosition, setCurrentCardPosition] =
     useState(0);
   const [showDefinition, setShowDefinition] =
@@ -158,15 +168,20 @@ export default function FlashcardScreen() {
           const shouldStartUnansweredRound =
             startInUnansweredMode &&
             unansweredCardIndexes.length > 0;
+          const sessionIndexes = shouldStartReviewRound
+            ? reviewCardIndexes
+            : shouldStartUnansweredRound
+              ? unansweredCardIndexes
+              : loadedCards.map((_, index) => index);
+          const session = createFlashcardSession(
+            sessionIndexes
+          );
 
           setCards(loadedCards);
-          setCardOrder(
-            shouldStartReviewRound
-              ? reviewCardIndexes
-              : shouldStartUnansweredRound
-                ? unansweredCardIndexes
-              : loadedCards.map((_, index) => index)
-          );
+          setCardOrder(session.currentRound);
+          setRemainingCardOrder(session.remaining);
+          setCurrentRoundNumber(1);
+          setTotalRoundCount(session.totalRounds);
           setAssessments(loadedAssessments);
           setIsSaved(hasSavedRecord);
           setIsOutdated(
@@ -250,8 +265,15 @@ export default function FlashcardScreen() {
         throw new Error('生成されたカードが空です');
       }
 
+      const session = createFlashcardSession(
+        validCards.map((_, index) => index)
+      );
+
       setCards(validCards);
-      setCardOrder(validCards.map((_, index) => index));
+      setCardOrder(session.currentRound);
+      setRemainingCardOrder(session.remaining);
+      setCurrentRoundNumber(1);
+      setTotalRoundCount(session.totalRounds);
       setCurrentCardPosition(0);
       setShowDefinition(false);
       setIsFinished(false);
@@ -281,6 +303,42 @@ export default function FlashcardScreen() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+
+  const startCardSession = (
+    indexes: number[],
+    mode: 'all' | 'review' | 'unanswered'
+  ) => {
+    const session = createFlashcardSession(indexes);
+
+    setCardOrder(session.currentRound);
+    setRemainingCardOrder(session.remaining);
+    setCurrentRoundNumber(1);
+    setTotalRoundCount(session.totalRounds);
+    setCurrentCardPosition(0);
+    setShowDefinition(false);
+    setIsFinished(false);
+    setIsReviewRound(mode === 'review');
+    setIsUnansweredRound(mode === 'unanswered');
+    setIsEditingCurrentCard(false);
+    setCardEditError('');
+  };
+
+
+  const startNextRound = () => {
+    const nextRound = takeNextFlashcardRound(
+      remainingCardOrder
+    );
+
+    setCardOrder(nextRound.currentRound);
+    setRemainingCardOrder(nextRound.remaining);
+    setCurrentRoundNumber((round) => round + 1);
+    setCurrentCardPosition(0);
+    setShowDefinition(false);
+    setIsFinished(false);
+    setIsEditingCurrentCard(false);
+    setCardEditError('');
   };
 
 
@@ -460,7 +518,7 @@ export default function FlashcardScreen() {
         {!loading && loadError === '' ? (
           <>
             <Text style={styles.notice}>
-              {summaries.length}回分のまとめから重要語句を8枚作成し、別のAIが説明を再確認します。
+              {summaries.length}回分のまとめから重要語句を8枚作成し、別のAIが説明を再確認します。カードは順番を毎回ランダムにし、5枚ずつ表示します。
             </Text>
 
             {availability === 'available' ? (
@@ -517,24 +575,43 @@ export default function FlashcardScreen() {
             {isFinished && cards.length > 0 ? (
               <View style={styles.completionCard}>
                 <Text style={styles.completionTitle}>
-                  学習を終了しました
+                  {remainingCardOrder.length > 0
+                    ? `セット${currentRoundNumber}が終了しました`
+                    : '学習を終了しました'}
                 </Text>
                 <Text style={styles.completionText}>
+                  {totalRoundCount > 1
+                    ? `${currentRoundNumber} / ${totalRoundCount}セット\n`
+                    : ''}
                   覚えた {knownCount}枚
                   {'\n'}あとで復習 {reviewCount}枚
                   {'\n'}未評価 {unansweredCount}枚
                 </Text>
 
-                {reviewCardIndexes.length > 0 ? (
+                {remainingCardOrder.length > 0 ? (
+                  <Pressable
+                    style={styles.nextRoundButton}
+                    onPress={startNextRound}
+                  >
+                    <Text style={styles.nextRoundButtonText}>
+                      次のセットへ（
+                      {Math.min(
+                        flashcardRoundSize,
+                        remainingCardOrder.length
+                      )}枚）
+                    </Text>
+                  </Pressable>
+                ) : null}
+
+                {remainingCardOrder.length === 0 &&
+                reviewCardIndexes.length > 0 ? (
                   <Pressable
                     style={styles.retryReviewButton}
                     onPress={() => {
-                      setCardOrder(reviewCardIndexes);
-                      setCurrentCardPosition(0);
-                      setShowDefinition(false);
-                      setIsFinished(false);
-                      setIsReviewRound(true);
-                      setIsUnansweredRound(false);
+                      startCardSession(
+                        reviewCardIndexes,
+                        'review'
+                      );
                     }}
                   >
                     <Text style={styles.retryReviewButtonText}>
@@ -543,23 +620,21 @@ export default function FlashcardScreen() {
                   </Pressable>
                 ) : null}
 
-                <Pressable
-                  style={styles.retryButton}
-                  onPress={() => {
-                    setCardOrder(
-                      cards.map((_, index) => index)
-                    );
-                    setCurrentCardPosition(0);
-                    setShowDefinition(false);
-                    setIsFinished(false);
-                    setIsReviewRound(false);
-                    setIsUnansweredRound(false);
-                  }}
-                >
-                  <Text style={styles.retryButtonText}>
-                    すべてのカードを見直す
-                  </Text>
-                </Pressable>
+                {remainingCardOrder.length === 0 ? (
+                  <Pressable
+                    style={styles.retryButton}
+                    onPress={() => {
+                      startCardSession(
+                        cards.map((_, index) => index),
+                        'all'
+                      );
+                    }}
+                  >
+                    <Text style={styles.retryButtonText}>
+                      すべてのカードを見直す
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : currentCard !== null ? (
               <View style={styles.cardSection}>
@@ -571,6 +646,9 @@ export default function FlashcardScreen() {
                         ? '未回答 '
                         : 'カード '}
                     {currentCardPosition + 1} / {cardOrder.length}
+                    {totalRoundCount > 1
+                      ? `（セット${currentRoundNumber}/${totalRoundCount}）`
+                      : ''}
                   </Text>
                   {isSaved ? (
                     <Text style={styles.savedText}>端末に保存済み</Text>
@@ -822,6 +900,8 @@ const styles = StyleSheet.create({
   completionCard: { backgroundColor: '#f5effb', borderWidth: 1, borderColor: '#b798d5', borderRadius: 14, padding: 20, marginTop: 22 },
   completionTitle: { color: '#6b3ca0', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 14 },
   completionText: { color: '#333', fontSize: 15, lineHeight: 25, textAlign: 'center' },
+  nextRoundButton: { backgroundColor: '#6b3ca0', borderRadius: 9, padding: 13, marginTop: 18 },
+  nextRoundButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   retryReviewButton: { backgroundColor: '#b57c13', borderRadius: 9, padding: 13, marginTop: 18 },
   retryReviewButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   retryButton: { backgroundColor: '#6b3ca0', borderRadius: 9, padding: 13, marginTop: 10 },
