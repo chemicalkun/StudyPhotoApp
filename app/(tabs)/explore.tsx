@@ -99,7 +99,9 @@ import {
   getSubjectLearningCompletion,
   getSubjectReviewPendingCount,
   sortSubjectReviewProgressByAttention,
+  subjectFlashcardsAreMissing,
   subjectNeedsAttention,
+  subjectPracticeIsMissing,
 } from '@/utils/review-progress';
 import {
   defaultReviewDisplayOptions,
@@ -1324,7 +1326,8 @@ export default function ReviewScreen() {
                             </Pressable>
                           ) : null}
 
-                          {progress.practiceIsOutdated ? (
+                          {progress.practiceIsOutdated ||
+                          subjectPracticeIsMissing(progress) ? (
                             <Pressable
                               style={styles.reviewQueueUpdateButton}
                               accessibilityRole="button"
@@ -1339,7 +1342,9 @@ export default function ReviewScreen() {
                               }}
                             >
                               <Text style={styles.reviewQueueUpdateText}>
-                                練習問題を作り直す
+                                {progress.practiceIsOutdated
+                                  ? '練習問題を作り直す'
+                                  : '練習問題を作る'}
                               </Text>
                             </Pressable>
                           ) : progress.practiceReviewCount > 0 ? (
@@ -1389,7 +1394,8 @@ export default function ReviewScreen() {
                             </Pressable>
                           ) : null}
 
-                          {progress.flashcardsAreOutdated ? (
+                          {progress.flashcardsAreOutdated ||
+                          subjectFlashcardsAreMissing(progress) ? (
                             <Pressable
                               style={styles.reviewQueueUpdateButton}
                               accessibilityRole="button"
@@ -1404,7 +1410,9 @@ export default function ReviewScreen() {
                               }}
                             >
                               <Text style={styles.reviewQueueUpdateText}>
-                                カードを作り直す
+                                {progress.flashcardsAreOutdated
+                                  ? 'カードを作り直す'
+                                  : 'カードを作る'}
                               </Text>
                             </Pressable>
                           ) : progress.flashcardReviewCount > 0 ? (

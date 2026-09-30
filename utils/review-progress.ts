@@ -42,16 +42,40 @@ export type SubjectReviewProgress = {
 };
 
 
+export const subjectPracticeIsMissing = (
+  progress: SubjectReviewProgress
+) =>
+  progress.currentSummaryCount +
+    progress.outdatedSummaryCount > 0 &&
+  progress.practiceKnownCount +
+    progress.practiceReviewCount +
+    progress.practiceUnansweredCount === 0;
+
+
+export const subjectFlashcardsAreMissing = (
+  progress: SubjectReviewProgress
+) =>
+  progress.currentSummaryCount +
+    progress.outdatedSummaryCount > 0 &&
+  progress.flashcardKnownCount +
+    progress.flashcardReviewCount +
+    progress.flashcardUnansweredCount === 0;
+
+
 export const getSubjectReviewPendingCount = (
   progress: SubjectReviewProgress
 ) =>
   progress.missingSummaryCount +
   progress.outdatedSummaryCount +
-  (progress.practiceIsOutdated
+  (
+    progress.practiceIsOutdated ||
+    subjectPracticeIsMissing(progress)
     ? 1
     : progress.practiceReviewCount +
       progress.practiceUnansweredCount) +
-  (progress.flashcardsAreOutdated
+  (
+    progress.flashcardsAreOutdated ||
+    subjectFlashcardsAreMissing(progress)
     ? 1
     : progress.flashcardReviewCount +
       progress.flashcardUnansweredCount) +
@@ -177,14 +201,6 @@ export const sortSubjectReviewProgressByAttention = (
 export const subjectNeedsAttention = (
   progress: SubjectReviewProgress
 ) => {
-  const practiceItemCount =
-    progress.practiceKnownCount +
-    progress.practiceReviewCount +
-    progress.practiceUnansweredCount;
-  const flashcardItemCount =
-    progress.flashcardKnownCount +
-    progress.flashcardReviewCount +
-    progress.flashcardUnansweredCount;
   const completion = getSubjectLearningCompletion(progress);
 
   return (
@@ -194,8 +210,8 @@ export const subjectNeedsAttention = (
     progress.flashcardsAreOutdated ||
     progress.examPreparationIsMissing ||
     progress.examPreparationIsOutdated ||
-    practiceItemCount === 0 ||
-    flashcardItemCount === 0 ||
+    subjectPracticeIsMissing(progress) ||
+    subjectFlashcardsAreMissing(progress) ||
     completion.percentage === null ||
     completion.percentage < 100
   );

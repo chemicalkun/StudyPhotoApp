@@ -9,7 +9,9 @@ import {
   getSubjectLearningCompletion,
   getSubjectReviewPendingCount,
   sortSubjectReviewProgressByAttention,
+  subjectFlashcardsAreMissing,
   subjectNeedsAttention,
+  subjectPracticeIsMissing,
 } from '@/utils/review-progress';
 
 
@@ -197,6 +199,36 @@ describe('review progress', () => {
       ...completedProgress,
       examPreparationIsMissing: true,
     })).toBe(true);
+  });
+
+  test('まとめ作成後の未作成問題とカードを判定する', () => {
+    const progress = {
+      subject: '有機化学',
+      practiceKnownCount: 0,
+      practiceReviewCount: 0,
+      practiceUnansweredCount: 0,
+      practiceIsOutdated: false,
+      flashcardKnownCount: 0,
+      flashcardReviewCount: 0,
+      flashcardUnansweredCount: 0,
+      flashcardsAreOutdated: false,
+      examPreparationIsMissing: false,
+      examPreparationIsOutdated: false,
+      importantPhotoCount: 0,
+      notedPhotoCount: 0,
+      currentSummaryCount: 1,
+      outdatedSummaryCount: 0,
+      missingSummaryCount: 0,
+    };
+
+    expect(subjectPracticeIsMissing(progress)).toBe(true);
+    expect(subjectFlashcardsAreMissing(progress)).toBe(true);
+    expect(getSubjectReviewPendingCount(progress)).toBe(2);
+    expect(subjectPracticeIsMissing({
+      ...progress,
+      currentSummaryCount: 0,
+      missingSummaryCount: 1,
+    })).toBe(false);
   });
 
   test('復習待ちの合計件数を計算する', () => {
