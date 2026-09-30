@@ -331,6 +331,8 @@ export default function SubjectScreen() {
     useState(false);
   const [isSharingLectureSummary, setIsSharingLectureSummary] =
     useState(false);
+  const [isSharingSubjectSummaries, setIsSharingSubjectSummaries] =
+    useState(false);
   const [lectureQuestion, setLectureQuestion] = useState('');
   const [lectureAnswer, setLectureAnswer] = useState('');
   const [questionError, setQuestionError] = useState('');
@@ -967,6 +969,46 @@ export default function SubjectScreen() {
   };
 
 
+  const shareSubjectSummaries = async () => {
+    if (
+      savedLectureSummaries.length === 0 ||
+      isSharingSubjectSummaries
+    ) {
+      return;
+    }
+
+    const summaryText = savedLectureSummaries
+      .map(({ section, text, isOutdated }) => [
+        `${section.title}（${section.dateLabel}）${
+          isOutdated ? '・更新あり' : ''
+        }`,
+        text,
+      ].join('\n'))
+      .join('\n\n──────────\n\n');
+
+    try {
+      setIsSharingSubjectSummaries(true);
+
+      await Share.share({
+        title: `${subject}の授業回まとめ`,
+        message: [
+          `${subject}の授業回まとめ`,
+          '',
+          summaryText,
+        ].join('\n'),
+      });
+    } catch (error) {
+      console.log('授業回まとめ一括共有エラー:', error);
+      Alert.alert(
+        'まとめを共有できません',
+        '授業回のまとめを一括共有する際にエラーが発生しました。'
+      );
+    } finally {
+      setIsSharingSubjectSummaries(false);
+    }
+  };
+
+
   const saveEditedLectureSummary = async () => {
     if (
       selectedLectureSection === null ||
@@ -1384,6 +1426,22 @@ export default function SubjectScreen() {
     lectureSummaryStatuses.filter(
       (summaryStatus) => summaryStatus === 'missing'
     ).length;
+  const savedLectureSummaries = sections.flatMap(
+    (section) => {
+      const savedSummary = lectureSummaryRecords[
+        createLectureSummaryId(subject, section.dateKey)
+      ];
+
+      return savedSummary === undefined
+        ? []
+        : [{
+            section,
+            text: savedSummary.text,
+            isOutdated:
+              getLectureSummaryStatus(section) === 'outdated',
+          }];
+    }
+  );
   const summaryFilteredSections = showSummaryAttentionOnly
     ? sections.filter(
         (section) =>
@@ -2496,10 +2554,14 @@ export default function SubjectScreen() {
               <Pressable
                 style={[
                   styles.shareSubjectPhotosButton,
-                  sharingPhotoGroup !== null &&
+                  (sharingPhotoGroup !== null ||
+                    isSharingSubjectSummaries) &&
                     styles.summaryButtonDisabled,
                 ]}
-                disabled={sharingPhotoGroup !== null}
+                disabled={
+                  sharingPhotoGroup !== null ||
+                  isSharingSubjectSummaries
+                }
                 accessibilityRole="button"
                 onPress={() => {
                   void sharePhotos(
@@ -2521,6 +2583,40 @@ export default function SubjectScreen() {
                   {sharingPhotoGroup === 'subject'
                     ? '共有を準備中...'
                     : `授業全体の写真を共有（${allPhotoIds.length}枚）`}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {savedLectureSummaries.length > 0 &&
+            !isSelectingPhotos ? (
+              <Pressable
+                style={[
+                  styles.shareSubjectSummariesButton,
+                  (sharingPhotoGroup !== null ||
+                    isSharingSubjectSummaries) &&
+                    styles.summaryButtonDisabled,
+                ]}
+                disabled={
+                  sharingPhotoGroup !== null ||
+                  isSharingSubjectSummaries
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`${subject}の作成済み授業回まとめを共有`}
+                onPress={() => {
+                  void shareSubjectSummaries();
+                }}
+              >
+                {isSharingSubjectSummaries ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#28794c"
+                  />
+                ) : null}
+
+                <Text style={styles.shareSubjectSummariesText}>
+                  {isSharingSubjectSummaries
+                    ? '共有を準備中...'
+                    : `作成済みのまとめを共有（${savedLectureSummaries.length}回）`}
                 </Text>
               </Pressable>
             ) : null}
@@ -4229,6 +4325,26 @@ const styles = StyleSheet.create({
 
   shareSubjectPhotosText: {
     color: '#31518f',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  shareSubjectSummariesButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#eef8f2',
+    borderWidth: 1,
+    borderColor: '#9bc9aa',
+    borderRadius: 9,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    marginBottom: 12,
+  },
+
+  shareSubjectSummariesText: {
+    color: '#28794c',
     fontSize: 13,
     fontWeight: 'bold',
   },
