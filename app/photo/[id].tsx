@@ -139,6 +139,7 @@ export default function PhotoScreen() {
     useState(false);
   const [savingImportantReview, setSavingImportantReview] =
     useState(false);
+  const [sharingPhoto, setSharingPhoto] = useState(false);
   const [noteModalVisible, setNoteModalVisible] =
     useState(false);
   const [savingNote, setSavingNote] = useState(false);
@@ -865,6 +866,40 @@ export default function PhotoScreen() {
   };
 
 
+  const sharePhoto = async () => {
+    if (photo === null || sharingPhoto) {
+      return;
+    }
+
+    try {
+      setSharingPhoto(true);
+
+      const photoFile = new File(photo.uri);
+
+      if (!photoFile.exists) {
+        Alert.alert(
+          '写真を共有できません',
+          '写真ファイルが端末内に見つかりません。'
+        );
+        return;
+      }
+
+      await Share.share({
+        title: `${getPhotoLabel(photo)}の写真`,
+        url: photo.uri,
+      });
+    } catch (error) {
+      console.log('写真共有エラー:', error);
+      Alert.alert(
+        '写真を共有できません',
+        '写真を共有する際にエラーが発生しました。'
+      );
+    } finally {
+      setSharingPhoto(false);
+    }
+  };
+
+
   const openClassificationModal = async () => {
     if (!photo) {
       return;
@@ -1381,6 +1416,23 @@ export default function PhotoScreen() {
               >
                 {photo.note ??
                   'この写真の補足や、復習したい内容を記録できます'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.sharePhotoButton,
+                (sharingPhoto || imageLoadFailed) &&
+                  styles.disabledButton,
+              ]}
+              disabled={sharingPhoto || imageLoadFailed}
+              accessibilityRole="button"
+              onPress={() => {
+                void sharePhoto();
+              }}
+            >
+              <Text style={styles.sharePhotoButtonText}>
+                {sharingPhoto ? '共有を準備中...' : '写真を共有'}
               </Text>
             </Pressable>
 
@@ -2100,6 +2152,22 @@ const styles = StyleSheet.create({
     color: '#777',
     fontSize: 12,
     marginTop: 3,
+  },
+
+  sharePhotoButton: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#9db5e8',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginTop: 12,
+  },
+
+  sharePhotoButtonText: {
+    color: '#c6d4f0',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 
   importanceButton: {
