@@ -90,6 +90,26 @@ describe('parseTimetableCandidates', () => {
     });
   });
 
+  test('6限と第・時限・コマ付きの表記を検出する', () => {
+    const result = parseTimetableCandidates([
+      createBlock('月', 0.25, 0.9),
+      createBlock('火', 0.55, 0.9),
+      createBlock('第5時限', 0.05, 0.7),
+      createBlock('６コマ', 0.05, 0.4),
+      createBlock('卒業研究', 0.25, 0.4),
+    ]);
+
+    expect(result.detectedPeriods).toEqual([5, 6]);
+    expect(result.candidates).toEqual([
+      {
+        day: '月',
+        period: 6,
+        subject: '卒業研究',
+        confidence: 0.9,
+      },
+    ]);
+  });
+
   test('表の外側にあるタイトルは科目候補に含めない', () => {
     const result = parseTimetableCandidates([
       createBlock('月', 0.25, 0.9),

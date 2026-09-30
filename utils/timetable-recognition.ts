@@ -151,7 +151,7 @@ const getPeriodAnchor = (
   block: PositionedTextBlock,
   blockIndex: number
 ): PeriodAnchor | null => {
-  const match = /^([1-5])(?:時限|限)?$/.exec(
+  const match = /^(?:第)?([1-9])(?:時限|限|コマ)?$/.exec(
     compactText(block.text)
   );
 
