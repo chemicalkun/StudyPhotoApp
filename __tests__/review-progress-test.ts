@@ -12,6 +12,7 @@ import {
   subjectFlashcardsAreMissing,
   subjectNeedsAttention,
   subjectPracticeIsMissing,
+  subjectSummariesAreReady,
 } from '@/utils/review-progress';
 
 
@@ -221,6 +222,7 @@ describe('review progress', () => {
       missingSummaryCount: 0,
     };
 
+    expect(subjectSummariesAreReady(progress)).toBe(true);
     expect(subjectPracticeIsMissing(progress)).toBe(true);
     expect(subjectFlashcardsAreMissing(progress)).toBe(true);
     expect(getSubjectReviewPendingCount(progress)).toBe(2);
@@ -228,6 +230,10 @@ describe('review progress', () => {
       ...progress,
       currentSummaryCount: 0,
       missingSummaryCount: 1,
+    })).toBe(false);
+    expect(subjectSummariesAreReady({
+      ...progress,
+      outdatedSummaryCount: 1,
     })).toBe(false);
   });
 
@@ -256,11 +262,18 @@ describe('review progress', () => {
       ...progress,
       practiceIsOutdated: true,
       flashcardsAreOutdated: true,
-    })).toBe(24);
+    })).toBe(22);
     expect(getSubjectReviewPendingCount({
       ...progress,
       examPreparationIsOutdated: true,
-    })).toBe(32);
+    })).toBe(31);
+    expect(getSubjectReviewPendingCount({
+      ...progress,
+      currentSummaryCount: 7,
+      outdatedSummaryCount: 0,
+      missingSummaryCount: 0,
+      examPreparationIsOutdated: true,
+    })).toBe(15);
   });
 
   test('試験対策データの読み込み前でも集計できる', () => {
@@ -271,6 +284,40 @@ describe('review progress', () => {
       practiceQuestionRecords: {},
       flashcardRecords: {},
     })).toEqual([]);
+  });
+
+  test('まとめ完成後に古い試験対策を更新待ちにする', () => {
+    const summaryId = createLectureSummaryId(
+      '有機化学',
+      '2026-9-21'
+    );
+    const progress = buildSubjectReviewProgress({
+      summaries: [{
+        id: summaryId,
+        subject: '有機化学',
+        dateKey: '2026-9-21',
+        text: '第1回まとめ',
+        sourceOcrSignature:
+          createLectureSummarySourceSignature([]),
+        createdAt: '2026-09-21T03:00:00.000Z',
+      }],
+      photos: [],
+      photoOcrRecords: {},
+      practiceQuestionRecords: {},
+      flashcardRecords: {},
+      examPreparationRecords: {
+        '["有機化学"]': {
+          id: '["有機化学"]',
+          subject: '有機化学',
+          text: '試験対策',
+          sourceSummarySignature: '古い署名',
+          createdAt: '2026-09-21T04:00:00.000Z',
+        },
+      },
+    });
+
+    expect(progress[0].examPreparationIsOutdated)
+      .toBe(true);
   });
 
   test('授業ごとの復習待ちとまとめ状態を集計する', () => {
@@ -406,7 +453,7 @@ describe('review progress', () => {
         flashcardUnansweredCount: 1,
         flashcardsAreOutdated: true,
         examPreparationIsMissing: false,
-        examPreparationIsOutdated: true,
+        examPreparationIsOutdated: false,
         importantPhotoCount: 1,
         notedPhotoCount: 1,
         currentSummaryCount: 1,

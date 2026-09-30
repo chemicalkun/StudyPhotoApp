@@ -42,11 +42,18 @@ export type SubjectReviewProgress = {
 };
 
 
+export const subjectSummariesAreReady = (
+  progress: SubjectReviewProgress
+) =>
+  progress.currentSummaryCount > 0 &&
+  progress.outdatedSummaryCount === 0 &&
+  progress.missingSummaryCount === 0;
+
+
 export const subjectPracticeIsMissing = (
   progress: SubjectReviewProgress
 ) =>
-  progress.currentSummaryCount +
-    progress.outdatedSummaryCount > 0 &&
+  subjectSummariesAreReady(progress) &&
   progress.practiceKnownCount +
     progress.practiceReviewCount +
     progress.practiceUnansweredCount === 0;
@@ -55,8 +62,7 @@ export const subjectPracticeIsMissing = (
 export const subjectFlashcardsAreMissing = (
   progress: SubjectReviewProgress
 ) =>
-  progress.currentSummaryCount +
-    progress.outdatedSummaryCount > 0 &&
+  subjectSummariesAreReady(progress) &&
   progress.flashcardKnownCount +
     progress.flashcardReviewCount +
     progress.flashcardUnansweredCount === 0;
@@ -67,21 +73,24 @@ export const getSubjectReviewPendingCount = (
 ) =>
   progress.missingSummaryCount +
   progress.outdatedSummaryCount +
+  (progress.practiceIsOutdated
+    ? subjectSummariesAreReady(progress) ? 1 : 0
+    : subjectPracticeIsMissing(progress)
+      ? 1
+      : progress.practiceReviewCount +
+        progress.practiceUnansweredCount) +
+  (progress.flashcardsAreOutdated
+    ? subjectSummariesAreReady(progress) ? 1 : 0
+    : subjectFlashcardsAreMissing(progress)
+      ? 1
+      : progress.flashcardReviewCount +
+        progress.flashcardUnansweredCount) +
   (
-    progress.practiceIsOutdated ||
-    subjectPracticeIsMissing(progress)
-    ? 1
-    : progress.practiceReviewCount +
-      progress.practiceUnansweredCount) +
-  (
-    progress.flashcardsAreOutdated ||
-    subjectFlashcardsAreMissing(progress)
-    ? 1
-    : progress.flashcardReviewCount +
-      progress.flashcardUnansweredCount) +
-  (
-    progress.examPreparationIsMissing ||
-    progress.examPreparationIsOutdated
+    subjectSummariesAreReady(progress) &&
+    (
+      progress.examPreparationIsMissing ||
+      progress.examPreparationIsOutdated
+    )
       ? 1
       : 0
   ) +
@@ -390,11 +399,15 @@ export const buildSubjectReviewProgress = ({
       const examPreparationRecord = Object.values(
         examPreparationRecords
       ).find((record) => record.subject === subject);
+      const summariesAreReady =
+        currentSummaryCount > 0 &&
+        outdatedSummaryCount === 0 &&
+        missingSummaryCount === 0;
       const examPreparationIsMissing =
-        subjectSummaries.length > 0 &&
+        summariesAreReady &&
         examPreparationRecord === undefined;
       const examPreparationIsOutdated =
-        subjectSummaries.length > 0 &&
+        summariesAreReady &&
         examPreparationRecord !== undefined &&
         examPreparationRecord.sourceSummarySignature !==
           createExamPreparationSourceSignature(

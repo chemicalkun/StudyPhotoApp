@@ -102,6 +102,7 @@ import {
   subjectFlashcardsAreMissing,
   subjectNeedsAttention,
   subjectPracticeIsMissing,
+  subjectSummariesAreReady,
 } from '@/utils/review-progress';
 import {
   defaultReviewDisplayOptions,
@@ -1326,8 +1327,11 @@ export default function ReviewScreen() {
                             </Pressable>
                           ) : null}
 
-                          {progress.practiceIsOutdated ||
-                          subjectPracticeIsMissing(progress) ? (
+                          {subjectSummariesAreReady(progress) &&
+                          (
+                            progress.practiceIsOutdated ||
+                            subjectPracticeIsMissing(progress)
+                          ) ? (
                             <Pressable
                               style={styles.reviewQueueUpdateButton}
                               accessibilityRole="button"
@@ -1347,7 +1351,8 @@ export default function ReviewScreen() {
                                   : '練習問題を作る'}
                               </Text>
                             </Pressable>
-                          ) : progress.practiceReviewCount > 0 ? (
+                          ) : !progress.practiceIsOutdated &&
+                          progress.practiceReviewCount > 0 ? (
                             <Pressable
                               style={styles.reviewQueueActionButton}
                               accessibilityRole="button"
@@ -1394,8 +1399,11 @@ export default function ReviewScreen() {
                             </Pressable>
                           ) : null}
 
-                          {progress.flashcardsAreOutdated ||
-                          subjectFlashcardsAreMissing(progress) ? (
+                          {subjectSummariesAreReady(progress) &&
+                          (
+                            progress.flashcardsAreOutdated ||
+                            subjectFlashcardsAreMissing(progress)
+                          ) ? (
                             <Pressable
                               style={styles.reviewQueueUpdateButton}
                               accessibilityRole="button"
@@ -1415,7 +1423,8 @@ export default function ReviewScreen() {
                                   : 'カードを作る'}
                               </Text>
                             </Pressable>
-                          ) : progress.flashcardReviewCount > 0 ? (
+                          ) : !progress.flashcardsAreOutdated &&
+                          progress.flashcardReviewCount > 0 ? (
                             <Pressable
                               style={styles.reviewQueueActionButton}
                               accessibilityRole="button"
@@ -1744,12 +1753,14 @@ export default function ReviewScreen() {
                       const hasSummaryTasks =
                         hasMissingSummary || hasOutdatedSummary;
                       const canCreatePractice =
+                        !hasSummaryTasks &&
                         summaryCount > 0 &&
                         (
                           practiceItemCount === 0 ||
                           progress.practiceIsOutdated
                         );
                       const canCreateFlashcards =
+                        !hasSummaryTasks &&
                         summaryCount > 0 &&
                         (
                           flashcardItemCount === 0 ||
@@ -1829,7 +1840,9 @@ export default function ReviewScreen() {
                         </Text>
                         <Text style={styles.subjectProgressExamPreparation}>
                           試験対策：
-                          {progress.examPreparationIsOutdated
+                          {hasSummaryTasks
+                            ? '授業回まとめ完成後に利用可能'
+                            : progress.examPreparationIsOutdated
                             ? '更新待ち'
                             : progress.examPreparationIsMissing
                               ? '未作成'
@@ -1870,6 +1883,7 @@ export default function ReviewScreen() {
                                     params: {
                                       subject: progress.subject,
                                       from: 'review',
+                                      summaryAttentionOnly: 'true',
                                     },
                                   });
                                 }}
