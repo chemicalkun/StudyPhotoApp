@@ -3,6 +3,7 @@ import {
   getContainedImageFrame,
   moveNormalizedImageRegion,
   resizeNormalizedImageRegion,
+  splitImageRegionForTextRecognition,
   toVisionImageRegion,
 } from '@/utils/image-region';
 
@@ -111,5 +112,49 @@ describe('image region', () => {
     expect(region.y).toBeCloseTo(0.2);
     expect(region.width).toBeCloseTo(0.1);
     expect(region.height).toBeCloseTo(0.1);
+  });
+
+  test('横に長い読み取り範囲を重なりのある小範囲へ分割する', () => {
+    const tiles = splitImageRegionForTextRecognition(
+      { x: 0.1, y: 0.2, width: 0.8, height: 0.1 },
+      1000,
+      500
+    );
+
+    expect(tiles).toHaveLength(4);
+    expect(tiles[0].x).toBeCloseTo(0.1);
+    expect(tiles[3].x + tiles[3].width).toBeCloseTo(0.9);
+    expect(tiles[0].height).toBeCloseTo(0.1);
+    expect(tiles[0].x + tiles[0].width).toBeGreaterThan(
+      tiles[1].x
+    );
+  });
+
+  test('縦に長い読み取り範囲も小範囲へ分割する', () => {
+    const tiles = splitImageRegionForTextRecognition(
+      { x: 0.2, y: 0.1, width: 0.1, height: 0.8 },
+      500,
+      1000
+    );
+
+    expect(tiles).toHaveLength(4);
+    expect(tiles[0].y).toBeCloseTo(0.1);
+    expect(tiles[3].y + tiles[3].height).toBeCloseTo(0.9);
+    expect(tiles[0].width).toBeCloseTo(0.1);
+  });
+
+  test('極端に長くない範囲は分割しない', () => {
+    const region = {
+      x: 0.1,
+      y: 0.2,
+      width: 0.6,
+      height: 0.5,
+    };
+
+    expect(splitImageRegionForTextRecognition(
+      region,
+      1000,
+      500
+    )).toEqual([region]);
   });
 });

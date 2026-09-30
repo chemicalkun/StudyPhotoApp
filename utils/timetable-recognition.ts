@@ -605,6 +605,43 @@ const inferDayAnchorsFromHorizontalSlots = (
 };
 
 
+const getConsolidatedTimetableSubject = (
+  sortedBlocks: AssignedBlock[]
+) => {
+  const subjectParts: string[] = [];
+  const confidenceValues: number[] = [];
+
+  for (const item of sortedBlocks) {
+    const textParts = item.block.text
+      .normalize('NFKC')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    const courseCodeIndex = textParts.findIndex(
+      (textPart) => /^\d{4,6}$/.test(textPart)
+    );
+    const subjectTextParts = courseCodeIndex >= 0
+      ? textParts.slice(0, courseCodeIndex)
+      : textParts;
+
+    if (subjectTextParts.length > 0) {
+      subjectParts.push(...subjectTextParts);
+      confidenceValues.push(item.block.confidence);
+    }
+
+    if (courseCodeIndex >= 0) {
+      break;
+    }
+  }
+
+  return {
+    subject: normalizeTimetableText(subjectParts.join(' ')),
+    confidenceValues,
+  };
+};
+
+
 const parseHorizontallyGroupedTimetable = (
   blocks: PositionedTextBlock[],
   allDayAnchors: DayAnchor[],
@@ -758,19 +795,21 @@ const parseHorizontallyGroupedTimetable = (
           getCenterY(b.block) - getCenterY(a.block) ||
           getCenterX(a.block) - getCenterX(b.block)
       );
-      const confidence = sortedBlocks.reduce(
-        (sum, item) => sum + item.block.confidence,
+      const extractedSubject =
+        getConsolidatedTimetableSubject(sortedBlocks);
+      const confidenceValues =
+        extractedSubject.confidenceValues.length > 0
+          ? extractedSubject.confidenceValues
+          : sortedBlocks.map((item) => item.block.confidence);
+      const confidence = confidenceValues.reduce(
+        (sum, value) => sum + value,
         0
-      ) / sortedBlocks.length;
+      ) / confidenceValues.length;
 
       return {
         day: sortedBlocks[0].day,
         period: sortedBlocks[0].period,
-        subject: normalizeTimetableText(
-          sortedBlocks
-            .map((item) => item.block.text)
-            .join(' ')
-        ),
+        subject: extractedSubject.subject,
         confidence,
       };
     })

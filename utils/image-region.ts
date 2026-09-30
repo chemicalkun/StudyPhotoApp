@@ -159,6 +159,91 @@ export const resizeNormalizedImageRegion = (
 };
 
 
+export const splitImageRegionForTextRecognition = (
+  region: NormalizedImageRegion,
+  imageWidth: number,
+  imageHeight: number,
+  maximumTileAspectRatio = 4,
+  maximumTileCount = 12,
+  overlapRatio = 0.08
+): NormalizedImageRegion[] => {
+  const pixelWidth = region.width * imageWidth;
+  const pixelHeight = region.height * imageHeight;
+
+  if (
+    pixelWidth <= 0 ||
+    pixelHeight <= 0 ||
+    maximumTileAspectRatio <= 0 ||
+    maximumTileCount <= 1
+  ) {
+    return [region];
+  }
+
+  const horizontalTileCount = Math.min(
+    Math.ceil(
+      pixelWidth / pixelHeight / maximumTileAspectRatio
+    ),
+    maximumTileCount
+  );
+  const verticalTileCount = Math.min(
+    Math.ceil(
+      pixelHeight / pixelWidth / maximumTileAspectRatio
+    ),
+    maximumTileCount
+  );
+
+  if (horizontalTileCount > 1) {
+    const tileWidth = region.width / horizontalTileCount;
+    const overlap = tileWidth * overlapRatio;
+
+    return Array.from(
+      { length: horizontalTileCount },
+      (_, index) => {
+        const left = region.x + tileWidth * index -
+          (index > 0 ? overlap / 2 : 0);
+        const right = region.x + tileWidth * (index + 1) +
+          (index < horizontalTileCount - 1
+            ? overlap / 2
+            : 0);
+
+        return {
+          x: left,
+          y: region.y,
+          width: right - left,
+          height: region.height,
+        };
+      }
+    );
+  }
+
+  if (verticalTileCount > 1) {
+    const tileHeight = region.height / verticalTileCount;
+    const overlap = tileHeight * overlapRatio;
+
+    return Array.from(
+      { length: verticalTileCount },
+      (_, index) => {
+        const top = region.y + tileHeight * index -
+          (index > 0 ? overlap / 2 : 0);
+        const bottom = region.y + tileHeight * (index + 1) +
+          (index < verticalTileCount - 1
+            ? overlap / 2
+            : 0);
+
+        return {
+          x: region.x,
+          y: top,
+          width: region.width,
+          height: bottom - top,
+        };
+      }
+    );
+  }
+
+  return [region];
+};
+
+
 export const toVisionImageRegion = (
   region: NormalizedImageRegion
 ): NormalizedImageRegion => {

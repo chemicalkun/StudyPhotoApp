@@ -267,7 +267,12 @@ describe('parseTimetableCandidates', () => {
     const result = parseTimetableCandidates([
       ...slotBlocks,
       createBlock('数学', 0.055, 0.45, 0.9, 0.03, 0.04),
+      createBlock('2410', 0.055, 0.39, 0.94, 0.02, 0.02),
+      createBlock('田中', 0.055, 0.35, 0.92, 0.02, 0.02),
+      createBlock('2211', 0.055, 0.31, 0.96, 0.02, 0.02),
       createBlock('情報処理', 0.435, 0.45, 0.85, 0.03, 0.04),
+      createBlock('2602', 0.435, 0.39, 0.94, 0.02, 0.02),
+      createBlock('佐藤', 0.435, 0.35, 0.91, 0.02, 0.02),
     ]);
 
     expect(result.detectedDays).toEqual(['月', '火']);

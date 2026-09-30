@@ -39,6 +39,7 @@ import {
 } from '@/utils/timetable-recognition';
 import {
   getContainedImageFrame,
+  splitImageRegionForTextRecognition,
   toVisionImageRegion,
   type NormalizedImageRegion,
 } from '@/utils/image-region';
@@ -358,7 +359,13 @@ export default function TimetableImportScreen() {
       const recognitionRegions =
         selectedImageRegions.length === 0
           ? [undefined]
-          : selectedImageRegions.map(toVisionImageRegion);
+          : selectedImageRegions.flatMap((region) =>
+              splitImageRegionForTextRecognition(
+                region,
+                selectedImage.width,
+                selectedImage.height
+              ).map(toVisionImageRegion)
+            );
       const recognizedBlockGroups: RecognizedTextBlock[][] = [];
 
       for (const region of recognitionRegions) {
