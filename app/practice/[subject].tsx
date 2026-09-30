@@ -1,10 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -25,6 +28,7 @@ import {
   loadPracticeQuestionRecords,
   savePracticeQuestionAssessment,
   savePracticeQuestionRecord,
+  updatePracticeQuestion,
 } from '@/services/practice-question-storage';
 import {
   buildExamPreparationSource,
@@ -78,6 +82,13 @@ export default function PracticeQuestionScreen() {
   const [saveError, setSaveError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [isOutdated, setIsOutdated] = useState(false);
+  const [isEditingCurrentQuestion, setIsEditingCurrentQuestion] =
+    useState(false);
+  const [isSavingCurrentQuestion, setIsSavingCurrentQuestion] =
+    useState(false);
+  const [questionEditError, setQuestionEditError] = useState('');
+  const editedQuestionRef = useRef('');
+  const editedAnswerRef = useRef('');
   const [loadRevision, setLoadRevision] = useState(0);
 
 
@@ -171,6 +182,9 @@ export default function PracticeQuestionScreen() {
           setIsFinished(false);
           setIsReviewRound(shouldStartReviewRound);
           setIsUnansweredRound(shouldStartUnansweredRound);
+          setIsEditingCurrentQuestion(false);
+          setIsSavingCurrentQuestion(false);
+          setQuestionEditError('');
         } catch (error) {
           console.log('練習問題読み込みエラー:', error);
 
@@ -279,6 +293,65 @@ export default function PracticeQuestionScreen() {
   };
 
 
+  const saveEditedQuestion = async () => {
+    if (
+      currentQuestionIndex === undefined ||
+      isSavingCurrentQuestion
+    ) {
+      return;
+    }
+
+    const question = editedQuestionRef.current.trim();
+    const answer = editedAnswerRef.current.trim();
+
+    if (question === '' || answer === '') {
+      setQuestionEditError(
+        '問題文と解答の両方を入力してください。'
+      );
+      return;
+    }
+
+    try {
+      setIsSavingCurrentQuestion(true);
+      setQuestionEditError('');
+
+      const editedQuestions = [...questions];
+      editedQuestions[currentQuestionIndex] = {
+        question,
+        answer,
+      };
+      const updatedRecord = isSaved
+        ? await updatePracticeQuestion(
+            subject,
+            currentQuestionIndex,
+            { question, answer }
+          )
+        : await savePracticeQuestionRecord(
+            subject,
+            editedQuestions,
+            createPracticeQuestionSourceSignature(summaries)
+          );
+
+      setQuestions(updatedRecord.questions);
+      editedQuestionRef.current =
+        updatedRecord.questions[currentQuestionIndex]?.question ??
+        question;
+      editedAnswerRef.current =
+        updatedRecord.questions[currentQuestionIndex]?.answer ??
+        answer;
+      setIsEditingCurrentQuestion(false);
+      setIsSaved(true);
+    } catch (error) {
+      console.log('練習問題編集エラー:', error);
+      setQuestionEditError(
+        '練習問題を保存できませんでした。もう一度お試しください。'
+      );
+    } finally {
+      setIsSavingCurrentQuestion(false);
+    }
+  };
+
+
   const saveAssessment = async (
     assessment: PracticeQuestionAssessment
   ) => {
@@ -370,10 +443,17 @@ export default function PracticeQuestionScreen() {
         }}
       />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          automaticallyAdjustKeyboardInsets
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+        >
         <Text style={styles.title}>{subject}</Text>
         <Text style={styles.subtitle}>練習問題</Text>
 
@@ -525,6 +605,86 @@ export default function PracticeQuestionScreen() {
                   覚えた {knownCount}問・あとで復習 {reviewCount}問
                 </Text>
 
+                {isEditingCurrentQuestion ? (
+                  <View style={styles.editCard}>
+                    <Text style={styles.editLabel}>問題文</Text>
+                    <TextInput
+                      style={styles.questionEditInput}
+                      defaultValue={editedQuestionRef.current}
+                      onChangeText={(text) => {
+                        editedQuestionRef.current = text;
+                        setQuestionEditError('');
+                      }}
+                      multiline
+                      scrollEnabled
+                      textAlignVertical="top"
+                      editable={!isSavingCurrentQuestion}
+                      accessibilityLabel="練習問題の問題文"
+                    />
+
+                    <Text style={styles.editLabel}>解答</Text>
+                    <TextInput
+                      style={styles.answerEditInput}
+                      defaultValue={editedAnswerRef.current}
+                      onChangeText={(text) => {
+                        editedAnswerRef.current = text;
+                        setQuestionEditError('');
+                      }}
+                      multiline
+                      scrollEnabled
+                      textAlignVertical="top"
+                      editable={!isSavingCurrentQuestion}
+                      accessibilityLabel="練習問題の解答"
+                    />
+
+                    {questionEditError !== '' ? (
+                      <Text style={styles.editErrorText}>
+                        {questionEditError}
+                      </Text>
+                    ) : null}
+
+                    <View style={styles.editActions}>
+                      <Pressable
+                        style={[
+                          styles.saveEditButton,
+                          isSavingCurrentQuestion &&
+                            styles.disabledButton,
+                        ]}
+                        disabled={isSavingCurrentQuestion}
+                        onPress={() => void saveEditedQuestion()}
+                      >
+                        {isSavingCurrentQuestion ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="white"
+                          />
+                        ) : null}
+                        <Text style={styles.saveEditButtonText}>
+                          {isSavingCurrentQuestion
+                            ? '保存中...'
+                            : '変更を保存'}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.cancelEditButton}
+                        disabled={isSavingCurrentQuestion}
+                        onPress={() => {
+                          editedQuestionRef.current =
+                            currentQuestion.question;
+                          editedAnswerRef.current =
+                            currentQuestion.answer;
+                          setQuestionEditError('');
+                          setIsEditingCurrentQuestion(false);
+                        }}
+                      >
+                        <Text style={styles.cancelEditButtonText}>
+                          キャンセル
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
                 <View style={styles.questionCard}>
                   <Text style={styles.questionLabel}>問題</Text>
                   <Text style={styles.questionText} selectable>
@@ -539,6 +699,24 @@ export default function PracticeQuestionScreen() {
                           {currentQuestion.answer}
                         </Text>
                       </View>
+
+                      <Pressable
+                        style={styles.editButton}
+                        accessibilityRole="button"
+                        accessibilityLabel="この練習問題を編集"
+                        onPress={() => {
+                          editedQuestionRef.current =
+                            currentQuestion.question;
+                          editedAnswerRef.current =
+                            currentQuestion.answer;
+                          setQuestionEditError('');
+                          setIsEditingCurrentQuestion(true);
+                        }}
+                      >
+                        <Text style={styles.editButtonText}>
+                          この問題を編集
+                        </Text>
+                      </Pressable>
 
                       <Text style={styles.assessmentPrompt}>
                         この問題を覚えましたか？
@@ -587,7 +765,9 @@ export default function PracticeQuestionScreen() {
                     </Pressable>
                   )}
                 </View>
+                )}
 
+                {!isEditingCurrentQuestion ? (
                 <View style={styles.navigationRow}>
                   <Pressable
                     style={[
@@ -634,11 +814,13 @@ export default function PracticeQuestionScreen() {
                     </Text>
                   </Pressable>
                 </View>
+                ) : null}
               </View>
             ) : null}
           </>
         ) : null}
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -646,6 +828,7 @@ export default function PracticeQuestionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'white' },
+  keyboardAvoidingView: { flex: 1 },
   scrollView: { flex: 1 },
   contentContainer: { padding: 24, paddingBottom: 48 },
   title: { color: '#111', fontSize: 30, fontWeight: 'bold', marginTop: 24 },
@@ -679,6 +862,18 @@ const styles = StyleSheet.create({
   answerBox: { backgroundColor: 'white', borderRadius: 10, padding: 14, marginTop: 18 },
   answerLabel: { color: '#28794c', fontSize: 13, fontWeight: 'bold' },
   answerText: { color: '#222', fontSize: 15, lineHeight: 23, marginTop: 6 },
+  editButton: { alignSelf: 'center', borderWidth: 1, borderColor: '#28794c', borderRadius: 9, paddingHorizontal: 18, paddingVertical: 10, marginTop: 12 },
+  editButtonText: { color: '#28794c', fontSize: 14, fontWeight: 'bold' },
+  editCard: { backgroundColor: '#eef8f2', borderWidth: 1, borderColor: '#9bc9aa', borderRadius: 14, padding: 16, marginTop: 10 },
+  editLabel: { color: '#28794c', fontSize: 13, fontWeight: 'bold', marginBottom: 6 },
+  questionEditInput: { height: 130, color: '#1d1d1d', backgroundColor: 'white', borderWidth: 1, borderColor: '#9bc9aa', borderRadius: 9, fontSize: 16, lineHeight: 24, padding: 12, marginBottom: 14 },
+  answerEditInput: { height: 190, color: '#1d1d1d', backgroundColor: 'white', borderWidth: 1, borderColor: '#9bc9aa', borderRadius: 9, fontSize: 16, lineHeight: 24, padding: 12 },
+  editErrorText: { color: '#9b2c2c', fontSize: 13, lineHeight: 20, marginTop: 10 },
+  editActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  saveEditButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#28794c', borderRadius: 9, padding: 12 },
+  saveEditButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold' },
+  cancelEditButton: { flex: 1, alignItems: 'center', borderWidth: 1, borderColor: '#71947d', borderRadius: 9, padding: 12 },
+  cancelEditButtonText: { color: '#285c3b', fontSize: 14, fontWeight: 'bold' },
   assessmentPrompt: { color: '#444', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginTop: 16 },
   assessmentRow: { flexDirection: 'row', gap: 10, marginTop: 9 },
   reviewButton: { flex: 1, backgroundColor: '#fff3d6', borderWidth: 1, borderColor: '#dfbd6d', borderRadius: 9, padding: 11 },

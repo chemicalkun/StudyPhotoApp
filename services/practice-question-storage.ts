@@ -109,3 +109,53 @@ export const savePracticeQuestionAssessment = async (
 
   return updatedRecord;
 };
+
+
+export const updatePracticeQuestion = async (
+  subject: string,
+  questionIndex: number,
+  question: PracticeQuestion
+) => {
+  const questionText = question.question.trim();
+  const answer = question.answer.trim();
+
+  if (
+    subject === '' ||
+    !Number.isInteger(questionIndex) ||
+    questionIndex < 0 ||
+    questionText === '' ||
+    answer === ''
+  ) {
+    throw new Error('保存する練習問題が不正です');
+  }
+
+  const records = await loadPracticeQuestionRecords();
+  const id = createPracticeQuestionRecordId(subject);
+  const record = records[id];
+
+  if (
+    record === undefined ||
+    questionIndex >= record.questions.length
+  ) {
+    throw new Error('練習問題が見つかりません');
+  }
+
+  const updatedQuestions = [...record.questions];
+  updatedQuestions[questionIndex] = {
+    question: questionText,
+    answer,
+  };
+
+  const updatedRecord: PracticeQuestionRecord = {
+    ...record,
+    questions: updatedQuestions,
+    createdAt: new Date().toISOString(),
+  };
+
+  await savePracticeQuestionRecords({
+    ...records,
+    [id]: updatedRecord,
+  });
+
+  return updatedRecord;
+};

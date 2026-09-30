@@ -4,6 +4,7 @@ import {
   loadPracticeQuestionRecords,
   savePracticeQuestionAssessment,
   savePracticeQuestionRecord,
+  updatePracticeQuestion,
 } from '@/services/practice-question-storage';
 import {
   createPracticeQuestionRecordId,
@@ -81,5 +82,39 @@ describe('practice question storage', () => {
     expect(record.assessments).toEqual({
       '0': 'review',
     });
+  });
+
+  test('問題と解答を編集して自己評価を維持する', async () => {
+    const saved = await savePracticeQuestionRecord(
+      '高分子化学',
+      [{
+        question: '重合とは何ですか？',
+        answer: '単量体が結合する反応です。',
+      }],
+      'signature'
+    );
+    await savePracticeQuestionAssessment(
+      '高分子化学',
+      0,
+      'review'
+    );
+
+    const updated = await updatePracticeQuestion(
+      '高分子化学',
+      0,
+      {
+        question: ' 付加重合とは何ですか？ ',
+        answer: ' 不飽和結合が開く重合反応です。 ',
+      }
+    );
+
+    expect(updated.questions[0]).toEqual({
+      question: '付加重合とは何ですか？',
+      answer: '不飽和結合が開く重合反応です。',
+    });
+    expect(updated.assessments).toEqual({ '0': 'review' });
+    expect(updated.sourceSummarySignature).toBe(
+      saved.sourceSummarySignature
+    );
   });
 });
