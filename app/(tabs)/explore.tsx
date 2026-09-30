@@ -1294,6 +1294,35 @@ export default function ReviewScreen() {
                         </View>
 
                         <View style={styles.reviewQueueActions}>
+                          {progress.missingSummaryCount > 0 ||
+                          progress.outdatedSummaryCount > 0 ? (
+                            <Pressable
+                              style={styles.reviewQueueUpdateButton}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                router.push({
+                                  pathname: '/subject/[subject]',
+                                  params: {
+                                    subject: progress.subject,
+                                    from: 'review',
+                                  },
+                                });
+                              }}
+                            >
+                              <Text style={styles.reviewQueueUpdateText}>
+                                {progress.missingSummaryCount > 0 &&
+                                progress.outdatedSummaryCount > 0
+                                  ? 'まとめを作成・更新'
+                                  : progress.outdatedSummaryCount > 0
+                                    ? 'まとめを更新'
+                                    : 'まとめを作る'}{' '}
+                                {progress.missingSummaryCount +
+                                  progress.outdatedSummaryCount}
+                                回
+                              </Text>
+                            </Pressable>
+                          ) : null}
+
                           {progress.practiceIsOutdated ? (
                             <Pressable
                               style={styles.reviewQueueUpdateButton}

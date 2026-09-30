@@ -45,6 +45,8 @@ export type SubjectReviewProgress = {
 export const getSubjectReviewPendingCount = (
   progress: SubjectReviewProgress
 ) =>
+  progress.missingSummaryCount +
+  progress.outdatedSummaryCount +
   (progress.practiceIsOutdated
     ? 1
     : progress.practiceReviewCount +

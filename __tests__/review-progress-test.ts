@@ -219,16 +219,16 @@ describe('review progress', () => {
       missingSummaryCount: 9,
     };
 
-    expect(getSubjectReviewPendingCount(progress)).toBe(14);
+    expect(getSubjectReviewPendingCount(progress)).toBe(31);
     expect(getSubjectReviewPendingCount({
       ...progress,
       practiceIsOutdated: true,
       flashcardsAreOutdated: true,
-    })).toBe(7);
+    })).toBe(24);
     expect(getSubjectReviewPendingCount({
       ...progress,
       examPreparationIsOutdated: true,
-    })).toBe(15);
+    })).toBe(32);
   });
 
   test('試験対策データの読み込み前でも集計できる', () => {
