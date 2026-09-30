@@ -42,6 +42,7 @@ import {
 import type {
   LectureSummaryRecord,
 } from '@/types/lecture-summary';
+import { shuffleIndexes } from '@/utils/random-order';
 import { getUnansweredItemIndexes } from '@/utils/study-assessment';
 
 
@@ -163,15 +164,14 @@ export default function PracticeQuestionScreen() {
           const shouldStartUnansweredRound =
             startInUnansweredMode &&
             unansweredQuestionIndexes.length > 0;
+          const sessionIndexes = shouldStartReviewRound
+            ? reviewQuestionIndexes
+            : shouldStartUnansweredRound
+              ? unansweredQuestionIndexes
+              : loadedQuestions.map((_, index) => index);
 
           setQuestions(loadedQuestions);
-          setQuestionOrder(
-            shouldStartReviewRound
-              ? reviewQuestionIndexes
-              : shouldStartUnansweredRound
-                ? unansweredQuestionIndexes
-              : loadedQuestions.map((_, index) => index)
-          );
+          setQuestionOrder(shuffleIndexes(sessionIndexes));
           setIsSaved(hasSavedRecord);
           setIsOutdated(
             hasSavedRecord && !savedRecordIsCurrent
@@ -259,7 +259,9 @@ export default function PracticeQuestionScreen() {
 
       setQuestions(validQuestions);
       setQuestionOrder(
-        validQuestions.map((_, index) => index)
+        shuffleIndexes(
+          validQuestions.map((_, index) => index)
+        )
       );
       setCurrentQuestionPosition(0);
       setShowAnswer(false);
@@ -478,7 +480,7 @@ export default function PracticeQuestionScreen() {
         {!loading && loadError === '' ? (
           <>
             <Text style={styles.notice}>
-              {summaries.length}回分の保存済みまとめから、このiPhone内で5問作成します。作成後、別のAIが根拠と一般知識に照らして解答を再確認します。
+              {summaries.length}回分の保存済みまとめから、このiPhone内で5問作成します。作成後、別のAIが根拠と一般知識に照らして解答を再確認します。出題順は毎回ランダムです。
             </Text>
 
             {availability === 'available' ? (
@@ -552,7 +554,9 @@ export default function PracticeQuestionScreen() {
                   <Pressable
                     style={styles.retryReviewButton}
                     onPress={() => {
-                      setQuestionOrder(reviewQuestionIndexes);
+                      setQuestionOrder(
+                        shuffleIndexes(reviewQuestionIndexes)
+                      );
                       setCurrentQuestionPosition(0);
                       setShowAnswer(false);
                       setIsFinished(false);
@@ -570,7 +574,9 @@ export default function PracticeQuestionScreen() {
                   style={styles.retryAllButton}
                   onPress={() => {
                     setQuestionOrder(
-                      questions.map((_, index) => index)
+                      shuffleIndexes(
+                        questions.map((_, index) => index)
+                      )
                     );
                     setCurrentQuestionPosition(0);
                     setShowAnswer(false);

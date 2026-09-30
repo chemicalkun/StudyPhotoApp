@@ -1,8 +1,8 @@
 import {
   createFlashcardSession,
-  shuffleFlashcardIndexes,
   takeNextFlashcardRound,
 } from '@/utils/flashcard-session';
+import { shuffleIndexes } from '@/utils/random-order';
 
 
 describe('flashcard session', () => {
@@ -11,7 +11,7 @@ describe('flashcard session', () => {
     const randomValues = [0.1, 0.7, 0.2];
     let randomIndex = 0;
 
-    const shuffled = shuffleFlashcardIndexes(
+    const shuffled = shuffleIndexes(
       original,
       () => randomValues[randomIndex++] ?? 0
     );
