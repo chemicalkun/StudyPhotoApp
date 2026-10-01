@@ -27,7 +27,8 @@ type StudyPhotoIntelligenceNativeModule = {
   ): Promise<string>;
   createExamPreparation(text: string): Promise<string>;
   createPracticeQuestions(
-    text: string
+    text: string,
+    count: number
   ): Promise<PracticeQuestion[]>;
   createFlashcards(
     text: string,
@@ -96,7 +97,8 @@ export const createExamPreparation = async (
 
 
 export const createPracticeQuestions = async (
-  text: string
+  text: string,
+  count: 3 | 5 | 8 = 5
 ): Promise<PracticeQuestion[]> => {
   if (nativeModule === null) {
     throw new Error(
@@ -104,7 +106,7 @@ export const createPracticeQuestions = async (
     );
   }
 
-  return nativeModule.createPracticeQuestions(text);
+  return nativeModule.createPracticeQuestions(text, count);
 };
 
 

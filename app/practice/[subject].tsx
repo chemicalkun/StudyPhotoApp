@@ -48,6 +48,19 @@ import { getUnansweredItemIndexes } from '@/utils/study-assessment';
 import { buildPracticeQuestionShareMessage } from '@/utils/study-material-share';
 
 
+const practiceQuestionCountOptions = [3, 5, 8] as const;
+type PracticeQuestionCount =
+  typeof practiceQuestionCountOptions[number];
+
+
+const isPracticeQuestionCount = (
+  value: number
+): value is PracticeQuestionCount =>
+  practiceQuestionCountOptions.some(
+    (count) => count === value
+  );
+
+
 export default function PracticeQuestionScreen() {
   const params = useLocalSearchParams();
   const subject =
@@ -63,6 +76,8 @@ export default function PracticeQuestionScreen() {
     useState<LectureSummaryRecord[]>([]);
   const [questions, setQuestions] =
     useState<PracticeQuestion[]>([]);
+  const [selectedQuestionCount, setSelectedQuestionCount] =
+    useState<PracticeQuestionCount>(5);
   const [questionOrder, setQuestionOrder] =
     useState<number[]>([]);
   const [currentQuestionPosition, setCurrentQuestionPosition] =
@@ -175,6 +190,11 @@ export default function PracticeQuestionScreen() {
               : loadedQuestions.map((_, index) => index);
 
           setQuestions(loadedQuestions);
+          setSelectedQuestionCount(
+            isPracticeQuestionCount(loadedQuestions.length)
+              ? loadedQuestions.length
+              : 5
+          );
           setQuestionOrder(shuffleIndexes(sessionIndexes));
           setIsSaved(hasSavedRecord);
           setIsOutdated(
@@ -246,7 +266,10 @@ export default function PracticeQuestionScreen() {
       setIsOutdated(false);
 
       const generatedQuestions =
-        await createPracticeQuestions(source);
+        await createPracticeQuestions(
+          source,
+          selectedQuestionCount
+        );
       const validQuestions = generatedQuestions
         .map((question) => ({
           question: question.question.trim(),
@@ -508,8 +531,47 @@ export default function PracticeQuestionScreen() {
         {!loading && loadError === '' ? (
           <>
             <Text style={styles.notice}>
-              {summaries.length}回分の保存済みまとめから、このiPhone内で5問作成します。作成後、別のAIが根拠と一般知識に照らして解答を再確認します。出題順は毎回ランダムです。
+              {summaries.length}回分の保存済みまとめから、このiPhone内で{selectedQuestionCount}問作成します。作成後、別のAIが根拠と一般知識に照らして解答を再確認します。出題順は毎回ランダムです。
             </Text>
+
+            <View style={styles.questionCountSection}>
+              <Text style={styles.questionCountLabel}>
+                作成する問題数
+              </Text>
+              <View style={styles.questionCountRow}>
+                {practiceQuestionCountOptions.map((count) => {
+                  const isSelected =
+                    selectedQuestionCount === count;
+
+                  return (
+                    <Pressable
+                      key={count}
+                      style={[
+                        styles.questionCountButton,
+                        isSelected &&
+                          styles.questionCountButtonSelected,
+                        isGenerating && styles.disabledButton,
+                      ]}
+                      disabled={isGenerating}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${count}問作成`}
+                      onPress={() => setSelectedQuestionCount(count)}
+                    >
+                      <Text
+                        style={[
+                          styles.questionCountButtonText,
+                          isSelected &&
+                            styles.questionCountButtonTextSelected,
+                        ]}
+                      >
+                        {count}問
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
 
             {availability === 'available' ? (
               <Pressable
@@ -886,6 +948,13 @@ const styles = StyleSheet.create({
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14 },
   loadingText: { color: '#555', fontSize: 14 },
   notice: { color: '#555', backgroundColor: '#f3f6ff', borderRadius: 10, fontSize: 13, lineHeight: 20, padding: 13 },
+  questionCountSection: { marginTop: 14 },
+  questionCountLabel: { color: '#263e70', fontSize: 13, fontWeight: 'bold', marginBottom: 8 },
+  questionCountRow: { flexDirection: 'row', gap: 8 },
+  questionCountButton: { flex: 1, alignItems: 'center', borderWidth: 1, borderColor: '#8fa7d9', borderRadius: 9, paddingVertical: 10 },
+  questionCountButtonSelected: { backgroundColor: '#31518f', borderColor: '#31518f' },
+  questionCountButtonText: { color: '#31518f', fontSize: 14, fontWeight: 'bold' },
+  questionCountButtonTextSelected: { color: 'white' },
   generateButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: '#31518f', borderRadius: 10, padding: 14, marginTop: 14 },
   generateButtonText: { color: 'white', fontSize: 15, fontWeight: 'bold' },
   disabledButton: { opacity: 0.45 },

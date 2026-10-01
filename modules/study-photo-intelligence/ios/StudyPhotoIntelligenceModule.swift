@@ -6,8 +6,22 @@ import FoundationModels
 
 @available(iOS 26.0, *)
 @Generable
-private struct GeneratedPracticeQuestionSet {
+private struct GeneratedPracticeQuestionSet3 {
+  @Guide(description: "授業内容を復習するための問題", .count(3))
+  var questions: [GeneratedPracticeQuestion]
+}
+
+@available(iOS 26.0, *)
+@Generable
+private struct GeneratedPracticeQuestionSet5 {
   @Guide(description: "授業内容を復習するための問題", .count(5))
+  var questions: [GeneratedPracticeQuestion]
+}
+
+@available(iOS 26.0, *)
+@Generable
+private struct GeneratedPracticeQuestionSet8 {
+  @Guide(description: "授業内容を復習するための問題", .count(8))
   var questions: [GeneratedPracticeQuestion]
 }
 
@@ -26,8 +40,22 @@ private struct GeneratedPracticeQuestion {
 
 @available(iOS 26.0, *)
 @Generable
-private struct VerifiedPracticeQuestionSet {
+private struct VerifiedPracticeQuestionSet3 {
+  @Guide(description: "検証と修正が完了した練習問題", .count(3))
+  var questions: [VerifiedPracticeQuestion]
+}
+
+@available(iOS 26.0, *)
+@Generable
+private struct VerifiedPracticeQuestionSet5 {
   @Guide(description: "検証と修正が完了した練習問題", .count(5))
+  var questions: [VerifiedPracticeQuestion]
+}
+
+@available(iOS 26.0, *)
+@Generable
+private struct VerifiedPracticeQuestionSet8 {
+  @Guide(description: "検証と修正が完了した練習問題", .count(8))
   var questions: [VerifiedPracticeQuestion]
 }
 
@@ -298,13 +326,17 @@ public class StudyPhotoIntelligenceModule: Module {
     }
 
     AsyncFunction("createPracticeQuestions") {
-      (text: String) async throws -> [[String: String]] in
+      (text: String, requestedCount: Int) async throws -> [[String: String]] in
       let trimmedText = text.trimmingCharacters(
         in: .whitespacesAndNewlines
       )
 
       guard !trimmedText.isEmpty else {
         throw EmptyLectureTextException()
+      }
+
+      guard [3, 5, 8].contains(requestedCount) else {
+        throw InvalidPracticeQuestionCountException()
       }
 
       #if canImport(FoundationModels)
@@ -325,18 +357,37 @@ public class StudyPhotoIntelligenceModule: Module {
           """
         )
 
-        let draftResponse = try await session.respond(
-          to: """
-          次の授業回まとめから、重要内容を確認できる重複のない練習問題を作成してください。
+        let generationPrompt = """
+          次の授業回まとめから、重要内容を確認できる重複のない練習問題を\(requestedCount)問作成してください。
           単純な暗記だけでなく、用語、関係性、理由を確認する問題を含めてください。
 
           授業回まとめ:
           \(limitedText)
-          """,
-          generating: GeneratedPracticeQuestionSet.self
-        )
+          """
+        let draftQuestions: [GeneratedPracticeQuestion]
 
-        let draftText = draftResponse.content.questions
+        switch requestedCount {
+        case 3:
+          let response = try await session.respond(
+            to: generationPrompt,
+            generating: GeneratedPracticeQuestionSet3.self
+          )
+          draftQuestions = response.content.questions
+        case 8:
+          let response = try await session.respond(
+            to: generationPrompt,
+            generating: GeneratedPracticeQuestionSet8.self
+          )
+          draftQuestions = response.content.questions
+        default:
+          let response = try await session.respond(
+            to: generationPrompt,
+            generating: GeneratedPracticeQuestionSet5.self
+          )
+          draftQuestions = response.content.questions
+        }
+
+        let draftText = draftQuestions
           .enumerated()
           .map { index, question in
             """
@@ -358,16 +409,35 @@ public class StudyPhotoIntelligenceModule: Module {
           """
         )
 
-        let verifiedResponse = try await verificationSession.respond(
-          to: """
-          次の5問を検証し、必要な修正を行ってください。
+        let verificationPrompt = """
+          次の\(requestedCount)問を検証し、必要な修正を行ってください。
 
           \(draftText)
-          """,
-          generating: VerifiedPracticeQuestionSet.self
-        )
+          """
+        let verifiedQuestions: [VerifiedPracticeQuestion]
 
-        return verifiedResponse.content.questions.map { question in
+        switch requestedCount {
+        case 3:
+          let response = try await verificationSession.respond(
+            to: verificationPrompt,
+            generating: VerifiedPracticeQuestionSet3.self
+          )
+          verifiedQuestions = response.content.questions
+        case 8:
+          let response = try await verificationSession.respond(
+            to: verificationPrompt,
+            generating: VerifiedPracticeQuestionSet8.self
+          )
+          verifiedQuestions = response.content.questions
+        default:
+          let response = try await verificationSession.respond(
+            to: verificationPrompt,
+            generating: VerifiedPracticeQuestionSet5.self
+          )
+          verifiedQuestions = response.content.questions
+        }
+
+        return verifiedQuestions.map { question in
           [
             "question": question.question,
             "answer": question.answer,
@@ -515,6 +585,12 @@ private final class EmptyLectureTextException: Exception {
 private final class InvalidFlashcardCountException: Exception {
   override var reason: String {
     "フラッシュカードの作成枚数が不正です。"
+  }
+}
+
+private final class InvalidPracticeQuestionCountException: Exception {
+  override var reason: String {
+    "練習問題の作成数が不正です。"
   }
 }
 
