@@ -29,7 +29,10 @@ type StudyPhotoIntelligenceNativeModule = {
   createPracticeQuestions(
     text: string
   ): Promise<PracticeQuestion[]>;
-  createFlashcards(text: string): Promise<Flashcard[]>;
+  createFlashcards(
+    text: string,
+    count: number
+  ): Promise<Flashcard[]>;
 };
 
 
@@ -106,7 +109,8 @@ export const createPracticeQuestions = async (
 
 
 export const createFlashcards = async (
-  text: string
+  text: string,
+  count: 5 | 8 | 12 = 8
 ): Promise<Flashcard[]> => {
   if (nativeModule === null) {
     throw new Error(
@@ -114,5 +118,5 @@ export const createFlashcards = async (
     );
   }
 
-  return nativeModule.createFlashcards(text);
+  return nativeModule.createFlashcards(text, count);
 };

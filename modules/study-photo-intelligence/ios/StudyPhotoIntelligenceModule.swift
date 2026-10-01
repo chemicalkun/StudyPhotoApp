@@ -43,8 +43,22 @@ private struct VerifiedPracticeQuestion {
 
 @available(iOS 26.0, *)
 @Generable
-private struct GeneratedFlashcardSet {
+private struct GeneratedFlashcardSet5 {
+  @Guide(description: "授業の重要語句を覚えるカード", .count(5))
+  var cards: [GeneratedFlashcard]
+}
+
+@available(iOS 26.0, *)
+@Generable
+private struct GeneratedFlashcardSet8 {
   @Guide(description: "授業の重要語句を覚えるカード", .count(8))
+  var cards: [GeneratedFlashcard]
+}
+
+@available(iOS 26.0, *)
+@Generable
+private struct GeneratedFlashcardSet12 {
+  @Guide(description: "授業の重要語句を覚えるカード", .count(12))
   var cards: [GeneratedFlashcard]
 }
 
@@ -63,8 +77,22 @@ private struct GeneratedFlashcard {
 
 @available(iOS 26.0, *)
 @Generable
-private struct VerifiedFlashcardSet {
+private struct VerifiedFlashcardSet5 {
+  @Guide(description: "検証と修正が完了したカード", .count(5))
+  var cards: [VerifiedFlashcard]
+}
+
+@available(iOS 26.0, *)
+@Generable
+private struct VerifiedFlashcardSet8 {
   @Guide(description: "検証と修正が完了したカード", .count(8))
+  var cards: [VerifiedFlashcard]
+}
+
+@available(iOS 26.0, *)
+@Generable
+private struct VerifiedFlashcardSet12 {
+  @Guide(description: "検証と修正が完了したカード", .count(12))
   var cards: [VerifiedFlashcard]
 }
 
@@ -352,13 +380,17 @@ public class StudyPhotoIntelligenceModule: Module {
     }
 
     AsyncFunction("createFlashcards") {
-      (text: String) async throws -> [[String: String]] in
+      (text: String, requestedCount: Int) async throws -> [[String: String]] in
       let trimmedText = text.trimmingCharacters(
         in: .whitespacesAndNewlines
       )
 
       guard !trimmedText.isEmpty else {
         throw EmptyLectureTextException()
+      }
+
+      guard [5, 8, 12].contains(requestedCount) else {
+        throw InvalidFlashcardCountException()
       }
 
       #if canImport(FoundationModels)
@@ -379,18 +411,37 @@ public class StudyPhotoIntelligenceModule: Module {
           """
         )
 
-        let draftResponse = try await generationSession.respond(
-          to: """
-          次の授業回まとめから、重複しない重要語句を選び、短時間で復習できるカードを作成してください。
-          語句は短く、説明は1〜3文にしてください。
+        let generationPrompt = """
+        次の授業回まとめから、重複しない重要語句を選び、短時間で復習できるカードを\(requestedCount)枚作成してください。
+        語句は短く、説明は1〜3文にしてください。
 
-          授業回まとめ:
-          \(limitedText)
-          """,
-          generating: GeneratedFlashcardSet.self
-        )
+        授業回まとめ:
+        \(limitedText)
+        """
+        let draftCards: [GeneratedFlashcard]
 
-        let draftText = draftResponse.content.cards
+        switch requestedCount {
+        case 5:
+          let response = try await generationSession.respond(
+            to: generationPrompt,
+            generating: GeneratedFlashcardSet5.self
+          )
+          draftCards = response.content.cards
+        case 12:
+          let response = try await generationSession.respond(
+            to: generationPrompt,
+            generating: GeneratedFlashcardSet12.self
+          )
+          draftCards = response.content.cards
+        default:
+          let response = try await generationSession.respond(
+            to: generationPrompt,
+            generating: GeneratedFlashcardSet8.self
+          )
+          draftCards = response.content.cards
+        }
+
+        let draftText = draftCards
           .enumerated()
           .map { index, card in
             """
@@ -413,16 +464,35 @@ public class StudyPhotoIntelligenceModule: Module {
           """
         )
 
-        let verifiedResponse = try await verificationSession.respond(
-          to: """
-          次の8枚を検証し、必要な修正を行ってください。
+        let verificationPrompt = """
+          次の\(requestedCount)枚を検証し、必要な修正を行ってください。
 
           \(draftText)
-          """,
-          generating: VerifiedFlashcardSet.self
-        )
+          """
+        let verifiedCards: [VerifiedFlashcard]
 
-        return verifiedResponse.content.cards.map { card in
+        switch requestedCount {
+        case 5:
+          let response = try await verificationSession.respond(
+            to: verificationPrompt,
+            generating: VerifiedFlashcardSet5.self
+          )
+          verifiedCards = response.content.cards
+        case 12:
+          let response = try await verificationSession.respond(
+            to: verificationPrompt,
+            generating: VerifiedFlashcardSet12.self
+          )
+          verifiedCards = response.content.cards
+        default:
+          let response = try await verificationSession.respond(
+            to: verificationPrompt,
+            generating: VerifiedFlashcardSet8.self
+          )
+          verifiedCards = response.content.cards
+        }
+
+        return verifiedCards.map { card in
           [
             "term": card.term,
             "definition": card.definition,
@@ -439,6 +509,12 @@ public class StudyPhotoIntelligenceModule: Module {
 private final class EmptyLectureTextException: Exception {
   override var reason: String {
     "要約するOCR文字がありません。"
+  }
+}
+
+private final class InvalidFlashcardCountException: Exception {
+  override var reason: String {
+    "フラッシュカードの作成枚数が不正です。"
   }
 }
 

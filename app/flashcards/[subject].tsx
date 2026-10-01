@@ -50,6 +50,16 @@ import { getUnansweredItemIndexes } from '@/utils/study-assessment';
 import { buildFlashcardShareMessage } from '@/utils/study-material-share';
 
 
+const flashcardCountOptions = [5, 8, 12] as const;
+type FlashcardCount = typeof flashcardCountOptions[number];
+
+
+const isFlashcardCount = (
+  value: number
+): value is FlashcardCount =>
+  flashcardCountOptions.some((count) => count === value);
+
+
 export default function FlashcardScreen() {
   const params = useLocalSearchParams();
   const subject =
@@ -64,6 +74,8 @@ export default function FlashcardScreen() {
   const [summaries, setSummaries] =
     useState<LectureSummaryRecord[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
+  const [selectedCardCount, setSelectedCardCount] =
+    useState<FlashcardCount>(8);
   const [cardOrder, setCardOrder] = useState<number[]>([]);
   const [remainingCardOrder, setRemainingCardOrder] =
     useState<number[]>([]);
@@ -182,6 +194,11 @@ export default function FlashcardScreen() {
           );
 
           setCards(loadedCards);
+          setSelectedCardCount(
+            isFlashcardCount(loadedCards.length)
+              ? loadedCards.length
+              : 8
+          );
           setCardOrder(session.currentRound);
           setRemainingCardOrder(session.remaining);
           setCurrentRoundNumber(1);
@@ -255,7 +272,10 @@ export default function FlashcardScreen() {
       setIsSaved(false);
       setIsOutdated(false);
 
-      const generatedCards = await createFlashcards(source);
+      const generatedCards = await createFlashcards(
+        source,
+        selectedCardCount
+      );
       const validCards = generatedCards
         .map((card) => ({
           term: card.term.trim(),
@@ -543,8 +563,45 @@ export default function FlashcardScreen() {
         {!loading && loadError === '' ? (
           <>
             <Text style={styles.notice}>
-              {summaries.length}回分のまとめから重要語句を8枚作成し、別のAIが説明を再確認します。カードは順番を毎回ランダムにし、5枚ずつ表示します。
+              {summaries.length}回分のまとめから重要語句を{selectedCardCount}枚作成し、別のAIが説明を再確認します。カードは順番を毎回ランダムにし、5枚ずつ表示します。
             </Text>
+
+            <View style={styles.cardCountSection}>
+              <Text style={styles.cardCountLabel}>
+                作成する枚数
+              </Text>
+              <View style={styles.cardCountRow}>
+                {flashcardCountOptions.map((count) => {
+                  const isSelected = selectedCardCount === count;
+
+                  return (
+                    <Pressable
+                      key={count}
+                      style={[
+                        styles.cardCountButton,
+                        isSelected && styles.cardCountButtonSelected,
+                        isGenerating && styles.disabledButton,
+                      ]}
+                      disabled={isGenerating}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${count}枚作成`}
+                      onPress={() => setSelectedCardCount(count)}
+                    >
+                      <Text
+                        style={[
+                          styles.cardCountButtonText,
+                          isSelected &&
+                            styles.cardCountButtonTextSelected,
+                        ]}
+                      >
+                        {count}枚
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
 
             {availability === 'available' ? (
               <Pressable
@@ -932,6 +989,13 @@ const styles = StyleSheet.create({
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14 },
   loadingText: { color: '#555', fontSize: 14 },
   notice: { color: '#555', backgroundColor: '#f5effb', borderRadius: 10, fontSize: 13, lineHeight: 20, padding: 13 },
+  cardCountSection: { marginTop: 14 },
+  cardCountLabel: { color: '#4b315f', fontSize: 13, fontWeight: 'bold', marginBottom: 8 },
+  cardCountRow: { flexDirection: 'row', gap: 8 },
+  cardCountButton: { flex: 1, alignItems: 'center', borderWidth: 1, borderColor: '#b798d5', borderRadius: 9, paddingVertical: 10 },
+  cardCountButtonSelected: { backgroundColor: '#6b3ca0', borderColor: '#6b3ca0' },
+  cardCountButtonText: { color: '#6b3ca0', fontSize: 14, fontWeight: 'bold' },
+  cardCountButtonTextSelected: { color: 'white' },
   generateButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: '#6b3ca0', borderRadius: 10, padding: 14, marginTop: 14 },
   generateButtonText: { color: 'white', fontSize: 15, fontWeight: 'bold' },
   disabledButton: { opacity: 0.45 },
