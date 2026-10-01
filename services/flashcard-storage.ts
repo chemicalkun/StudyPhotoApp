@@ -7,13 +7,15 @@ import {
   type FlashcardAssessment,
   type FlashcardRecord,
   type FlashcardRecords,
+  type FlashcardSession,
 } from '@/types/flashcard';
 
 
 const flashcardStorageKey = 'flashcardRecords';
+let mutationQueue: Promise<void> = Promise.resolve();
 
 
-export const loadFlashcardRecords = async () => {
+const loadFlashcardRecordsFromStorage = async () => {
   const savedRecords = await AsyncStorage.getItem(
     flashcardStorageKey
   );
@@ -23,6 +25,13 @@ export const loadFlashcardRecords = async () => {
   }
 
   return parseFlashcardRecords(savedRecords);
+};
+
+
+export const loadFlashcardRecords = async () => {
+  await mutationQueue;
+
+  return loadFlashcardRecordsFromStorage();
 };
 
 
@@ -36,10 +45,37 @@ const saveFlashcardRecords = async (
 };
 
 
+const mutateFlashcardRecords = <Result>(
+  mutation: (
+    records: FlashcardRecords
+  ) => {
+    records: FlashcardRecords;
+    result: Result;
+  }
+): Promise<Result> => {
+  const operation = mutationQueue.then(async () => {
+    const records = await loadFlashcardRecordsFromStorage();
+    const mutationResult = mutation(records);
+
+    await saveFlashcardRecords(mutationResult.records);
+
+    return mutationResult.result;
+  });
+
+  mutationQueue = operation.then(
+    () => undefined,
+    () => undefined
+  );
+
+  return operation;
+};
+
+
 export const saveFlashcardRecord = async (
   subject: string,
   cards: Flashcard[],
-  sourceSummarySignature: string
+  sourceSummarySignature: string,
+  session?: FlashcardSession
 ): Promise<FlashcardRecord> => {
   if (
     subject === '' ||
@@ -49,23 +85,56 @@ export const saveFlashcardRecord = async (
     throw new Error('保存するフラッシュカードがありません');
   }
 
-  const records = await loadFlashcardRecords();
   const id = createFlashcardRecordId(subject);
   const record: FlashcardRecord = {
     id,
     subject,
     cards,
     assessments: {},
+    session,
     sourceSummarySignature,
     createdAt: new Date().toISOString(),
   };
 
-  await saveFlashcardRecords({
-    ...records,
-    [id]: record,
-  });
+  return mutateFlashcardRecords((records) => ({
+    records: {
+      ...records,
+      [id]: record,
+    },
+    result: record,
+  }));
+};
 
-  return record;
+
+export const saveFlashcardSession = async (
+  subject: string,
+  session: FlashcardSession
+) => {
+  if (subject === '') {
+    throw new Error('保存する学習位置が不正です');
+  }
+
+  return mutateFlashcardRecords((records) => {
+    const id = createFlashcardRecordId(subject);
+    const record = records[id];
+
+    if (record === undefined) {
+      throw new Error('フラッシュカードが見つかりません');
+    }
+
+    const updatedRecord: FlashcardRecord = {
+      ...record,
+      session,
+    };
+
+    return {
+      records: {
+        ...records,
+        [id]: updatedRecord,
+      },
+      result: updatedRecord,
+    };
+  });
 };
 
 
@@ -82,31 +151,33 @@ export const saveFlashcardAssessment = async (
     throw new Error('保存するカード記録が不正です');
   }
 
-  const records = await loadFlashcardRecords();
-  const id = createFlashcardRecordId(subject);
-  const record = records[id];
+  return mutateFlashcardRecords((records) => {
+    const id = createFlashcardRecordId(subject);
+    const record = records[id];
 
-  if (
-    record === undefined ||
-    cardIndex >= record.cards.length
-  ) {
-    throw new Error('フラッシュカードが見つかりません');
-  }
+    if (
+      record === undefined ||
+      cardIndex >= record.cards.length
+    ) {
+      throw new Error('フラッシュカードが見つかりません');
+    }
 
-  const updatedRecord: FlashcardRecord = {
-    ...record,
-    assessments: {
-      ...record.assessments,
-      [String(cardIndex)]: assessment,
-    },
-  };
+    const updatedRecord: FlashcardRecord = {
+      ...record,
+      assessments: {
+        ...record.assessments,
+        [String(cardIndex)]: assessment,
+      },
+    };
 
-  await saveFlashcardRecords({
-    ...records,
-    [id]: updatedRecord,
+    return {
+      records: {
+        ...records,
+        [id]: updatedRecord,
+      },
+      result: updatedRecord,
+    };
   });
-
-  return updatedRecord;
 };
 
 
@@ -128,27 +199,32 @@ export const updateFlashcard = async (
     throw new Error('保存するカードが不正です');
   }
 
-  const records = await loadFlashcardRecords();
-  const id = createFlashcardRecordId(subject);
-  const record = records[id];
+  return mutateFlashcardRecords((records) => {
+    const id = createFlashcardRecordId(subject);
+    const record = records[id];
 
-  if (record === undefined || cardIndex >= record.cards.length) {
-    throw new Error('フラッシュカードが見つかりません');
-  }
+    if (
+      record === undefined ||
+      cardIndex >= record.cards.length
+    ) {
+      throw new Error('フラッシュカードが見つかりません');
+    }
 
-  const updatedCards = [...record.cards];
-  updatedCards[cardIndex] = { term, definition };
+    const updatedCards = [...record.cards];
+    updatedCards[cardIndex] = { term, definition };
 
-  const updatedRecord: FlashcardRecord = {
-    ...record,
-    cards: updatedCards,
-    createdAt: new Date().toISOString(),
-  };
+    const updatedRecord: FlashcardRecord = {
+      ...record,
+      cards: updatedCards,
+      createdAt: new Date().toISOString(),
+    };
 
-  await saveFlashcardRecords({
-    ...records,
-    [id]: updatedRecord,
+    return {
+      records: {
+        ...records,
+        [id]: updatedRecord,
+      },
+      result: updatedRecord,
+    };
   });
-
-  return updatedRecord;
 };

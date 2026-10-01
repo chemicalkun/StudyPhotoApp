@@ -28,7 +28,7 @@ type StudyPhotoIntelligenceNativeModule = {
   createExamPreparation(text: string): Promise<string>;
   createPracticeQuestions(
     text: string,
-    count: number
+    count?: number
   ): Promise<PracticeQuestion[]>;
   createFlashcards(
     text: string,
@@ -106,7 +106,29 @@ export const createPracticeQuestions = async (
     );
   }
 
-  return nativeModule.createPracticeQuestions(text, count);
+  try {
+    return await nativeModule.createPracticeQuestions(
+      text,
+      count
+    );
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : String(error);
+    const installedBuildUsesFixedFiveQuestions =
+      message.includes(
+        'Received 2 arguments, but 1 was expected'
+      );
+
+    if (
+      count === 5 &&
+      installedBuildUsesFixedFiveQuestions
+    ) {
+      return nativeModule.createPracticeQuestions(text);
+    }
+
+    throw error;
+  }
 };
 
 

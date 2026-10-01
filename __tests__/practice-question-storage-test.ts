@@ -4,6 +4,7 @@ import {
   loadPracticeQuestionRecords,
   savePracticeQuestionAssessment,
   savePracticeQuestionRecord,
+  savePracticeQuestionSession,
   updatePracticeQuestion,
 } from '@/services/practice-question-storage';
 import {
@@ -116,5 +117,70 @@ describe('practice question storage', () => {
     expect(updated.sourceSummarySignature).toBe(
       saved.sourceSummarySignature
     );
+  });
+
+  test('自己評価と学習位置を続けて保存して両方維持する', async () => {
+    await savePracticeQuestionRecord(
+      '高分子化学',
+      [
+        {
+          question: '重合とは何ですか？',
+          answer: '単量体が結合する反応です。',
+        },
+        {
+          question: '単量体とは何ですか？',
+          answer: '重合の材料となる分子です。',
+        },
+      ],
+      'signature'
+    );
+
+    await Promise.all([
+      savePracticeQuestionAssessment(
+        '高分子化学',
+        1,
+        'known'
+      ),
+      savePracticeQuestionSession('高分子化学', {
+        order: [1, 0],
+        currentPosition: 1,
+        isFinished: false,
+      }),
+    ]);
+
+    const record = (await loadPracticeQuestionRecords())[
+      createPracticeQuestionRecordId('高分子化学')
+    ];
+
+    expect(record.assessments).toEqual({ '1': 'known' });
+    expect(record.session).toEqual({
+      order: [1, 0],
+      currentPosition: 1,
+      isFinished: false,
+    });
+  });
+
+  test('範囲外の学習位置を含む保存データを拒否する', () => {
+    const id = createPracticeQuestionRecordId('高分子化学');
+
+    expect(() =>
+      parsePracticeQuestionRecords(JSON.stringify({
+        [id]: {
+          id,
+          subject: '高分子化学',
+          questions: [{
+            question: '重合とは何ですか？',
+            answer: '単量体が結合する反応です。',
+          }],
+          session: {
+            order: [1],
+            currentPosition: 0,
+            isFinished: false,
+          },
+          sourceSummarySignature: 'signature',
+          createdAt: '2026-09-21T10:00:00.000Z',
+        },
+      }))
+    ).toThrow('practiceQuestionRecordsの形式が不正です');
   });
 });

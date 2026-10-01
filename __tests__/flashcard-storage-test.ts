@@ -4,6 +4,7 @@ import {
   loadFlashcardRecords,
   saveFlashcardAssessment,
   saveFlashcardRecord,
+  saveFlashcardSession,
   updateFlashcard,
 } from '@/services/flashcard-storage';
 import {
@@ -109,5 +110,85 @@ describe('flashcard storage', () => {
     expect(updated.sourceSummarySignature).toBe(
       saved.sourceSummarySignature
     );
+  });
+
+  test('自己評価と学習位置を続けて保存して両方維持する', async () => {
+    await saveFlashcardRecord(
+      '高分子化学',
+      [
+        {
+          term: '重合',
+          definition: '単量体が結合する反応。',
+        },
+        {
+          term: '単量体',
+          definition: '重合の材料となる分子。',
+        },
+      ],
+      'signature'
+    );
+
+    await Promise.all([
+      saveFlashcardAssessment(
+        '高分子化学',
+        1,
+        'review'
+      ),
+      saveFlashcardSession('高分子化学', {
+        currentRound: [1, 0],
+        remaining: [],
+        currentPosition: 1,
+        currentRoundNumber: 1,
+        totalRoundCount: 1,
+        isFinished: false,
+      }),
+    ]);
+
+    const record = (await loadFlashcardRecords())[
+      createFlashcardRecordId('高分子化学')
+    ];
+
+    expect(record.assessments).toEqual({ '1': 'review' });
+    expect(record.session).toEqual({
+      currentRound: [1, 0],
+      remaining: [],
+      currentPosition: 1,
+      currentRoundNumber: 1,
+      totalRoundCount: 1,
+      isFinished: false,
+    });
+  });
+
+  test('重複したカード位置を含む保存データを拒否する', () => {
+    const id = createFlashcardRecordId('高分子化学');
+
+    expect(() =>
+      parseFlashcardRecords(JSON.stringify({
+        [id]: {
+          id,
+          subject: '高分子化学',
+          cards: [
+            {
+              term: '重合',
+              definition: '単量体が結合する反応。',
+            },
+            {
+              term: '単量体',
+              definition: '重合の材料となる分子。',
+            },
+          ],
+          session: {
+            currentRound: [0],
+            remaining: [0],
+            currentPosition: 0,
+            currentRoundNumber: 1,
+            totalRoundCount: 1,
+            isFinished: false,
+          },
+          sourceSummarySignature: 'signature',
+          createdAt: '2026-09-21T10:00:00.000Z',
+        },
+      }))
+    ).toThrow('flashcardRecordsの形式が不正です');
   });
 });

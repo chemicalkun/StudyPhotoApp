@@ -14,6 +14,13 @@ export type PracticeQuestionAssessment =
   | 'review';
 
 
+export type PracticeQuestionSession = {
+  order: number[];
+  currentPosition: number;
+  isFinished: boolean;
+};
+
+
 export type PracticeQuestionRecord = {
   id: string;
   subject: string;
@@ -22,6 +29,7 @@ export type PracticeQuestionRecord = {
     string,
     PracticeQuestionAssessment
   >;
+  session?: PracticeQuestionSession;
   sourceSummarySignature: string;
   createdAt: string;
 };
@@ -95,6 +103,29 @@ const isPracticeQuestionRecord = (
           )
       )
     );
+  const sessionIsValid =
+    record.session === undefined ||
+    (
+      typeof record.session === 'object' &&
+      record.session !== null &&
+      !Array.isArray(record.session) &&
+      Array.isArray(record.session.order) &&
+      record.session.order.length ===
+        record.questions?.length &&
+      record.session.order.every(
+        (questionIndex) =>
+          Number.isInteger(questionIndex) &&
+          questionIndex >= 0 &&
+          questionIndex < (record.questions?.length ?? 0)
+      ) &&
+      new Set(record.session.order).size ===
+        record.session.order.length &&
+      Number.isInteger(record.session.currentPosition) &&
+      record.session.currentPosition >= 0 &&
+      record.session.currentPosition <
+        record.session.order.length &&
+      typeof record.session.isFinished === 'boolean'
+    );
 
   return (
     typeof record.id === 'string' &&
@@ -104,6 +135,7 @@ const isPracticeQuestionRecord = (
     record.questions.length > 0 &&
     record.questions.every(isPracticeQuestion) &&
     assessmentsAreValid &&
+    sessionIsValid &&
     typeof record.sourceSummarySignature === 'string' &&
     record.sourceSummarySignature !== '' &&
     typeof record.createdAt === 'string' &&

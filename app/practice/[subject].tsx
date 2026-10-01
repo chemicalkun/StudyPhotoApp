@@ -29,6 +29,7 @@ import {
   loadPracticeQuestionRecords,
   savePracticeQuestionAssessment,
   savePracticeQuestionRecord,
+  savePracticeQuestionSession,
   updatePracticeQuestion,
 } from '@/services/practice-question-storage';
 import {
@@ -39,6 +40,7 @@ import {
   createPracticeQuestionSourceSignature,
   type PracticeQuestion,
   type PracticeQuestionAssessment,
+  type PracticeQuestionSession,
 } from '@/types/practice-question';
 import type {
   LectureSummaryRecord,
@@ -183,7 +185,14 @@ export default function PracticeQuestionScreen() {
           const shouldStartUnansweredRound =
             startInUnansweredMode &&
             unansweredQuestionIndexes.length > 0;
-          const sessionIndexes = shouldStartReviewRound
+          const savedSession =
+            !startInReviewMode &&
+            !startInUnansweredMode
+              ? savedRecord?.session
+              : undefined;
+          const sessionIndexes = savedSession !== undefined
+            ? savedSession.order
+            : shouldStartReviewRound
             ? reviewQuestionIndexes
             : shouldStartUnansweredRound
               ? unansweredQuestionIndexes
@@ -195,15 +204,21 @@ export default function PracticeQuestionScreen() {
               ? loadedQuestions.length
               : 5
           );
-          setQuestionOrder(shuffleIndexes(sessionIndexes));
+          setQuestionOrder(
+            savedSession === undefined
+              ? shuffleIndexes(sessionIndexes)
+              : sessionIndexes
+          );
           setIsSaved(hasSavedRecord);
           setIsOutdated(
             hasSavedRecord && !savedRecordIsCurrent
           );
           setAssessments(loadedAssessments);
-          setCurrentQuestionPosition(0);
+          setCurrentQuestionPosition(
+            savedSession?.currentPosition ?? 0
+          );
           setShowAnswer(false);
-          setIsFinished(false);
+          setIsFinished(savedSession?.isFinished ?? false);
           setIsReviewRound(shouldStartReviewRound);
           setIsUnansweredRound(shouldStartUnansweredRound);
           setIsEditingCurrentQuestion(false);
@@ -285,12 +300,17 @@ export default function PracticeQuestionScreen() {
         throw new Error('生成された練習問題が空です');
       }
 
-      setQuestions(validQuestions);
-      setQuestionOrder(
-        shuffleIndexes(
-          validQuestions.map((_, index) => index)
-        )
+      const generatedQuestionOrder = shuffleIndexes(
+        validQuestions.map((_, index) => index)
       );
+      const generatedSession: PracticeQuestionSession = {
+        order: generatedQuestionOrder,
+        currentPosition: 0,
+        isFinished: false,
+      };
+
+      setQuestions(validQuestions);
+      setQuestionOrder(generatedQuestionOrder);
       setCurrentQuestionPosition(0);
       setShowAnswer(false);
       setIsFinished(false);
@@ -302,7 +322,8 @@ export default function PracticeQuestionScreen() {
         await savePracticeQuestionRecord(
           subject,
           validQuestions,
-          createPracticeQuestionSourceSignature(summaries)
+          createPracticeQuestionSourceSignature(summaries),
+          generatedSession
         );
         setIsSaved(true);
         setIsOutdated(false);
@@ -343,6 +364,42 @@ export default function PracticeQuestionScreen() {
         '練習問題を共有できませんでした。もう一度お試しください。'
       );
     }
+  };
+
+
+  const persistQuestionSession = (
+    session: PracticeQuestionSession
+  ) => {
+    if (!isSaved) {
+      return;
+    }
+
+    void savePracticeQuestionSession(subject, session)
+      .catch((error) => {
+        console.log('練習問題の学習位置保存エラー:', error);
+        setSaveError(
+          '学習位置を端末に保存できませんでした。'
+        );
+      });
+  };
+
+
+  const startAllQuestionSession = () => {
+    const order = shuffleIndexes(
+      questions.map((_, index) => index)
+    );
+
+    setQuestionOrder(order);
+    setCurrentQuestionPosition(0);
+    setShowAnswer(false);
+    setIsFinished(false);
+    setIsReviewRound(false);
+    setIsUnansweredRound(false);
+    persistQuestionSession({
+      order,
+      currentPosition: 0,
+      isFinished: false,
+    });
   };
 
 
@@ -678,18 +735,7 @@ export default function PracticeQuestionScreen() {
 
                 <Pressable
                   style={styles.retryAllButton}
-                  onPress={() => {
-                    setQuestionOrder(
-                      shuffleIndexes(
-                        questions.map((_, index) => index)
-                      )
-                    );
-                    setCurrentQuestionPosition(0);
-                    setShowAnswer(false);
-                    setIsFinished(false);
-                    setIsReviewRound(false);
-                    setIsUnansweredRound(false);
-                  }}
+                  onPress={startAllQuestionSession}
                 >
                   <Text style={styles.retryAllButtonText}>
                     すべての問題を見直す
@@ -889,10 +935,24 @@ export default function PracticeQuestionScreen() {
                     ]}
                     disabled={currentQuestionPosition === 0}
                     onPress={() => {
+                      const nextPosition =
+                        currentQuestionPosition - 1;
+
                       setCurrentQuestionPosition(
-                        (position) => position - 1
+                        nextPosition
                       );
                       setShowAnswer(false);
+
+                      if (
+                        !isReviewRound &&
+                        !isUnansweredRound
+                      ) {
+                        persistQuestionSession({
+                          order: questionOrder,
+                          currentPosition: nextPosition,
+                          isFinished: false,
+                        });
+                      }
                     }}
                   >
                     <Text style={styles.navigationButtonText}>
@@ -909,13 +969,40 @@ export default function PracticeQuestionScreen() {
                       ) {
                         setIsFinished(true);
                         setShowAnswer(false);
+
+                        if (
+                          !isReviewRound &&
+                          !isUnansweredRound
+                        ) {
+                          persistQuestionSession({
+                            order: questionOrder,
+                            currentPosition:
+                              currentQuestionPosition,
+                            isFinished: true,
+                          });
+                        }
+
                         return;
                       }
 
+                      const nextPosition =
+                        currentQuestionPosition + 1;
+
                       setCurrentQuestionPosition(
-                        (position) => position + 1
+                        nextPosition
                       );
                       setShowAnswer(false);
+
+                      if (
+                        !isReviewRound &&
+                        !isUnansweredRound
+                      ) {
+                        persistQuestionSession({
+                          order: questionOrder,
+                          currentPosition: nextPosition,
+                          isFinished: false,
+                        });
+                      }
                     }}
                   >
                     <Text style={styles.navigationButtonText}>

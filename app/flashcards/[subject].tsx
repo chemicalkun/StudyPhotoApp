@@ -28,6 +28,7 @@ import {
   loadFlashcardRecords,
   saveFlashcardAssessment,
   saveFlashcardRecord,
+  saveFlashcardSession,
   updateFlashcard,
 } from '@/services/flashcard-storage';
 import { loadLectureSummaryRecords } from '@/services/lecture-summary-storage';
@@ -37,6 +38,7 @@ import {
   createFlashcardSourceSignature,
   type Flashcard,
   type FlashcardAssessment,
+  type FlashcardSession,
 } from '@/types/flashcard';
 import type {
   LectureSummaryRecord,
@@ -189,9 +191,14 @@ export default function FlashcardScreen() {
             : shouldStartUnansweredRound
               ? unansweredCardIndexes
               : loadedCards.map((_, index) => index);
-          const session = createFlashcardSession(
-            sessionIndexes
-          );
+          const savedSession =
+            !startInReviewMode &&
+            !startInUnansweredMode
+              ? savedRecord?.session
+              : undefined;
+          const newSession = savedSession === undefined
+            ? createFlashcardSession(sessionIndexes)
+            : null;
 
           setCards(loadedCards);
           setSelectedCardCount(
@@ -199,18 +206,34 @@ export default function FlashcardScreen() {
               ? loadedCards.length
               : 8
           );
-          setCardOrder(session.currentRound);
-          setRemainingCardOrder(session.remaining);
-          setCurrentRoundNumber(1);
-          setTotalRoundCount(session.totalRounds);
+          setCardOrder(
+            savedSession?.currentRound ??
+              newSession?.currentRound ??
+              []
+          );
+          setRemainingCardOrder(
+            savedSession?.remaining ??
+              newSession?.remaining ??
+              []
+          );
+          setCurrentRoundNumber(
+            savedSession?.currentRoundNumber ?? 1
+          );
+          setTotalRoundCount(
+            savedSession?.totalRoundCount ??
+              newSession?.totalRounds ??
+              0
+          );
           setAssessments(loadedAssessments);
           setIsSaved(hasSavedRecord);
           setIsOutdated(
             hasSavedRecord && !savedRecordIsCurrent
           );
-          setCurrentCardPosition(0);
+          setCurrentCardPosition(
+            savedSession?.currentPosition ?? 0
+          );
           setShowDefinition(false);
-          setIsFinished(false);
+          setIsFinished(savedSession?.isFinished ?? false);
           setIsReviewRound(shouldStartReviewRound);
           setIsUnansweredRound(shouldStartUnansweredRound);
           setIsEditingCurrentCard(false);
@@ -293,6 +316,14 @@ export default function FlashcardScreen() {
       const session = createFlashcardSession(
         validCards.map((_, index) => index)
       );
+      const savedSession: FlashcardSession = {
+        currentRound: session.currentRound,
+        remaining: session.remaining,
+        currentPosition: 0,
+        currentRoundNumber: 1,
+        totalRoundCount: session.totalRounds,
+        isFinished: false,
+      };
 
       setCards(validCards);
       setCardOrder(session.currentRound);
@@ -310,7 +341,8 @@ export default function FlashcardScreen() {
         await saveFlashcardRecord(
           subject,
           validCards,
-          createFlashcardSourceSignature(summaries)
+          createFlashcardSourceSignature(summaries),
+          savedSession
         );
         setIsSaved(true);
         setIsOutdated(false);
@@ -351,6 +383,26 @@ export default function FlashcardScreen() {
   };
 
 
+  const persistFlashcardSession = (
+    session: FlashcardSession
+  ) => {
+    if (!isSaved) {
+      return;
+    }
+
+    void saveFlashcardSession(subject, session)
+      .catch((error) => {
+        console.log(
+          'フラッシュカードの学習位置保存エラー:',
+          error
+        );
+        setSaveError(
+          '学習位置を端末に保存できませんでした。'
+        );
+      });
+  };
+
+
   const startCardSession = (
     indexes: number[],
     mode: 'all' | 'review' | 'unanswered'
@@ -368,6 +420,17 @@ export default function FlashcardScreen() {
     setIsUnansweredRound(mode === 'unanswered');
     setIsEditingCurrentCard(false);
     setCardEditError('');
+
+    if (mode === 'all') {
+      persistFlashcardSession({
+        currentRound: session.currentRound,
+        remaining: session.remaining,
+        currentPosition: 0,
+        currentRoundNumber: 1,
+        totalRoundCount: session.totalRounds,
+        isFinished: false,
+      });
+    }
   };
 
 
@@ -375,15 +438,27 @@ export default function FlashcardScreen() {
     const nextRound = takeNextFlashcardRound(
       remainingCardOrder
     );
+    const nextRoundNumber = currentRoundNumber + 1;
 
     setCardOrder(nextRound.currentRound);
     setRemainingCardOrder(nextRound.remaining);
-    setCurrentRoundNumber((round) => round + 1);
+    setCurrentRoundNumber(nextRoundNumber);
     setCurrentCardPosition(0);
     setShowDefinition(false);
     setIsFinished(false);
     setIsEditingCurrentCard(false);
     setCardEditError('');
+
+    if (!isReviewRound && !isUnansweredRound) {
+      persistFlashcardSession({
+        currentRound: nextRound.currentRound,
+        remaining: nextRound.remaining,
+        currentPosition: 0,
+        currentRoundNumber: nextRoundNumber,
+        totalRoundCount,
+        isFinished: false,
+      });
+    }
   };
 
 
@@ -932,10 +1007,27 @@ export default function FlashcardScreen() {
                     ]}
                     disabled={currentCardPosition === 0}
                     onPress={() => {
+                      const nextPosition =
+                        currentCardPosition - 1;
+
                       setCurrentCardPosition(
-                        (position) => position - 1
+                        nextPosition
                       );
                       setShowDefinition(false);
+
+                      if (
+                        !isReviewRound &&
+                        !isUnansweredRound
+                      ) {
+                        persistFlashcardSession({
+                          currentRound: cardOrder,
+                          remaining: remainingCardOrder,
+                          currentPosition: nextPosition,
+                          currentRoundNumber,
+                          totalRoundCount,
+                          isFinished: false,
+                        });
+                      }
                     }}
                   >
                     <Text style={styles.navigationButtonText}>
@@ -951,13 +1043,46 @@ export default function FlashcardScreen() {
                       ) {
                         setIsFinished(true);
                         setShowDefinition(false);
+
+                        if (
+                          !isReviewRound &&
+                          !isUnansweredRound
+                        ) {
+                          persistFlashcardSession({
+                            currentRound: cardOrder,
+                            remaining: remainingCardOrder,
+                            currentPosition:
+                              currentCardPosition,
+                            currentRoundNumber,
+                            totalRoundCount,
+                            isFinished: true,
+                          });
+                        }
+
                         return;
                       }
 
+                      const nextPosition =
+                        currentCardPosition + 1;
+
                       setCurrentCardPosition(
-                        (position) => position + 1
+                        nextPosition
                       );
                       setShowDefinition(false);
+
+                      if (
+                        !isReviewRound &&
+                        !isUnansweredRound
+                      ) {
+                        persistFlashcardSession({
+                          currentRound: cardOrder,
+                          remaining: remainingCardOrder,
+                          currentPosition: nextPosition,
+                          currentRoundNumber,
+                          totalRoundCount,
+                          isFinished: false,
+                        });
+                      }
                     }}
                   >
                     <Text style={styles.navigationButtonText}>

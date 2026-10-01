@@ -14,11 +14,22 @@ export type FlashcardAssessment =
   | 'review';
 
 
+export type FlashcardSession = {
+  currentRound: number[];
+  remaining: number[];
+  currentPosition: number;
+  currentRoundNumber: number;
+  totalRoundCount: number;
+  isFinished: boolean;
+};
+
+
 export type FlashcardRecord = {
   id: string;
   subject: string;
   cards: Flashcard[];
   assessments?: Record<string, FlashcardAssessment>;
+  session?: FlashcardSession;
   sourceSummarySignature: string;
   createdAt: string;
 };
@@ -92,6 +103,46 @@ const isFlashcardRecord = (
           )
       )
     );
+  const sessionIndexes =
+    typeof record.session === 'object' &&
+    record.session !== null &&
+    !Array.isArray(record.session) &&
+    Array.isArray(record.session.currentRound) &&
+    Array.isArray(record.session.remaining)
+      ? [
+          ...record.session.currentRound,
+          ...record.session.remaining,
+        ]
+      : [];
+  const sessionIsValid =
+    record.session === undefined ||
+    (
+      typeof record.session === 'object' &&
+      record.session !== null &&
+      !Array.isArray(record.session) &&
+      Array.isArray(record.session.currentRound) &&
+      record.session.currentRound.length > 0 &&
+      record.session.currentRound.length <= 5 &&
+      Array.isArray(record.session.remaining) &&
+      sessionIndexes.every(
+        (cardIndex) =>
+          Number.isInteger(cardIndex) &&
+          cardIndex >= 0 &&
+          cardIndex < (record.cards?.length ?? 0)
+      ) &&
+      new Set(sessionIndexes).size ===
+        sessionIndexes.length &&
+      Number.isInteger(record.session.currentPosition) &&
+      record.session.currentPosition >= 0 &&
+      record.session.currentPosition <
+        record.session.currentRound.length &&
+      Number.isInteger(record.session.currentRoundNumber) &&
+      record.session.currentRoundNumber >= 1 &&
+      Number.isInteger(record.session.totalRoundCount) &&
+      record.session.totalRoundCount >=
+        record.session.currentRoundNumber &&
+      typeof record.session.isFinished === 'boolean'
+    );
 
   return (
     typeof record.id === 'string' &&
@@ -101,6 +152,7 @@ const isFlashcardRecord = (
     record.cards.length > 0 &&
     record.cards.every(isFlashcard) &&
     assessmentsAreValid &&
+    sessionIsValid &&
     typeof record.sourceSummarySignature === 'string' &&
     record.sourceSummarySignature !== '' &&
     typeof record.createdAt === 'string' &&
